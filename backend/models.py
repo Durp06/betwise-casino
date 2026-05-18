@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -39,7 +39,7 @@ class User(Base):
     correct_decisions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     current_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     best_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
-    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     # Relationships
     hands: Mapped[list["Hand"]] = relationship("Hand", back_populates="user", cascade="all, delete-orphan")
@@ -62,7 +62,7 @@ class CasinoTable(Base):
     max_bet: Mapped[int] = mapped_column(Integer, nullable=False, default=50_000)
     max_seats: Mapped[int] = mapped_column(Integer, nullable=False, default=3)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="waiting")
-    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     # Relationships
     seats: Mapped[list["TableSeat"]] = relationship("TableSeat", back_populates="table", cascade="all, delete-orphan")
@@ -82,7 +82,7 @@ class TableSeat(Base):
     table_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("casino_tables.id", ondelete="CASCADE"), nullable=False)
     user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     seat_number: Mapped[int] = mapped_column(Integer, nullable=False)
-    joined_at: Mapped[datetime] = mapped_column(nullable=False, default=_now)
+    joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     # Relationships
     table: Mapped["CasinoTable"] = relationship("CasinoTable", back_populates="seats")
@@ -106,7 +106,7 @@ class GameSession(Base):
     dealer_cards: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     deck_state: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="betting")
-    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     # Relationships
     table: Mapped["CasinoTable"] = relationship("CasinoTable", back_populates="sessions")
@@ -159,7 +159,7 @@ class PlayerAction(Base):
     hand_snapshot: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     dealer_upcard: Mapped[dict] = mapped_column(JSON, nullable=False)
     chipy_explanation: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(nullable=False, default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     # Relationships
     hand: Mapped["Hand"] = relationship("Hand", back_populates="actions")
