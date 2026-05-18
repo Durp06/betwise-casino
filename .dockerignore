@@ -1,0 +1,28 @@
+# Heavy/derived artifacts — don't bloat the build context
+**/node_modules
+**/dist
+**/.venv
+**/__pycache__
+**/.pytest_cache
+**/*.pyc
+**/*.log
+**/.vite
+**/coverage
+
+# Local env files — these should be injected by Railway, not baked into images
+**/.env
+**/.env.*
+!**/.env.example
+
+# Git / IDE
+.git
+.gitignore
+.github
+.idea
+.vscode
+
+# Docs / specs not needed in the image
+README.md
+CLAUDE.md
+specs/
+.playwright-mcp/
