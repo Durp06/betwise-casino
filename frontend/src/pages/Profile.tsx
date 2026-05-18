@@ -1,6 +1,8 @@
 /**
- * Profile.tsx — chip balance, total hands, accuracy, streak, weakness list,
- * hand history (last 20).
+ * Profile.tsx — Cuphead-styled user profile.
+ *
+ * Shows: chip balance, total hands, accuracy, streak, weakness list,
+ * and recent hand history. Reset-chips CTA available when balance < $10.
  */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -8,6 +10,7 @@ import { useSession } from "../auth/supabase";
 import { getMe, getWeakness, getUserHands, resetChips } from "../api/client";
 import type { UserStats, WeakSpot, Hand } from "../types";
 import { t } from "../i18n";
+import Chipy from "../components/Chipy";
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
@@ -15,7 +18,7 @@ function formatCents(cents: number): string {
 
 export default function Profile() {
   const navigate = useNavigate();
-  const { session } = useSession();
+  const { session, loading: sessionLoading } = useSession();
   const [stats, setStats] = useState<UserStats | null>(null);
   const [weakness, setWeakness] = useState<WeakSpot[] | null>(null);
   const [hands, setHands] = useState<Hand[] | null>(null);
@@ -25,9 +28,13 @@ export default function Profile() {
   const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
-    if (!session) return;
+    // Don't hang in "Loading" forever when session is null after auth resolves
+    if (sessionLoading) return;
+    if (!session) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
-
     async function load(): Promise<void> {
       const [statsRes, weakRes, handsRes] = await Promise.all([
         getMe(),
@@ -41,10 +48,9 @@ export default function Profile() {
       setWeakness(weakRes.error ? [] : weakRes.data);
       setHands(handsRes.error ? [] : handsRes.data);
     }
-
     void load();
     return () => { cancelled = true; };
-  }, [session]);
+  }, [session, sessionLoading]);
 
   async function handleReset(): Promise<void> {
     setResetting(true);
@@ -59,99 +65,141 @@ export default function Profile() {
     }
   }
 
+  // ─── Auth gate ─────────────────────────────────────────────────────────
+  if (!sessionLoading && !session) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6"
+        style={{ backgroundColor: "#1A0A00" }}>
+        <Chipy size={120} expression="surprised" animation="idle" pose="rest" />
+        <p className="font-ui text-cream text-xl text-center">
+          {t("Sign in to see your profile.")}
+        </p>
+        <button
+          onClick={() => void navigate("/login")}
+          className="ink-outline-thick ink-shadow font-display tracking-wider
+            px-5 py-3 rounded-md text-cream text-xl uppercase"
+          style={{ backgroundColor: "#C0392B" }}
+        >
+          {t("Sign In")}
+        </button>
+      </div>
+    );
+  }
+
+  // ─── Loading ───────────────────────────────────────────────────────────
   if (loading) {
     return (
-      <div className="min-h-screen bg-felt-green flex items-center justify-center">
-        <span role="status" aria-busy="true" className="text-white animate-pulse">
+      <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#1A0A00" }}>
+        <span role="status" aria-busy="true" className="font-flavor text-cream animate-pulse">
           {t("Loading...")}
         </span>
       </div>
     );
   }
 
+  // ─── Error ─────────────────────────────────────────────────────────────
   if (error) {
     return (
-      <div className="min-h-screen bg-felt-green flex flex-col items-center justify-center gap-4">
-        <p role="alert" className="text-card-red">{error}</p>
-        <button onClick={() => void navigate("/lobby")} className="text-chip-gold underline">
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 px-6"
+        style={{ backgroundColor: "#1A0A00" }}>
+        <Chipy size={120} expression="surprised" animation="shake" pose="rest" />
+        <p role="alert" className="font-flavor text-action-hit italic text-center">{error}</p>
+        <button
+          onClick={() => void navigate("/lobby")}
+          className="font-ui text-cream uppercase tracking-wider underline"
+        >
           {t("Back to Lobby")}
         </button>
       </div>
     );
   }
 
+  // ─── Main render ────────────────────────────────────────────────────────
   return (
-    <div className="min-h-screen bg-felt-green flex flex-col">
-      <header className="bg-chipy-dark px-4 py-3 flex items-center justify-between">
-        <h1 className="font-display text-chip-gold font-bold text-xl">{t("Profile")}</h1>
-        <button onClick={() => void navigate("/lobby")} className="text-white/60 hover:text-white text-sm">
+    <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#1A0A00" }}>
+      <header
+        className="flex items-center justify-between px-4 py-4 border-b-[3px] border-ink"
+        style={{ backgroundColor: "#0D3B1F" }}
+      >
+        <h1 className="font-display text-cream text-2xl gold-drop">{t("Profile")}</h1>
+        <button
+          onClick={() => void navigate("/lobby")}
+          className="font-ui text-cream uppercase tracking-wider text-xs hover:text-gold-bright"
+        >
           {t("← Lobby")}
         </button>
       </header>
 
-      <main className="flex-1 px-4 py-6 max-w-xl mx-auto w-full flex flex-col gap-5">
+      <main className="flex-1 px-4 py-8 max-w-xl mx-auto w-full flex flex-col gap-5">
         {stats && (
           <>
-            {/* Stats card */}
-            <div className="bg-chipy-dark rounded-xl p-4 flex flex-col gap-3">
+            {/* Stats plaque */}
+            <div
+              className="ink-outline-thick paper-grain rounded-md p-5 flex flex-col gap-4"
+              style={{ backgroundColor: "#F5F0E8", boxShadow: "5px 5px 0 0 #1A0A00" }}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-white font-bold text-lg">{stats.username}</span>
-                <span className="text-chip-gold font-bold">{formatCents(stats.chip_balance)}</span>
+                <span className="font-display text-ink text-3xl">{stats.username}</span>
+                <span className="font-display text-action-stand text-3xl gold-drop">
+                  {formatCents(stats.chip_balance)}
+                </span>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-sm">
-                <div>
-                  <span className="text-white/60">{t("Total hands:")}</span>
-                  <span className="text-white ml-1 font-medium">{stats.total_hands}</span>
-                </div>
-                <div>
-                  <span className="text-white/60">{t("Accuracy:")}</span>
-                  <span className="text-white ml-1 font-medium">
-                    {stats.total_hands > 0 ? `${Math.round(stats.accuracy * 100)}%` : "—"}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-white/60">{t("Current streak:")}</span>
-                  <span className="text-chip-gold ml-1 font-bold">{stats.current_streak}</span>
-                </div>
-                <div>
-                  <span className="text-white/60">{t("Best streak:")}</span>
-                  <span className="text-chip-gold ml-1 font-bold">{stats.best_streak}</span>
-                </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <Stat label={t("Total hands")} value={String(stats.total_hands)} />
+                <Stat
+                  label={t("Accuracy")}
+                  value={stats.total_hands > 0 ? `${Math.round(stats.accuracy * 100)}%` : "—"}
+                />
+                <Stat label={t("Current streak")} value={`🔥 ${stats.current_streak}`} amber />
+                <Stat label={t("Best streak")} value={`🏆 ${stats.best_streak}`} amber />
               </div>
+
               <button
                 onClick={() => void handleReset()}
                 disabled={resetting || stats.chip_balance >= 1000}
-                className="mt-1 text-xs text-white/40 hover:text-white/70 underline disabled:opacity-30 disabled:cursor-not-allowed"
+                className="self-start font-flavor text-xs text-ink/60 underline
+                  disabled:opacity-30 disabled:cursor-not-allowed hover:text-ink"
               >
-                {resetting ? t("Resetting...") : t("Reset chips (when balance < $10)")}
+                {resetting
+                  ? t("Resetting…")
+                  : stats.chip_balance >= 1000
+                  ? t("Reset chips (only when balance < $10)")
+                  : t("Reset chips to $1,000")}
               </button>
               {resetMsg && (
-                <p className="text-sm text-green-400">{resetMsg}</p>
+                <p className="font-flavor text-action-stand text-sm italic">{resetMsg}</p>
               )}
             </div>
 
             {/* Weakness detector */}
             {weakness !== null && weakness.length > 0 && (
-              <div className="bg-chipy-dark rounded-xl p-4 flex flex-col gap-3">
-                <h2 className="text-white font-bold">{t("Weak Spots")}</h2>
-                <div className="flex flex-col gap-2">
+              <div
+                className="ink-outline-thick paper-grain rounded-md p-5 flex flex-col gap-3"
+                style={{ backgroundColor: "#F5F0E8", boxShadow: "5px 5px 0 0 #1A0A00" }}
+              >
+                <h2 className="font-display text-ink text-2xl">{t("Weak Spots")}</h2>
+                <p className="font-flavor text-ink/70 text-xs italic">
+                  {t("Where your reads are off — work these first.")}
+                </p>
+                <div className="flex flex-col gap-3 mt-1">
                   {weakness.map((spot, i) => (
                     <div key={i} className="flex flex-col gap-1">
                       <div className="flex items-center justify-between text-xs">
-                        <span className="text-white/70">
-                          {spot.hand_category} {t("vs")} {t("dealer")} {spot.dealer_upcard_category}
+                        <span className="font-ui text-ink">
+                          {spot.hand_category} {t("vs")} {spot.dealer_upcard_category}
                         </span>
-                        <span className="text-card-red font-bold">
+                        <span className="font-display text-action-hit">
                           {Math.round(spot.accuracy * 100)}%
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-white/10 rounded-full overflow-hidden">
+                      <div className="ink-outline w-full h-2.5 bg-cream rounded-full overflow-hidden">
                         <div
-                          className="h-full bg-card-red rounded-full"
-                          style={{ width: `${spot.accuracy * 100}%` }}
+                          className="h-full bg-action-hit"
+                          style={{ width: `${Math.max(spot.accuracy * 100, 3)}%` }}
                         />
                       </div>
-                      <span className="text-xs text-white/40">
+                      <span className="font-flavor text-ink/60 text-[10px]">
                         {spot.correct}/{spot.samples} {t("correct")}
                       </span>
                     </div>
@@ -160,31 +208,43 @@ export default function Profile() {
               </div>
             )}
 
-            {/* Hand history */}
+            {/* Recent hands */}
             {hands !== null && (
-              <div className="bg-chipy-dark rounded-xl p-4 flex flex-col gap-3">
-                <h2 className="text-white font-bold">{t("Recent Hands")}</h2>
+              <div
+                className="ink-outline-thick paper-grain rounded-md p-5 flex flex-col gap-3"
+                style={{ backgroundColor: "#F5F0E8", boxShadow: "5px 5px 0 0 #1A0A00" }}
+              >
+                <h2 className="font-display text-ink text-2xl">{t("Recent Hands")}</h2>
                 {hands.length === 0 ? (
-                  <p className="text-white/40 text-sm">{t("No hands played yet.")}</p>
+                  <p className="font-flavor text-ink/60 italic text-sm">
+                    {t("No hands played yet.")}
+                  </p>
                 ) : (
-                  <div className="flex flex-col gap-2">
-                    {hands.map((hand) => (
-                      <div key={hand.id} className="flex items-center justify-between text-sm">
-                        <span className="text-white/60 capitalize">{hand.status}</span>
-                        {hand.outcome && (
-                          <span className={`font-bold capitalize ${
-                            hand.outcome === "win" || hand.outcome === "blackjack"
-                              ? "text-green-400"
-                              : hand.outcome === "push"
-                              ? "text-chip-gold"
-                              : "text-card-red"
-                          }`}>
-                            {hand.outcome}
+                  <div className="flex flex-col gap-1">
+                    {hands.map((hand) => {
+                      const outcomeColor =
+                        hand.outcome === "win" || hand.outcome === "blackjack"
+                          ? "text-action-stand"
+                          : hand.outcome === "push"
+                          ? "text-gold-dark"
+                          : "text-action-hit";
+                      return (
+                        <div
+                          key={hand.id}
+                          className="grid grid-cols-3 items-center text-sm py-1 border-b border-ink/15 last:border-0"
+                        >
+                          <span className="font-flavor text-ink/70 capitalize">
+                            {hand.status}
                           </span>
-                        )}
-                        <span className="text-white/40">{formatCents(hand.bet)}</span>
-                      </div>
-                    ))}
+                          <span className={`font-ui uppercase tracking-wider text-center ${outcomeColor}`}>
+                            {hand.outcome ?? "—"}
+                          </span>
+                          <span className="font-ui text-ink/80 text-right">
+                            {formatCents(hand.bet)}
+                          </span>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -192,6 +252,26 @@ export default function Profile() {
           </>
         )}
       </main>
+    </div>
+  );
+}
+
+interface StatProps {
+  label: string;
+  value: string;
+  amber?: boolean;
+}
+function Stat({ label, value, amber }: StatProps) {
+  return (
+    <div className="flex flex-col">
+      <span className="font-flavor text-ink/60 text-[10px] uppercase tracking-widest">
+        {label}
+      </span>
+      <span
+        className={`font-display text-2xl ${amber ? "text-gold-dark" : "text-ink"}`}
+      >
+        {value}
+      </span>
     </div>
   );
 }
