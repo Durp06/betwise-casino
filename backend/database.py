@@ -31,6 +31,11 @@ _engine: AsyncEngine | None = None
 _session_factory: async_sessionmaker[AsyncSession] | None = None
 
 
+def _is_local_postgres(url: str) -> bool:
+    """Cheap heuristic: does the URL point at a local Postgres host?"""
+    return ("@localhost" in url) or ("@127.0.0.1" in url) or ("@db:" in url)
+
+
 def get_engine() -> AsyncEngine:
     """Return (and lazily create) the singleton async engine.
 
@@ -44,9 +49,23 @@ def get_engine() -> AsyncEngine:
             or os.environ.get("DATABASE_URL")
             or "sqlite+aiosqlite:///:memory:"
         )
+        # Strip query params that asyncpg doesn't understand (sslmode=, pgbouncer=…)
+        # — these come from psycopg2-style URLs people often paste from Supabase docs.
+        if "+asyncpg" in url and "?" in url:
+            url = url.split("?", 1)[0]
+
         connect_args: dict = {}
         if url.startswith("sqlite"):
             connect_args["check_same_thread"] = False
+        elif "+asyncpg" in url and not _is_local_postgres(url):
+            # Supabase / managed Postgres require SSL. asyncpg's "require" means:
+            # encrypt the connection but don't verify the certificate chain.
+            connect_args["ssl"] = "require"
+            # Port 5432 (session mode) supports prepared statements, but disabling
+            # the cache keeps us safe if someone accidentally points at 6543 (txn
+            # mode / pgbouncer), which doesn't.
+            connect_args["statement_cache_size"] = 0
+
         _engine = create_async_engine(url, connect_args=connect_args)
     return _engine
 
