@@ -78,24 +78,30 @@ async def get_current_user(
     token = authorization.removeprefix("Bearer ").strip()
 
     try:
-        # Try JWKS (RS256) first
-        jwks = await _fetch_jwks()
-        jwt_secret = os.environ.get("SUPABASE_JWT_SECRET", "")
+        # Inspect the token header to determine which algorithm to use
+        header = jwt.get_unverified_header(token)
+        alg = header.get("alg", "")
 
-        if jwks and "keys" in jwks:
-            # RS256 / JWKS verification
-            payload = jwt.decode(
-                token,
-                jwks,
-                algorithms=["RS256"],
-                options={"verify_aud": False},
-            )
-        elif jwt_secret:
-            # HS256 with symmetric secret
+        if alg.startswith("HS"):
+            # Symmetric secret (HS256 / HS384 / HS512)
+            jwt_secret = os.environ.get("SUPABASE_JWT_SECRET", "")
+            if not jwt_secret:
+                raise HTTPException(status_code=401, detail="Invalid or expired token")
             payload = jwt.decode(
                 token,
                 jwt_secret,
-                algorithms=["HS256"],
+                algorithms=[alg],
+                options={"verify_aud": False},
+            )
+        elif alg.startswith("RS") or alg.startswith("ES"):
+            # Asymmetric key via JWKS (RS256 / RS384 / ES256 etc.)
+            jwks = await _fetch_jwks()
+            if not (jwks and jwks.get("keys")):
+                raise HTTPException(status_code=401, detail="Invalid or expired token")
+            payload = jwt.decode(
+                token,
+                jwks,
+                algorithms=[alg],
                 options={"verify_aud": False},
             )
         else:

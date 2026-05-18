@@ -152,7 +152,7 @@ async def run_dealer(session_id: uuid.UUID, db: AsyncSession) -> None:
     game_session.deck_state = deck
     game_session.status = "finished"
 
-    # Resolve all hands
+    # Resolve all hands and credit payouts back to users
     result = await db.execute(select(Hand).where(Hand.session_id == session_id))
     hands = result.scalars().all()
     for hand in hands:
@@ -164,5 +164,13 @@ async def run_dealer(session_id: uuid.UUID, db: AsyncSession) -> None:
             hand.outcome = outcome
             hand.payout = payout
             hand.status = "finished"
+
+            # Credit payout back to the user's chip balance
+            if payout > 0:
+                from backend.models import User  # noqa: PLC0415
+                result_u = await db.execute(select(User).where(User.id == hand.user_id))
+                hand_user = result_u.scalar_one_or_none()
+                if hand_user is not None:
+                    hand_user.chip_balance += payout
 
     await db.flush()

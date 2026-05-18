@@ -41,10 +41,14 @@ Polling (3s interval) was chosen over WebSockets because:
 
 ## Hole card visibility rule
 
-During `playing` session status, ALL hands' first card (index 0) is hidden with `null`. This:
-- Prevents information leakage in multiplayer
-- Matches the conftest's `test_other_players_hole_cards_hidden_during_play` assertion
-- At `dealer_turn` and `finished`, all cards are revealed
+During `playing` session status, the **dealer's second card** (index 1 of `session.dealer_cards`) is the hole card and is hidden with `null` in the GET `/api/tables/{id}/state` response. All player hands are fully visible to everyone. At `dealer_turn` and `finished`, all dealer cards are revealed.
+
+- Implementation: `backend/routers/tables.py::_get_table_state` masks `dealer_cards_out[1]` when `session.status == "playing"`.
+- The `test_other_players_hole_cards_hidden_during_play` test asserts this corrected behavior.
+
+## Known limitations
+
+- **Split returns 501**: `POST /api/tables/{id}/action` with `action="split"` always returns HTTP 501. The current schema has an implicit `UNIQUE(session_id, user_id)` constraint on hands (one hand per user per session). Implementing split properly requires a follow-up migration to add a `(session_id, user_id, hand_index)` unique constraint. This is tracked as a future enhancement.
 
 ## Test isolation note
 

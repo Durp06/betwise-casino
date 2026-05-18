@@ -299,29 +299,27 @@ async def _get_table_state(
     hands_out: list[HandOut] = []
 
     if session_row:
+        # During "playing", hide the dealer's second card (hole card).
+        # Reveal at dealer_turn and finished.
+        dealer_cards_out = list(session_row.dealer_cards) if session_row.dealer_cards else []
+        if session_row.status == "playing" and len(dealer_cards_out) >= 2:
+            dealer_cards_out = [dealer_cards_out[0], HIDDEN_CARD] + dealer_cards_out[2:]
+
         session_out = SessionOut(
             id=session_row.id,
             table_id=session_row.table_id,
             game_type=session_row.game_type,
-            dealer_cards=session_row.dealer_cards,
+            dealer_cards=dealer_cards_out,
             status=session_row.status,
             created_at=session_row.created_at,
         )
 
-        # Fetch hands
+        # Fetch hands — all player cards are always visible
         result = await db.execute(
             select(Hand).where(Hand.session_id == session_row.id)
         )
         for hand in result.scalars().all():
             cards = list(hand.cards) if hand.cards else []
-
-            # During "playing" status, hide the first card (hole card) of every hand.
-            # This prevents information leakage in multiplayer and makes the
-            # test assertion deterministic regardless of which user is requesting.
-            # At dealer_turn and finished, all cards are revealed.
-            if session_row.status == "playing":
-                if cards:
-                    cards = [HIDDEN_CARD] + cards[1:]
 
             hands_out.append(
                 HandOut(

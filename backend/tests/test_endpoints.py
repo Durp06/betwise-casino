@@ -175,15 +175,23 @@ async def test_unknown_table_state_returns_404(client):
     assert resp.status_code == 404
 
 
-# Criterion: Other players' hole cards are hidden (null/sentinel) during play.
+# Criterion: Dealer hole card (second card) is hidden during play; player cards are visible.
 
 @pytest.mark.asyncio
 async def test_other_players_hole_cards_hidden_during_play(client, other_client, db):
-    """During a playing session, other players' first card must be hidden."""
+    """During a playing session, the dealer's second card (hole card) must be hidden.
+    All player cards must be fully visible to all seated players.
+    """
     await seed_user(db, TEST_USER_ID, "player1")
     await seed_user(db, OTHER_USER_ID, "player2")
     table = await seed_table(db, max_seats=3)
-    session = await seed_session(db, table.id, status="playing")
+    # Seed a session with two known dealer cards
+    session = await seed_session(
+        db,
+        table.id,
+        status="playing",
+        dealer_cards=[{"suit": "hearts", "value": "6"}, {"suit": "spades", "value": "K"}],
+    )
 
     # Seed a hand for OTHER_USER_ID with two known cards
     await seed_hand(
@@ -197,17 +205,28 @@ async def test_other_players_hole_cards_hidden_during_play(client, other_client,
     assert resp.status_code == 200
     state = resp.json()
 
-    # Find the other player's hand in the response
+    # Dealer hole card (index 1) must be hidden during play
+    session_data = state.get("session", {})
+    if session_data:
+        dealer_cards = session_data.get("dealer_cards", [])
+        if len(dealer_cards) >= 2:
+            hole_card = dealer_cards[1]
+            assert hole_card is None or (isinstance(hole_card, dict) and hole_card.get("value") in ("?", None)), (
+                f"Dealer hole card (index 1) must be hidden during play; got {hole_card!r}"
+            )
+        # First dealer card must be visible
+        if dealer_cards:
+            assert dealer_cards[0] is not None, "Dealer upcard (index 0) must be visible during play"
+
+    # Player cards must all be visible (not hidden)
     hands = state.get("hands", [])
     other_hands = [h for h in hands if str(h.get("user_id")) == str(OTHER_USER_ID)]
     if other_hands:
         other_hand = other_hands[0]
         cards = other_hand.get("cards", [])
-        if len(cards) >= 1:
-            first_card = cards[0]
-            # The hole card must be hidden: either null or a sentinel {"value":"?"}
-            assert first_card is None or first_card.get("value") in ("?", None), (
-                f"Hole card must be hidden during play; got {first_card!r}"
+        for i, card in enumerate(cards):
+            assert card is not None, (
+                f"Player card at index {i} must be visible during play; got None"
             )
 
 
@@ -626,3 +645,135 @@ async def test_invalid_token_returns_401_with_clean_message():
     finally:
         if original is not None:
             os.environ["BETWISE_DEV_USER_ID"] = original
+
+
+# ─── Multiplayer round: join-existing-betting-session ────────────────────────
+# Criterion: second player deal joins the same betting session, not a new one.
+# Once first player has dealt (status "playing"), a second deal attempt → 409.
+
+@pytest.mark.asyncio
+async def test_deal_409_when_round_already_playing(client, other_client, db):
+    """After the first player deals (session status = playing), a second deal → 409."""
+    await seed_user(db, TEST_USER_ID, "first_dealer", chip_balance=100_000)
+    await seed_user(db, OTHER_USER_ID, "second_dealer", chip_balance=100_000)
+    table = await seed_table(db)
+
+    # Seat both players
+    from backend.models import TableSeat  # noqa: PLC0415
+    seat1 = TableSeat(
+        id=uuid.uuid4(),
+        table_id=table.id,
+        user_id=TEST_USER_ID,
+        seat_number=1,
+        joined_at=datetime.now(timezone.utc),
+    )
+    seat2 = TableSeat(
+        id=uuid.uuid4(),
+        table_id=table.id,
+        user_id=OTHER_USER_ID,
+        seat_number=2,
+        joined_at=datetime.now(timezone.utc),
+    )
+    db.add(seat1)
+    db.add(seat2)
+    await db.commit()
+
+    # First player deals — session transitions to "playing"
+    resp1 = await client.post(f"/api/tables/{table.id}/deal", json={"bet": 1_000})
+    assert resp1.status_code in (200, 201), f"First deal failed: {resp1.text}"
+
+    # Second player tries to deal into a now-playing session → must 409
+    resp2 = await other_client.post(f"/api/tables/{table.id}/deal", json={"bet": 1_000})
+    assert resp2.status_code == 409, (
+        f"Expected 409 when round already playing; got {resp2.status_code}: {resp2.text}"
+    )
+    assert "round" in resp2.json().get("detail", "").lower(), (
+        f"409 detail should mention 'round': {resp2.json()}"
+    )
+
+
+# ─── Payout credits chip_balance ─────────────────────────────────────────────
+# Criterion: after dealer resolves a winning hand, user.chip_balance increases by bet.
+
+@pytest.mark.asyncio
+async def test_win_payout_credits_chip_balance(db, client):
+    """Force a player win via seeded state and verify chip_balance ends at initial + bet."""
+    from sqlalchemy import select  # noqa: PLC0415
+    from backend.models import User  # noqa: PLC0415
+    from backend.game.state import run_dealer  # noqa: PLC0415
+
+    initial_balance = 100_000
+    bet = 1_000
+    user = await seed_user(db, TEST_USER_ID, "payout_test", chip_balance=initial_balance - bet)
+    # ^ balance already reduced by bet (as _deal_hand does up-front)
+
+    table = await seed_table(db)
+    # Dealer has 16 (must hit); a single 6 card means dealer is at 16 and must hit
+    session = await seed_session(
+        db,
+        table.id,
+        status="dealer_turn",
+        dealer_cards=[
+            {"suit": "hearts", "value": "9"},
+            {"suit": "spades", "value": "7"},
+        ],
+        # Give the deck an 8 so dealer busts (16 + 8 = 24)
+        deck_state=[{"suit": "clubs", "value": "8"}],
+    )
+
+    # Seed a standing hand (player is at 18, will beat a busted dealer)
+    hand = await seed_hand(
+        db,
+        session.id,
+        TEST_USER_ID,
+        cards=[{"suit": "hearts", "value": "9"}, {"suit": "spades", "value": "9"}],
+        bet=bet,
+        status="standing",
+    )
+
+    # Run dealer — dealer draws 8 (=24, bust), player wins
+    await run_dealer(session.id, db)
+    await db.commit()
+
+    result = await db.execute(select(User).where(User.id == TEST_USER_ID))
+    updated_user = result.scalar_one_or_none()
+    assert updated_user is not None
+    # Player had initial_balance - bet before run_dealer; wins bet*2 payout → net = initial_balance + bet
+    expected = initial_balance - bet + bet * 2
+    assert updated_user.chip_balance == expected, (
+        f"Expected chip_balance={expected} after win; got {updated_user.chip_balance}"
+    )
+
+
+# ─── Advice ownership: 403 for another player's hand ─────────────────────────
+# Criterion: POSTing advice for a hand you don't own returns 403.
+
+@pytest.mark.asyncio
+async def test_advice_returns_403_for_another_users_hand(other_client, db, mock_anthropic):
+    """other_client (OTHER_USER_ID) requesting advice on TEST_USER's hand → 403."""
+    await seed_user(db, TEST_USER_ID, "hand_owner", chip_balance=100_000)
+    await seed_user(db, OTHER_USER_ID, "hand_thief", chip_balance=100_000)
+    table = await seed_table(db)
+    session = await seed_session(
+        db,
+        table.id,
+        status="playing",
+        dealer_cards=[{"suit": "hearts", "value": "6"}],
+    )
+    # Hand belongs to TEST_USER_ID
+    hand = await seed_hand(
+        db,
+        session.id,
+        TEST_USER_ID,
+        cards=[{"suit": "hearts", "value": "5"}, {"suit": "spades", "value": "6"}],
+        status="active",
+    )
+
+    # OTHER_USER_ID requests advice on TEST_USER's hand → must 403
+    resp = await other_client.post(
+        f"/api/advice/{hand.id}",
+        json={"player_guess": "double"},
+    )
+    assert resp.status_code == 403, (
+        f"Expected 403 for advice on another user's hand; got {resp.status_code}: {resp.text}"
+    )

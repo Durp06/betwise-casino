@@ -113,14 +113,18 @@ async def _deal_hand(
             detail=f"Bet {bet} is above table maximum {table.max_bet}",
         )
 
-    # Find or create a session in "betting" phase
+    # Find or create a session in "betting" or "playing" phase
     result = await db.execute(
         select(GameSession).where(
             (GameSession.table_id == table_id)
-            & (GameSession.status == "betting")
+            & (GameSession.status.in_(("betting", "playing")))
         )
     )
     session = result.scalar_one_or_none()
+
+    # If a round is already playing (first player dealt), reject new joiners
+    if session is not None and session.status == "playing":
+        raise HTTPException(status_code=409, detail="Round already in progress at this table")
 
     if session is None:
         # Create a new session with a fresh deck
@@ -255,8 +259,14 @@ async def _take_action(
     # Validate action legality
     if action == "double" and not eng.can_double(hand.cards):
         raise HTTPException(status_code=400, detail="Cannot double after hitting")
-    if action == "split" and not eng.can_split(hand.cards):
-        raise HTTPException(status_code=400, detail="Cannot split this hand")
+    if action == "split":
+        raise HTTPException(
+            status_code=501,
+            detail=(
+                "Split is a known limitation — schema has UNIQUE(session_id, user_id) "
+                "on hands. Coming in a future migration."
+            ),
+        )
 
     # Deal a card if hitting or doubling
     deck = list(session.deck_state)
@@ -282,6 +292,15 @@ async def _take_action(
         new_card, deck = eng.deal_card(deck)
         new_cards.append(new_card)
         session.deck_state = deck
+
+    # For double: double the bet and deduct original bet again from chip balance
+    if action == "double":
+        from backend.models import User  # noqa: PLC0415
+        result = await db.execute(select(User).where(User.id == user_id))
+        doubling_user = result.scalar_one_or_none()
+        if doubling_user is not None:
+            doubling_user.chip_balance -= hand.bet
+        hand.bet *= 2
 
     # Record to player_actions
     pa = PlayerAction(
@@ -309,7 +328,7 @@ async def _take_action(
     elif action == "stand":
         hand.status = "standing"
     elif action == "double":
-        # After double: stand (one card dealt, done)
+        # After double: one card dealt then must stand
         hand.status = "standing"
 
     await db.flush()

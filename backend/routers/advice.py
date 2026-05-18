@@ -69,6 +69,16 @@ async def get_advice(
     db: AsyncSession = Depends(get_db),
 ) -> StreamingResponse:
     """Stream Chipy's coaching explanation and update the user's streak."""
+    from sqlalchemy import select  # noqa: PLC0415
+    from backend.models import Hand  # noqa: PLC0415
+
+    # ── Ownership check before streaming begins ──────────────────────────────
+    pre_result = await db.execute(select(Hand).where(Hand.id == hand_id))
+    pre_hand = pre_result.scalar_one_or_none()
+    if pre_hand is None:
+        raise HTTPException(status_code=404, detail="Hand not found")
+    if pre_hand.user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot request advice for another player's hand")
 
     async def _sse_stream() -> AsyncGenerator[bytes, None]:
         from sqlalchemy import select, update  # noqa: PLC0415

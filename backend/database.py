@@ -62,7 +62,12 @@ def get_session_factory() -> async_sessionmaker[AsyncSession]:
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """FastAPI dependency — yields an AsyncSession and closes it after the request."""
+    """FastAPI dependency — yields an AsyncSession, commits on success, rolls back on error."""
     factory = get_session_factory()
     async with factory() as session:
-        yield session
+        try:
+            yield session
+            await session.commit()
+        except Exception:
+            await session.rollback()
+            raise

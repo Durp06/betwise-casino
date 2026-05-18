@@ -48,6 +48,16 @@ def test_hard_11_vs_dealer_6_should_double():
     assert optimal_action(player, dealer) == "double"
 
 
+# Criterion: hard_11 vs dealer Ace → double  (6-deck H17 chart: all upcards → double)
+
+def test_hard_11_vs_dealer_ace_should_double():
+    player = [card("5"), card("6")]  # hard 11
+    dealer = card("A")
+    assert optimal_action(player, dealer) == "double", (
+        "Hard 11 vs dealer Ace should double on 6-deck H17 chart"
+    )
+
+
 # Criterion: hard_12 vs dealer 4 → stand  (T6 row 12, upcard 4-6 → stand)
 
 def test_hard_12_vs_dealer_4_should_stand():

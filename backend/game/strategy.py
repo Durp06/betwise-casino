@@ -42,8 +42,8 @@ HARD_TOTALS: dict[int, dict[int, Action]] = {
     9:  {2:_H, 3:_D, 4:_D, 5:_D, 6:_D, 7:_H, 8:_H, 9:_H, 10:_H, 11:_H},
     # hard 10: double vs 2-9, else hit
     10: {2:_D, 3:_D, 4:_D, 5:_D, 6:_D, 7:_D, 8:_D, 9:_D, 10:_H, 11:_H},
-    # hard 11: double vs 2-10, hit vs Ace
-    11: {2:_D, 3:_D, 4:_D, 5:_D, 6:_D, 7:_D, 8:_D, 9:_D, 10:_D, 11:_H},
+    # hard 11: double vs 2-A (all upcards) per 6-deck H17 chart
+    11: {2:_D, 3:_D, 4:_D, 5:_D, 6:_D, 7:_D, 8:_D, 9:_D, 10:_D, 11:_D},
     # hard 12: stand vs 4-6, else hit
     12: {2:_H, 3:_H, 4:_S, 5:_S, 6:_S, 7:_H, 8:_H, 9:_H, 10:_H, 11:_H},
     # hard 13-14: stand vs 2-6, else hit
