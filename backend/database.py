@@ -58,12 +58,37 @@ def get_engine() -> AsyncEngine:
         if url.startswith("sqlite"):
             connect_args["check_same_thread"] = False
         elif "+asyncpg" in url and not _is_local_postgres(url):
-            # Supabase / managed Postgres require SSL. asyncpg's "require" means:
-            # encrypt the connection but don't verify the certificate chain.
+            # Defensive URL normalization for Supabase + asyncpg quirks.
+            from sqlalchemy.engine.url import make_url  # noqa: PLC0415
+
+            parsed = make_url(url)
+
+            # 1. Missing database name → asyncpg falls back to using the
+            #    username as the db name, which on Supabase looks like
+            #    "postgres.<project-ref>" and produces InvalidCatalogNameError.
+            #    Supabase's default database is always literally "postgres".
+            if not parsed.database:
+                parsed = parsed.set(database="postgres")
+
+            # 2. asyncpg + dotted username (Supabase pooler uses
+            #    `postgres.<project-ref>`): some asyncpg versions misinterpret
+            #    the dot when reading from the URL. Pass user/password via
+            #    connect_args instead, which asyncpg.connect() consumes
+            #    directly as kwargs without re-parsing.
+            if parsed.username and "." in parsed.username:
+                connect_args["user"] = parsed.username
+                if parsed.password:
+                    connect_args["password"] = parsed.password
+                parsed = parsed.set(username=None, password=None)
+
+            url = str(parsed)
+
+            # Supabase / managed Postgres require SSL. "require" = encrypt
+            # but don't verify the certificate chain.
             connect_args["ssl"] = "require"
-            # Port 5432 (session mode) supports prepared statements, but disabling
-            # the cache keeps us safe if someone accidentally points at 6543 (txn
-            # mode / pgbouncer), which doesn't.
+            # Port 5432 (session mode) supports prepared statements, but
+            # disabling the cache keeps us safe if someone accidentally
+            # points at 6543 (txn mode / pgbouncer), which doesn't.
             connect_args["statement_cache_size"] = 0
 
         _engine = create_async_engine(url, connect_args=connect_args)
