@@ -1,6 +1,9 @@
 /**
  * Table.tsx — main game screen. Uses useTablePoll for real-time-ish state.
  * Optimistic Hit: immediately appends null card placeholder.
+ *
+ * Saloon styling: a green felt "table surface" wraps the dealer + my hand,
+ * walnut frame for everything else, brass divider between sections.
  */
 import { useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
@@ -17,7 +20,6 @@ import ChipyPanel from "../components/ChipyPanel";
 import ReplayModal from "../components/ReplayModal";
 import { t } from "../i18n";
 
-// Naive hand value calculator for display (mirrors backend logic)
 function handValueDisplay(cards: (({ suit: string; value: string }) | null)[]): number | null {
   const realCards = cards.filter((c): c is { suit: string; value: string } => c !== null);
   if (realCards.length === 0) return null;
@@ -90,18 +92,17 @@ export default function Table() {
 
   if (!tableId) {
     return (
-      <div className="min-h-screen bg-felt-green flex items-center justify-center">
-        <p role="alert" className="text-card-red">{t("Invalid table ID")}</p>
+      <div className="min-h-screen flex items-center justify-center">
+        <p role="alert" className="text-saloon-blood italic">{t("Invalid table ID")}</p>
       </div>
     );
   }
 
-  // Initial loading
   if (!tableState) {
     return (
-      <div className="min-h-screen bg-felt-green flex items-center justify-center">
-        <span role="status" aria-busy="true" className="text-white animate-pulse">
-          {t("Loading table...")}
+      <div className="min-h-screen flex items-center justify-center">
+        <span role="status" aria-busy="true" className="text-saloon-parchment/70 animate-pulse">
+          {t("Pulling up a chair...")}
         </span>
       </div>
     );
@@ -110,28 +111,34 @@ export default function Table() {
   const dealerCards = tableState.session?.dealer_cards ?? [];
 
   return (
-    <div className="min-h-screen bg-felt-green flex flex-col">
-      {/* Header */}
-      <header className="bg-chipy-dark px-4 py-3 flex items-center justify-between">
-        <h1 className="font-display text-chip-gold font-bold text-lg">{tableState.name}</h1>
-        <div className="flex gap-2">
+    <div className="min-h-screen flex flex-col">
+      {/* Header — walnut bar with brass-line edge */}
+      <header className="saloon-panel px-4 py-3 flex items-center justify-between
+        border-b border-saloon-brass/40">
+        <h1
+          className="text-saloon-amber font-bold text-lg tracking-wide truncate"
+          style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}
+        >
+          {tableState.name}
+        </h1>
+        <div className="flex gap-3 text-xs uppercase tracking-wider">
           <button
             onClick={() => void navigate("/lobby")}
-            className="text-white/60 hover:text-white text-sm"
+            className="text-saloon-ash hover:text-saloon-parchment transition-colors"
           >
             {t("Lobby")}
           </button>
           <button
             onClick={() => void handleLeave()}
             disabled={leaveLoading}
-            className="text-card-red hover:text-red-400 text-sm disabled:opacity-40"
+            className="text-saloon-blood hover:text-red-400 transition-colors disabled:opacity-40"
           >
-            {leaveLoading ? t("Leaving...") : t("Leave")}
+            {leaveLoading ? t("...") : t("Leave")}
           </button>
         </div>
       </header>
 
-      <main className="flex-1 flex flex-col gap-4 px-4 py-4 max-w-2xl mx-auto w-full">
+      <main className="flex-1 flex flex-col gap-4 px-4 py-5 max-w-2xl mx-auto w-full">
         {/* Seats */}
         <TableSeats
           seats={tableState.seats}
@@ -139,33 +146,47 @@ export default function Table() {
           currentUserId={currentUserId}
         />
 
-        {/* Dealer hand */}
+        {/* Felt table surface — wraps dealer + your hand */}
         {tableState.session && (
-          <div className="bg-black/20 rounded-xl p-3">
-            <CardHand
-              cards={dealerCards}
-              handValue={handValueDisplay(dealerCards) ?? undefined}
-              label="Dealer"
-            />
-          </div>
-        )}
+          <div className="saloon-felt rounded-2xl p-4 sm:p-6 flex flex-col gap-5
+            ring-1 ring-saloon-brass/40">
+            <div>
+              <p className="text-saloon-amber/70 text-[10px] uppercase tracking-[0.3em] mb-2 text-center">
+                {t("Dealer")}
+              </p>
+              <CardHand
+                cards={dealerCards}
+                handValue={handValueDisplay(dealerCards) ?? undefined}
+              />
+            </div>
 
-        {/* My hand */}
-        {myHand && (
-          <div className={`bg-black/20 rounded-xl p-3 ${actionError ? "ring-2 ring-card-red animate-shake" : ""}`}>
-            <CardHand
-              cards={myHand.cards}
-              handValue={handValueDisplay(myHand.cards) ?? undefined}
-              label="Your hand"
-            />
-            {myHand.outcome && (
-              <p className="text-chip-gold font-bold mt-2 capitalize">{myHand.outcome}</p>
+            {/* Hairline brass divider across the felt */}
+            <div className="h-px bg-saloon-brass/40" />
+
+            {myHand && (
+              <div className={`${actionError ? "ring-2 ring-saloon-blood rounded-md animate-shake" : ""}`}>
+                <p className="text-saloon-amber/70 text-[10px] uppercase tracking-[0.3em] mb-2 text-center">
+                  {t("Your hand")}
+                </p>
+                <CardHand
+                  cards={myHand.cards}
+                  handValue={handValueDisplay(myHand.cards) ?? undefined}
+                />
+                {myHand.outcome && (
+                  <p
+                    className="text-saloon-amber font-bold mt-3 capitalize text-center text-lg"
+                    style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}
+                  >
+                    {myHand.outcome}
+                  </p>
+                )}
+              </div>
             )}
           </div>
         )}
 
         {actionError && (
-          <p role="alert" className="text-card-red text-sm text-center">{actionError}</p>
+          <p role="alert" className="text-saloon-blood text-sm text-center italic">{actionError}</p>
         )}
 
         {/* Betting controls — show when session is in betting phase */}
@@ -184,23 +205,23 @@ export default function Table() {
         {!tableState.session && tableState.seats.some((s) => s.user_id === currentUserId) && (
           <button
             onClick={() => void dealHand(tableId, 500)}
-            className="w-full py-3 bg-chip-gold text-chipy-dark font-bold rounded-lg
-              hover:bg-yellow-400 active:scale-95 transition-all min-h-[44px]"
+            className="btn-leather w-full py-3 rounded-md font-bold uppercase tracking-widest
+              min-h-[44px]"
           >
-            {t("Start Round")}
+            {t("Deal Cards")}
           </button>
         )}
 
         {/* Action bar during play */}
         {sessionStatus === "playing" && isMyTurn && !chipyOpen && (
           <div className="flex flex-col gap-2">
-            {/* Quick optimistic hit */}
             <button
               onClick={() => void handleOptimisticHit()}
-              className="w-full py-3 bg-green-600 text-white font-bold rounded-lg
-                hover:bg-green-500 active:scale-95 transition-all min-h-[44px]"
+              className="w-full py-3 rounded-md font-bold uppercase tracking-widest text-saloon-parchment
+                bg-saloon-leather hover:bg-saloon-blood active:scale-[0.98] transition-all
+                ring-1 ring-saloon-brass/40 min-h-[44px]"
             >
-              {t("Hit")}
+              {t("Hit (no coach)")}
             </button>
             <ActionBar
               tableId={tableId}
@@ -210,7 +231,7 @@ export default function Table() {
           </div>
         )}
 
-        {/* Chipy panel — full-width bottom sheet on mobile */}
+        {/* Chipy panel */}
         {chipyOpen && myHand && tableState.session && (
           <div className="fixed inset-x-0 bottom-0 sm:relative sm:inset-auto z-40 sm:z-auto">
             <ChipyPanel
@@ -234,14 +255,13 @@ export default function Table() {
         {myHand && (myHand.status === "finished" || myHand.outcome) && (
           <button
             onClick={() => setReplayHandId(myHand.id)}
-            className="text-chip-gold text-sm underline text-center"
+            className="text-saloon-amber text-xs uppercase tracking-widest underline text-center"
           >
-            {t("Review hand")}
+            {t("Review the hand")}
           </button>
         )}
       </main>
 
-      {/* Replay modal */}
       {replayHandId && (
         <ReplayModal handId={replayHandId} onClose={() => setReplayHandId(null)} />
       )}

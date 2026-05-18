@@ -2,7 +2,200 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Shake animation for rollback error */
+/*
+  ───────────────────────────────────────────────────────────────────────────
+  Design brief (committed upstream — every component should pull from this)
+  ───────────────────────────────────────────────────────────────────────────
+  Mood:        weathered low-lit saloon back room, two oil lamps overhead.
+               intimate, conspiratorial, the felt has been played hard.
+  Voice:       terse + frontier. "Take Seat", "Open Table", "Smart play".
+  Type scale:  Rye for the wordmark only. DM Serif Display 28-42 for screen
+               headings. Inter 12-16 for body. Hard contrast between the
+               three — don't reach for a fourth.
+  Color sys:   walnut (#15100a) → wood (#241812) → leather (#3b1f1d) for
+               vertical hierarchy. ONE sharp accent: candle amber (#d59140).
+               Oxblood (#7e2424) for hearts/diamonds + danger only. Brass
+               (#8a6a37) as the trim ring — never a fill.
+  Motion:      Kowalski for chrome (200ms opacity + 4-6px translate, ease-out).
+               Tompkins for the card deal (cascading 300ms stagger, slight
+               rotate, lands with overshoot). Ambient candle flicker on the
+               page glow (8s ease-in-out, infinite, opacity oscillation).
+               Hover lifts respect a 60ms in / 180ms out asymmetry so they
+               feel "leaning in" rather than springy.
+  3D:          layered shadows (close 2px / mid 8px / far 24px), engraved
+               type via stacked text-shadows, candle-light edge highlight
+               (white 4% top, black 30% bottom), no flat gradients.
+  ───────────────────────────────────────────────────────────────────────────
+*/
+
+html, body {
+  min-height: 100%;
+  background-color: #15100a;
+  color: #ede2c2;
+  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
+  font-feature-settings: "ss01", "cv11";  /* nicer Inter alternates */
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Layered ambient lighting — candle glow + corner vignette, slow flicker */
+body {
+  position: relative;
+  background-image:
+    radial-gradient(110% 80% at 50% 22%, rgba(213, 145, 64, 0.13) 0%, transparent 55%),
+    radial-gradient(140% 110% at 50% 110%, rgba(0, 0, 0, 0.65) 50%, transparent 100%);
+  background-attachment: fixed;
+  animation: candle-flicker 9s ease-in-out infinite;
+}
+
+@keyframes candle-flicker {
+  0%, 100% { background-color: #15100a; filter: brightness(1); }
+  18%      { filter: brightness(1.04); }
+  22%      { filter: brightness(0.98); }
+  47%      { filter: brightness(1.02); }
+  68%      { filter: brightness(0.96); }
+  86%      { filter: brightness(1.03); }
+}
+
+/* Grain overlay — pinned to viewport so it reads as the room, not the page */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image:
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0 0.04 0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  background-size: 160px 160px;
+  mix-blend-mode: overlay;
+  opacity: 0.40;
+}
+
+#root {
+  position: relative;
+  z-index: 2;
+}
+
+/* ─── Type ───────────────────────────────────────────────────────────────── */
+
+h1, h2, h3, h4 {
+  font-family: "DM Serif Display", Georgia, serif;
+  letter-spacing: 0.01em;
+}
+
+/* Engraved/letterpress effect for hero text — multiple text-shadows
+   simulate "dark beneath, candle highlight above." */
+.engraved {
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.55),
+    0 2px 1px rgba(0, 0, 0, 0.35),
+    0 -1px 0 rgba(255, 220, 160, 0.20);
+}
+
+/* Used on the BetWise wordmark — heavier letterpress + amber inner glow */
+.wordmark {
+  font-family: "Rye", "DM Serif Display", Georgia, serif;
+  color: #d59140;
+  text-shadow:
+    0 1px 0 rgba(0, 0, 0, 0.60),
+    0 2px 0 rgba(0, 0, 0, 0.45),
+    0 3px 6px rgba(0, 0, 0, 0.55),
+    0 -1px 0 rgba(255, 230, 180, 0.30),
+    0 0 18px rgba(213, 145, 64, 0.30);
+  letter-spacing: 0.02em;
+}
+
+/* ─── Surfaces ───────────────────────────────────────────────────────────── */
+
+.saloon-panel {
+  background-color: #241812;
+  background-image:
+    linear-gradient(180deg, rgba(255, 220, 160, 0.05) 0%, transparent 22%, rgba(0, 0, 0, 0.32) 100%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.20 0 0 0 0 0.13 0 0 0 0 0.07 0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 220, 160, 0.08),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.35),
+    0 1px 0 0 rgba(0, 0, 0, 0.25),
+    0 12px 32px -12px rgba(0, 0, 0, 0.7);
+}
+
+/* "Card stock" — used by PlayingCard */
+.saloon-card {
+  background-color: #ede2c2;
+  background-image:
+    radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.45) 0%, transparent 60%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.20 0 0 0 0 0.15 0 0 0 0 0.07 0 0 0 0.12 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+}
+
+/* Felt — table surface only (not the whole page) */
+.saloon-felt {
+  background-color: #1f3527;
+  background-image:
+    radial-gradient(140% 100% at 50% 0%, rgba(60, 100, 80, 0.55) 0%, rgba(20, 40, 30, 0.0) 70%),
+    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0.22 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+  box-shadow:
+    inset 0 0 0 1px rgba(138, 106, 55, 0.35),
+    inset 0 1px 0 0 rgba(255, 230, 180, 0.10),
+    inset 0 0 80px rgba(0, 0, 0, 0.55),
+    0 16px 48px -16px rgba(0, 0, 0, 0.5);
+}
+
+/* ─── Primary CTA — pressed leather with candle highlight ────────────────── */
+
+.btn-leather {
+  background-color: #d59140;
+  background-image: linear-gradient(180deg, #e7a55b 0%, #d59140 45%, #b3742a 100%);
+  color: #1d1208;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 230, 180, 0.65),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.30),
+    0 1px 0 0 rgba(0, 0, 0, 0.30),
+    0 6px 0 0 rgba(120, 75, 28, 0.55),
+    0 12px 20px -8px rgba(0, 0, 0, 0.55);
+  transform: translateY(0);
+  transition: transform 60ms ease-out, box-shadow 60ms ease-out, background-image 180ms ease-out;
+}
+.btn-leather:hover:not(:disabled) {
+  background-image: linear-gradient(180deg, #f1b269 0%, #e3a04e 45%, #c08134 100%);
+  transform: translateY(-1px);
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 240, 200, 0.75),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.30),
+    0 2px 0 0 rgba(0, 0, 0, 0.30),
+    0 8px 0 0 rgba(120, 75, 28, 0.55),
+    0 16px 28px -10px rgba(0, 0, 0, 0.6);
+}
+.btn-leather:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 2px 0 0 rgba(0, 0, 0, 0.25),
+    0 1px 0 0 rgba(0, 0, 0, 0.30),
+    0 3px 0 0 rgba(120, 75, 28, 0.55),
+    0 4px 12px -4px rgba(0, 0, 0, 0.5);
+  transition-duration: 80ms;
+}
+
+/* Secondary "wood" button — lifts on hover, no amber */
+.btn-wood {
+  background-color: #3a261c;
+  color: #ede2c2;
+  box-shadow:
+    inset 0 1px 0 0 rgba(255, 220, 160, 0.10),
+    inset 0 -2px 0 0 rgba(0, 0, 0, 0.30),
+    0 1px 0 0 rgba(0, 0, 0, 0.30),
+    0 6px 12px -6px rgba(0, 0, 0, 0.55);
+  transform: translateY(0);
+  transition: transform 60ms ease-out, background-color 180ms ease-out, box-shadow 60ms ease-out;
+}
+.btn-wood:hover:not(:disabled) {
+  background-color: #4a3024;
+  transform: translateY(-1px);
+}
+.btn-wood:active:not(:disabled) {
+  transform: translateY(1px);
+}
+
+/* ─── Motion library ─────────────────────────────────────────────────────── */
+
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
   20% { transform: translateX(-8px); }
@@ -10,7 +203,71 @@
   60% { transform: translateX(-4px); }
   80% { transform: translateX(4px); }
 }
+.animate-shake { animation: shake 0.4s ease-in-out; }
 
-.animate-shake {
-  animation: shake 0.4s ease-in-out;
+/* Tompkins-style card deal — slide in from above with rotation + tiny overshoot */
+@keyframes deal-in {
+  0%   { opacity: 0; transform: translateY(-40px) translateX(20px) rotate(-12deg) scale(0.92); }
+  60%  { opacity: 1; transform: translateY(2px) translateX(0) rotate(2deg) scale(1.02); }
+  100% { opacity: 1; transform: translateY(0) translateX(0) rotate(0) scale(1); }
 }
+.card-deal-in {
+  animation: deal-in 360ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+/* Per-card stagger via inline animation-delay — use this on the parent */
+.deal-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.deal-stagger > *:nth-child(2) { animation-delay: 110ms; }
+.deal-stagger > *:nth-child(3) { animation-delay: 220ms; }
+.deal-stagger > *:nth-child(4) { animation-delay: 330ms; }
+.deal-stagger > *:nth-child(5) { animation-delay: 440ms; }
+
+/* Kowalski-style chrome reveal — 200ms opacity + 4px translate */
+@keyframes chrome-in {
+  0%   { opacity: 0; transform: translateY(4px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+.chrome-in {
+  animation: chrome-in 220ms ease-out both;
+}
+
+/* Subtle row stagger for lobby table list */
+.stagger-rows > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-rows > *:nth-child(2) { animation-delay: 60ms; }
+.stagger-rows > *:nth-child(3) { animation-delay: 120ms; }
+.stagger-rows > *:nth-child(4) { animation-delay: 180ms; }
+.stagger-rows > *:nth-child(5) { animation-delay: 240ms; }
+
+/* Hover-lift on interactive cards */
+.hoverable-card {
+  transition: transform 180ms ease-out, box-shadow 180ms ease-out, background-color 180ms ease-out;
+  will-change: transform;
+}
+.hoverable-card:hover {
+  transform: translateY(-2px);
+}
+
+/* Streak counter pulse — fires when the data-streak key changes */
+@keyframes streak-pulse {
+  0%   { transform: scale(1); color: #d59140; }
+  40%  { transform: scale(1.12); color: #f0b269; text-shadow: 0 0 16px rgba(213, 145, 64, 0.7); }
+  100% { transform: scale(1); color: #d59140; text-shadow: none; }
+}
+.streak-pulse { animation: streak-pulse 480ms ease-out; }
+
+/* "Thinking dots" for Chipy — three dots bouncing */
+@keyframes bounce-dot {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40%           { transform: translateY(-4px); opacity: 1; }
+}
+.dot {
+  display: inline-block;
+  width: 5px; height: 5px;
+  border-radius: 9999px;
+  background: currentColor;
+  margin: 0 2px;
+  animation: bounce-dot 1.1s ease-in-out infinite;
+}
+.dot:nth-child(2) { animation-delay: 0.15s; }
+.dot:nth-child(3) { animation-delay: 0.30s; }

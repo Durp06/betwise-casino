@@ -1,5 +1,8 @@
 /**
  * Login.tsx — Supabase email/password auth + upsert on first login.
+ *
+ * Saloon styling: dim room with a single oxblood-leather booth panel in the
+ * center, brass trim, candle-amber CTA, wood-type "BetWise Casino" logo.
  */
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
@@ -18,7 +21,6 @@ export default function Login() {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
-  // Redirect if already authenticated
   useEffect(() => {
     if (!sessionLoading && session) {
       void navigate("/lobby");
@@ -43,7 +45,6 @@ export default function Login() {
         setLoading(false);
         return;
       }
-      // Upsert user profile
       const result = await createMe(username);
       if (result.error) {
         setError(result.error);
@@ -59,7 +60,6 @@ export default function Login() {
         setLoading(false);
         return;
       }
-      // Upsert user profile (idempotent)
       await createMe(username || (email.split("@")[0] ?? "player"));
       void navigate("/lobby");
     }
@@ -67,8 +67,8 @@ export default function Login() {
 
   if (sessionLoading) {
     return (
-      <div className="min-h-screen bg-felt-green flex items-center justify-center">
-        <span role="status" aria-busy="true" className="text-white animate-pulse">
+      <div className="min-h-screen flex items-center justify-center">
+        <span role="status" aria-busy="true" className="text-saloon-parchment/60 animate-pulse">
           {t("Loading...")}
         </span>
       </div>
@@ -76,29 +76,46 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen bg-felt-green flex flex-col items-center justify-center px-4 py-8">
-      <div className="w-full max-w-sm bg-chipy-dark rounded-2xl p-6 flex flex-col gap-4">
-        {/* Logo */}
-        <h1 className="font-display text-chip-gold text-3xl font-bold text-center">
-          {t("BetWise Casino")}
-        </h1>
-        <p className="text-white/60 text-sm text-center">
+    <div className="min-h-screen flex flex-col items-center justify-center px-4 py-10">
+      <div
+        className="saloon-panel w-full max-w-sm rounded-2xl p-7 flex flex-col gap-5
+          ring-1 ring-saloon-brass/30"
+      >
+        {/* Logo — engraved brass wordmark */}
+        <div className="flex flex-col items-center gap-1 chrome-in">
+          <h1 className="wordmark text-5xl text-center leading-none">
+            BetWise
+          </h1>
+          <p
+            className="text-saloon-brass tracking-[0.45em] text-xs uppercase engraved"
+            style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}
+          >
+            · Casino ·
+          </p>
+        </div>
+
+        {/* Tagline — embossed serif */}
+        <p className="text-saloon-ash text-sm text-center italic">
           {t("Fake money. Real strategy.")}
         </p>
 
         {/* Mode toggle */}
-        <div className="flex rounded-lg overflow-hidden border border-white/20">
+        <div className="flex rounded-md overflow-hidden ring-1 ring-saloon-brass/40">
           <button
             onClick={() => setMode("sign-in")}
-            className={`flex-1 py-2 text-sm font-medium transition-colors
-              ${mode === "sign-in" ? "bg-chip-gold text-chipy-dark" : "text-white/60 hover:text-white"}`}
+            className={`flex-1 py-2 text-sm font-semibold transition-colors uppercase tracking-wider
+              ${mode === "sign-in"
+                ? "bg-saloon-amber/90 text-saloon-ink"
+                : "text-saloon-ash hover:text-saloon-parchment"}`}
           >
             {t("Sign In")}
           </button>
           <button
             onClick={() => setMode("sign-up")}
-            className={`flex-1 py-2 text-sm font-medium transition-colors
-              ${mode === "sign-up" ? "bg-chip-gold text-chipy-dark" : "text-white/60 hover:text-white"}`}
+            className={`flex-1 py-2 text-sm font-semibold transition-colors uppercase tracking-wider
+              ${mode === "sign-up"
+                ? "bg-saloon-amber/90 text-saloon-ink"
+                : "text-saloon-ash hover:text-saloon-parchment"}`}
           >
             {t("Sign Up")}
           </button>
@@ -114,9 +131,9 @@ export default function Login() {
               required
               minLength={3}
               maxLength={20}
-              className="w-full px-3 py-3 rounded-lg bg-white/10 text-white
-                placeholder-white/40 border border-white/20
-                focus:outline-none focus:border-chip-gold
+              className="w-full px-3 py-3 rounded-md bg-saloon-night/60 text-saloon-parchment
+                placeholder-saloon-ash/70 ring-1 ring-saloon-brass/30
+                focus:outline-none focus:ring-saloon-amber/70
                 min-h-[44px]"
             />
           )}
@@ -126,9 +143,9 @@ export default function Login() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
-            className="w-full px-3 py-3 rounded-lg bg-white/10 text-white
-              placeholder-white/40 border border-white/20
-              focus:outline-none focus:border-chip-gold
+            className="w-full px-3 py-3 rounded-md bg-saloon-night/60 text-saloon-parchment
+              placeholder-saloon-ash/70 ring-1 ring-saloon-brass/30
+              focus:outline-none focus:ring-saloon-amber/70
               min-h-[44px]"
           />
           <input
@@ -138,40 +155,45 @@ export default function Login() {
             onChange={(e) => setPassword(e.target.value)}
             required
             minLength={6}
-            className="w-full px-3 py-3 rounded-lg bg-white/10 text-white
-              placeholder-white/40 border border-white/20
-              focus:outline-none focus:border-chip-gold
+            className="w-full px-3 py-3 rounded-md bg-saloon-night/60 text-saloon-parchment
+              placeholder-saloon-ash/70 ring-1 ring-saloon-brass/30
+              focus:outline-none focus:ring-saloon-amber/70
               min-h-[44px]"
           />
 
           {error && (
-            <p role="alert" className="text-card-red text-sm text-center">
+            <p role="alert" className="text-saloon-blood text-sm text-center italic">
               {error}
             </p>
           )}
           {message && (
-            <p className="text-green-400 text-sm text-center">{message}</p>
+            <p className="text-saloon-amber text-sm text-center italic">{message}</p>
           )}
 
           <button
             type="submit"
             disabled={loading}
-            className="w-full py-3 bg-chip-gold text-chipy-dark font-bold rounded-lg
+            className="btn-leather w-full py-3 rounded-md
+              font-bold tracking-wider uppercase text-sm
               disabled:opacity-40 disabled:cursor-not-allowed
-              hover:bg-yellow-400 active:scale-95 transition-all
               min-h-[44px]"
             aria-busy={loading}
           >
             {loading ? (
               <span role="status">{t("Loading...")}</span>
             ) : mode === "sign-in" ? (
-              t("Sign In")
+              t("Enter")
             ) : (
               t("Create Account")
             )}
           </button>
         </form>
       </div>
+
+      {/* Tiny footer flourish */}
+      <p className="mt-6 text-saloon-ash/60 text-xs tracking-widest uppercase">
+        Est. 2026 · House Always Watches
+      </p>
     </div>
   );
 }
