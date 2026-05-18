@@ -1,0 +1,34 @@
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+
+# SQLite databases
+*.db
+*.db-journal
+
+# Python virtualenvs
+.venv/
+venv/
+
+# Node / frontend build artifacts
+node_modules/
+dist/
+.vite/
+*.log
+
+# Vite / Vitest caches
+coverage/
+
+# Local env files (Vite picks up .env.local etc)
+.env
+.env.*
+!.env.example
+
+# IDE / OS
+.idea/
+.vscode/
+Thumbs.db

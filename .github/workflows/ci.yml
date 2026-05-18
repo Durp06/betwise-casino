@@ -3,17 +3,8 @@ name: BetWise Casino CI
 on:
   push:
     branches: [main]
-    paths:
-      - 'betwise-casino/**'
-      - '.github/workflows/ci.yml'
   pull_request:
     branches: [main]
-    paths:
-      - 'betwise-casino/**'
-
-defaults:
-  run:
-    working-directory: betwise-casino
 
 jobs:
   backend:
@@ -25,14 +16,14 @@ jobs:
         with:
           python-version: '3.11'
           cache: 'pip'
-          cache-dependency-path: betwise-casino/backend/requirements.txt
+          cache-dependency-path: backend/requirements.txt
 
       - name: Install backend dependencies
-        working-directory: betwise-casino/backend
+        working-directory: backend
         run: pip install -r requirements.txt
 
       - name: Run backend tests
-        working-directory: betwise-casino/backend
+        working-directory: backend
         env:
           # Tests use in-memory SQLite + the dev-user bypass; no real Supabase/Anthropic needed.
           BETWISE_TEST_DB_URL: "sqlite+aiosqlite:///:memory:"
@@ -48,16 +39,16 @@ jobs:
         with:
           node-version: '20'
           cache: 'npm'
-          cache-dependency-path: betwise-casino/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
 
       - name: Install frontend dependencies
-        working-directory: betwise-casino/frontend
+        working-directory: frontend
         run: npm ci
 
       - name: Run frontend tests
-        working-directory: betwise-casino/frontend
+        working-directory: frontend
         run: npm test -- --run
 
       - name: Build frontend
-        working-directory: betwise-casino/frontend
+        working-directory: frontend
         run: npm run build
