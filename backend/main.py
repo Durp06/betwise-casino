@@ -143,7 +143,32 @@ _frontend_dist = os.path.join(
 )
 
 if os.path.isdir(_frontend_dist):
-    app.mount("/", StaticFiles(directory=_frontend_dist, html=True), name="frontend")
+    # Serve hashed assets (Vite emits /assets/index-*.js etc.) via StaticFiles
+    # mounted at /assets. The static mount handles those file requests cleanly.
+    _assets_dir = os.path.join(_frontend_dist, "assets")
+    if os.path.isdir(_assets_dir):
+        app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
+
+    # SPA fallback: any non-/api/* path returns index.html so React Router
+    # owns client-side routing (refreshing /lobby, deep-linking /profile, etc.
+    # all work). Specific files at the top level (favicon.ico, robots.txt) are
+    # served from disk if they exist.
+    from fastapi.responses import FileResponse  # noqa: PLC0415
+
+    _index_html = os.path.join(_frontend_dist, "index.html")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    async def spa_fallback(full_path: str):
+        # API routes are already matched above this catch-all; we only get here
+        # for non-/api paths. Reject /api/* defensively in case ordering changes.
+        if full_path.startswith("api/") or full_path.startswith("api"):
+            return JSONResponse(status_code=404, content={"detail": "Not Found"})
+        # Try the literal file (e.g. favicon.ico, robots.txt at dist root)
+        candidate = os.path.join(_frontend_dist, full_path)
+        if full_path and os.path.isfile(candidate):
+            return FileResponse(candidate)
+        # Otherwise serve the SPA shell; React Router takes over client-side.
+        return FileResponse(_index_html)
 else:
     logger.warning(
         "frontend/dist not found at %s — frontend not served. "
