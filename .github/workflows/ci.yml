@@ -1,0 +1,63 @@
+name: BetWise Casino CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'betwise-casino/**'
+      - '.github/workflows/ci.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'betwise-casino/**'
+
+defaults:
+  run:
+    working-directory: betwise-casino
+
+jobs:
+  backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: betwise-casino/backend/requirements.txt
+
+      - name: Install backend dependencies
+        working-directory: betwise-casino/backend
+        run: pip install -r requirements.txt
+
+      - name: Run backend tests
+        working-directory: betwise-casino/backend
+        env:
+          # Tests use in-memory SQLite + the dev-user bypass; no real Supabase/Anthropic needed.
+          BETWISE_TEST_DB_URL: "sqlite+aiosqlite:///:memory:"
+          BETWISE_DEV_USER_ID: "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+        run: python -m pytest tests/ -v --tb=short
+
+  frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: betwise-casino/frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: betwise-casino/frontend
+        run: npm ci
+
+      - name: Run frontend tests
+        working-directory: betwise-casino/frontend
+        run: npm test -- --run
+
+      - name: Build frontend
+        working-directory: betwise-casino/frontend
+        run: npm run build
