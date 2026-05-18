@@ -42,10 +42,14 @@ async def _stream_anthropic(messages: list[dict]) -> AsyncGenerator[str, None]:
     Lazy client construction — never fails on import even without ANTHROPIC_API_KEY.
     """
     import anthropic  # noqa: PLC0415
+    import os as _os  # noqa: PLC0415
 
+    # Model is overridable via env so we don't have to ship a new commit when
+    # Anthropic rotates the recommended Sonnet/Haiku alias.
+    model = _os.environ.get("CHIPY_MODEL", "claude-sonnet-4-6")
     client = anthropic.AsyncAnthropic()
     async with client.messages.stream(
-        model="claude-sonnet-4-20250514",
+        model=model,
         max_tokens=256,
         system=_CHIPY_SYSTEM_PROMPT,
         messages=messages,
@@ -159,8 +163,22 @@ async def get_advice(
         ]
 
         # ── Stream Anthropic response ────────────────────────────────────────
-        async for chunk in _stream_anthropic(messages):
-            yield f"data: {json.dumps({'text': chunk})}\n\n".encode()
+        try:
+            async for chunk in _stream_anthropic(messages):
+                yield f"data: {json.dumps({'text': chunk})}\n\n".encode()
+        except Exception as e:  # noqa: BLE001
+            # Anthropic failure (deprecated model, quota, network…) must reach
+            # the client as an SSE event — otherwise the stream just stops with
+            # no body and the frontend spinner hangs forever. Falls through
+            # so the final summary event still fires (with optimal_action).
+            import logging as _logging  # noqa: PLC0415
+
+            _logging.getLogger(__name__).exception("Chipy stream failed")
+            fallback_text = (
+                f"(Chipy is offline right now — optimal play is to {opt}. "
+                f"Tap Confirm to continue.)"
+            )
+            yield f"data: {json.dumps({'text': fallback_text, 'error': type(e).__name__})}\n\n".encode()
 
         # ── Final summary event ──────────────────────────────────────────────
         final = {
