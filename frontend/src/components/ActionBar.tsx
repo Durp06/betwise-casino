@@ -1,6 +1,8 @@
 /**
- * ActionBar.tsx — Hit / Stand / Double / Split action buttons.
- * Disabled when not the player's turn or when an action is illegal.
+ * ActionBar.tsx — Hit / Stand / Double / Split action plaques.
+ *
+ * Per-action colors per the Cuphead palette, thick ink outline, offset
+ * solid shadow that compresses on press. Disabled state desaturates.
  */
 import { useState } from "react";
 import type { Action } from "../types";
@@ -23,11 +25,11 @@ const ACTION_LABELS: Record<Action, string> = {
   split:  "Split",
 };
 
-const ACTION_COLORS: Record<Action, string> = {
-  hit:    "bg-green-600 hover:bg-green-500",
-  stand:  "bg-blue-600 hover:bg-blue-500",
-  double: "bg-chip-gold hover:bg-yellow-400 text-chipy-dark",
-  split:  "bg-purple-600 hover:bg-purple-500",
+const ACTION_BG: Record<Action, string> = {
+  hit:    "bg-action-hit",
+  stand:  "bg-action-stand",
+  double: "bg-action-double",
+  split:  "bg-action-split",
 };
 
 export default function ActionBar({
@@ -55,7 +57,7 @@ export default function ActionBar({
 
   return (
     <div className="flex flex-col items-center gap-2 w-full">
-      <div className="flex flex-row flex-wrap gap-2 justify-center w-full">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
         {ALL_ACTIONS.map((action) => {
           const isLegal = legalSet.has(action);
           const isDisabled = !isMyTurn || !isLegal || loading !== null;
@@ -65,16 +67,15 @@ export default function ActionBar({
               key={action}
               onClick={() => handleAction(action)}
               disabled={isDisabled}
-              className={`flex-1 min-w-[80px] py-3 rounded-lg font-bold text-sm text-white
-                ${ACTION_COLORS[action]}
-                disabled:opacity-40 disabled:cursor-not-allowed
-                active:scale-95 transition-all
-                min-h-[44px]`}
+              className={`ink-outline ink-shadow py-3 rounded-md font-ui text-cream uppercase
+                tracking-wider text-sm sm:text-base ${ACTION_BG[action]}
+                disabled:opacity-40 disabled:saturate-50 disabled:cursor-not-allowed
+                min-h-[48px]`}
               aria-busy={isLoading}
               aria-label={t(ACTION_LABELS[action])}
             >
               {isLoading ? (
-                <span role="status" className="text-xs">{t("...")}</span>
+                <span role="status" className="text-xs">…</span>
               ) : (
                 t(ACTION_LABELS[action])
               )}
@@ -83,12 +84,12 @@ export default function ActionBar({
         })}
       </div>
       {error && (
-        <p role="alert" className="text-card-red text-sm text-center">
+        <p role="alert" className="text-action-hit font-flavor text-sm text-center">
           {error}
         </p>
       )}
       {!isMyTurn && (
-        <p className="text-white/40 text-xs text-center">
+        <p className="text-cream/60 font-flavor text-xs text-center">
           {t("Waiting for your turn...")}
         </p>
       )}

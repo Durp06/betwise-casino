@@ -4,197 +4,268 @@
 
 /*
   ───────────────────────────────────────────────────────────────────────────
-  Design brief (committed upstream — every component should pull from this)
+  Aesthetic brief — 1930s rubber-hose cartoon meets vintage Vegas.
   ───────────────────────────────────────────────────────────────────────────
-  Mood:        weathered low-lit saloon back room, two oil lamps overhead.
-               intimate, conspiratorial, the felt has been played hard.
-  Voice:       terse + frontier. "Take Seat", "Open Table", "Smart play".
-  Type scale:  Rye for the wordmark only. DM Serif Display 28-42 for screen
-               headings. Inter 12-16 for body. Hard contrast between the
-               three — don't reach for a fourth.
-  Color sys:   walnut (#15100a) → wood (#241812) → leather (#3b1f1d) for
-               vertical hierarchy. ONE sharp accent: candle amber (#d59140).
-               Oxblood (#7e2424) for hearts/diamonds + danger only. Brass
-               (#8a6a37) as the trim ring — never a fill.
-  Motion:      Kowalski for chrome (200ms opacity + 4-6px translate, ease-out).
-               Tompkins for the card deal (cascading 300ms stagger, slight
-               rotate, lands with overshoot). Ambient candle flicker on the
-               page glow (8s ease-in-out, infinite, opacity oscillation).
-               Hover lifts respect a 60ms in / 180ms out asymmetry so they
-               feel "leaning in" rather than springy.
-  3D:          layered shadows (close 2px / mid 8px / far 24px), engraved
-               type via stacked text-shadows, candle-light edge highlight
-               (white 4% top, black 30% bottom), no flat gradients.
+  - Bold black ink outlines on EVERY interactive element (3px #1A0A00).
+  - Cream paper (#F5F0E8) surfaces with subtle noise grain.
+  - Deep saturated primaries (red #C0392B, blue #2980B9, green #27AE60,
+    purple #8E44AD), not pastels, not neons.
+  - Shadows are SOLID OFFSET, never blurred. Default 4px 4px 0 #1A0A00.
+  - Display type: Luckiest Guy (logos, big numbers).
+    UI labels:    Lilita One (buttons, card values, chip denoms).
+    Body:         Fredoka One (Chipy speech, paragraphs).
+    Flavor:       Special Elite (typewriter for instructional copy).
+  - Everything reads as slightly hand-drawn — wobble allowed.
   ───────────────────────────────────────────────────────────────────────────
 */
 
 html, body {
   min-height: 100%;
-  background-color: #15100a;
-  color: #ede2c2;
-  font-family: "Inter", ui-sans-serif, system-ui, sans-serif;
-  font-feature-settings: "ss01", "cv11";  /* nicer Inter alternates */
+  background-color: #1A0A00;
+  color: #1A0A00;
+  font-family: "Fredoka One", ui-sans-serif, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
 }
 
-/* Layered ambient lighting — candle glow + corner vignette, slow flicker */
-body {
+#root { position: relative; min-height: 100%; }
+
+/* Paper grain — applied to cream surfaces via .paper-grain utility */
+.paper-grain {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.06'/%3E%3C/svg%3E");
+  background-blend-mode: multiply;
+}
+
+/* ─── Outline + offset shadow utility (the Cuphead foundation) ──────────── */
+
+.ink-outline {
+  border: 3px solid #1A0A00;
+}
+
+/* Thicker outline for hero surfaces (Chipy panels, outcome banners) */
+.ink-outline-thick {
+  border: 4px solid #1A0A00;
+}
+
+.ink-shadow {
+  box-shadow: 5px 5px 0 0 #1A0A00;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.ink-shadow:hover:not(:disabled) {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0 0 #1A0A00;
+}
+.ink-shadow:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: 2px 2px 0 0 #1A0A00;
+}
+
+/* Smaller shadow for inline chrome */
+.ink-shadow-sm {
+  box-shadow: 3px 3px 0 0 #1A0A00;
+  transition: transform 120ms ease-out, box-shadow 120ms ease-out;
+}
+.ink-shadow-sm:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 0 #1A0A00;
+}
+.ink-shadow-sm:active:not(:disabled) {
+  transform: translate(1px, 1px);
+  box-shadow: 2px 2px 0 0 #1A0A00;
+}
+
+/* ─── Table felt surface ────────────────────────────────────────────────── */
+
+.table-surface {
   position: relative;
-  background-image:
-    radial-gradient(110% 80% at 50% 22%, rgba(213, 145, 64, 0.13) 0%, transparent 55%),
-    radial-gradient(140% 110% at 50% 110%, rgba(0, 0, 0, 0.65) 50%, transparent 100%);
-  background-attachment: fixed;
-  animation: candle-flicker 9s ease-in-out infinite;
+  background: radial-gradient(ellipse at center, #1E8449 0%, #145A32 50%, #0D3B1F 100%);
 }
-
-@keyframes candle-flicker {
-  0%, 100% { background-color: #15100a; filter: brightness(1); }
-  18%      { filter: brightness(1.04); }
-  22%      { filter: brightness(0.98); }
-  47%      { filter: brightness(1.02); }
-  68%      { filter: brightness(0.96); }
-  86%      { filter: brightness(1.03); }
-}
-
-/* Grain overlay — pinned to viewport so it reads as the room, not the page */
-body::before {
+.table-surface::after {
   content: "";
-  position: fixed;
+  position: absolute;
   inset: 0;
   pointer-events: none;
-  z-index: 1;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.55' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23noise)' opacity='0.10'/%3E%3C/svg%3E");
+  mix-blend-mode: multiply;
+}
+
+/* ─── Card back diamond pattern ─────────────────────────────────────────── */
+
+.card-back-pattern {
+  background-color: #922B21;
   background-image:
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0 0.04 0 0 0 0.55 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  background-size: 160px 160px;
-  mix-blend-mode: overlay;
-  opacity: 0.40;
+    repeating-linear-gradient(45deg,  rgba(245, 240, 232, 0.18) 0 6px, transparent 6px 12px),
+    repeating-linear-gradient(-45deg, rgba(245, 240, 232, 0.18) 0 6px, transparent 6px 12px);
 }
 
-#root {
-  position: relative;
-  z-index: 2;
-}
-
-/* ─── Type ───────────────────────────────────────────────────────────────── */
+/* ─── Type defaults ─────────────────────────────────────────────────────── */
 
 h1, h2, h3, h4 {
-  font-family: "DM Serif Display", Georgia, serif;
-  letter-spacing: 0.01em;
+  font-family: "Luckiest Guy", Impact, system-ui, sans-serif;
+  letter-spacing: 0.04em;
 }
 
-/* Engraved/letterpress effect for hero text — multiple text-shadows
-   simulate "dark beneath, candle highlight above." */
-.engraved {
+/* Gold drop-shadow utility (solid offset, not blur) — used on the wordmark */
+.gold-drop {
   text-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.55),
-    0 2px 1px rgba(0, 0, 0, 0.35),
-    0 -1px 0 rgba(255, 220, 160, 0.20);
+    2px 2px 0 #9A7D0A,
+    4px 4px 0 #1A0A00;
 }
 
-/* Used on the BetWise wordmark — heavier letterpress + amber inner glow */
-.wordmark {
-  font-family: "Rye", "DM Serif Display", Georgia, serif;
-  color: #d59140;
-  text-shadow:
-    0 1px 0 rgba(0, 0, 0, 0.60),
-    0 2px 0 rgba(0, 0, 0, 0.45),
-    0 3px 6px rgba(0, 0, 0, 0.55),
-    0 -1px 0 rgba(255, 230, 180, 0.30),
-    0 0 18px rgba(213, 145, 64, 0.30);
-  letter-spacing: 0.02em;
+/* Stamped status mark — rotated, outline font */
+.stamped {
+  -webkit-text-stroke: 1.5px currentColor;
+  text-stroke: 1.5px currentColor;
+  color: transparent;
+  font-family: "Luckiest Guy", Impact, sans-serif;
+  letter-spacing: 0.08em;
+  display: inline-block;
+  transform: rotate(-5deg);
 }
 
-/* ─── Surfaces ───────────────────────────────────────────────────────────── */
+/* ─── Chipy animations (all keyframes prefers-reduced-motion-gated below) ─ */
 
-.saloon-panel {
-  background-color: #241812;
-  background-image:
-    linear-gradient(180deg, rgba(255, 220, 160, 0.05) 0%, transparent 22%, rgba(0, 0, 0, 0.32) 100%),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.20 0 0 0 0 0.13 0 0 0 0 0.07 0 0 0 0.18 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 220, 160, 0.08),
-    inset 0 -2px 0 0 rgba(0, 0, 0, 0.35),
-    0 1px 0 0 rgba(0, 0, 0, 0.25),
-    0 12px 32px -12px rgba(0, 0, 0, 0.7);
+@keyframes chipy-idle {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-4px); }
 }
-
-/* "Card stock" — used by PlayingCard */
-.saloon-card {
-  background-color: #ede2c2;
-  background-image:
-    radial-gradient(120% 100% at 50% 0%, rgba(255, 255, 255, 0.45) 0%, transparent 60%),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='120' height='120'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.20 0 0 0 0 0.15 0 0 0 0 0.07 0 0 0 0.12 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
+@keyframes chipy-bounce {
+  0%, 100% { transform: translateY(0)   scale(1, 1); }
+  20%      { transform: translateY(-12px) scale(1.05, 0.95); }
+  40%      { transform: translateY(0)   scale(0.95, 1.05); }
+  60%      { transform: translateY(-6px) scale(1.02, 0.98); }
+  80%      { transform: translateY(0)   scale(1, 1); }
 }
-
-/* Felt — table surface only (not the whole page) */
-.saloon-felt {
-  background-color: #1f3527;
-  background-image:
-    radial-gradient(140% 100% at 50% 0%, rgba(60, 100, 80, 0.55) 0%, rgba(20, 40, 30, 0.0) 70%),
-    url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.95' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 0.05 0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0.22 0'/></filter><rect width='100%25' height='100%25' filter='url(%23n)'/></svg>");
-  box-shadow:
-    inset 0 0 0 1px rgba(138, 106, 55, 0.35),
-    inset 0 1px 0 0 rgba(255, 230, 180, 0.10),
-    inset 0 0 80px rgba(0, 0, 0, 0.55),
-    0 16px 48px -16px rgba(0, 0, 0, 0.5);
+@keyframes chipy-shake {
+  0%, 100% { transform: translateX(0); }
+  10%      { transform: translateX(-6px) rotate(-3deg); }
+  30%      { transform: translateX(6px)  rotate(3deg); }
+  50%      { transform: translateX(-4px) rotate(-2deg); }
+  70%      { transform: translateX(4px)  rotate(2deg); }
+  90%      { transform: translateX(-2px) rotate(-1deg); }
+}
+@keyframes chipy-spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+@keyframes chipy-think {
+  0%, 100% { transform: rotate(-4deg); }
+  50%      { transform: rotate(4deg); }
 }
 
-/* ─── Primary CTA — pressed leather with candle highlight ────────────────── */
+.chipy-animate-idle   { animation: chipy-idle   3.0s ease-in-out infinite; }
+.chipy-animate-bounce { animation: chipy-bounce 0.7s ease-out 1; }
+.chipy-animate-shake  { animation: chipy-shake  0.6s ease-in-out 1; }
+.chipy-animate-spin   { animation: chipy-spin   0.9s ease-in-out 1; }
+.chipy-animate-think  { animation: chipy-think  1.6s ease-in-out infinite; }
 
-.btn-leather {
-  background-color: #d59140;
-  background-image: linear-gradient(180deg, #e7a55b 0%, #d59140 45%, #b3742a 100%);
-  color: #1d1208;
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 230, 180, 0.65),
-    inset 0 -2px 0 0 rgba(0, 0, 0, 0.30),
-    0 1px 0 0 rgba(0, 0, 0, 0.30),
-    0 6px 0 0 rgba(120, 75, 28, 0.55),
-    0 12px 20px -8px rgba(0, 0, 0, 0.55);
-  transform: translateY(0);
-  transition: transform 60ms ease-out, box-shadow 60ms ease-out, background-image 180ms ease-out;
-}
-.btn-leather:hover:not(:disabled) {
-  background-image: linear-gradient(180deg, #f1b269 0%, #e3a04e 45%, #c08134 100%);
-  transform: translateY(-1px);
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 240, 200, 0.75),
-    inset 0 -2px 0 0 rgba(0, 0, 0, 0.30),
-    0 2px 0 0 rgba(0, 0, 0, 0.30),
-    0 8px 0 0 rgba(120, 75, 28, 0.55),
-    0 16px 28px -10px rgba(0, 0, 0, 0.6);
-}
-.btn-leather:active:not(:disabled) {
-  transform: translateY(3px);
-  box-shadow:
-    inset 0 2px 0 0 rgba(0, 0, 0, 0.25),
-    0 1px 0 0 rgba(0, 0, 0, 0.30),
-    0 3px 0 0 rgba(120, 75, 28, 0.55),
-    0 4px 12px -4px rgba(0, 0, 0, 0.5);
-  transition-duration: 80ms;
+@media (prefers-reduced-motion: reduce) {
+  .chipy-animate-idle,
+  .chipy-animate-bounce,
+  .chipy-animate-shake,
+  .chipy-animate-spin,
+  .chipy-animate-think { animation: none !important; }
 }
 
-/* Secondary "wood" button — lifts on hover, no amber */
-.btn-wood {
-  background-color: #3a261c;
-  color: #ede2c2;
-  box-shadow:
-    inset 0 1px 0 0 rgba(255, 220, 160, 0.10),
-    inset 0 -2px 0 0 rgba(0, 0, 0, 0.30),
-    0 1px 0 0 rgba(0, 0, 0, 0.30),
-    0 6px 12px -6px rgba(0, 0, 0, 0.55);
-  transform: translateY(0);
-  transition: transform 60ms ease-out, background-color 180ms ease-out, box-shadow 60ms ease-out;
+/* ─── Wobble — gentle hand-drawn life on stationary plaques ───────────── */
+
+@keyframes wobble {
+  0%, 100% { transform: rotate(-0.6deg); }
+  50%      { transform: rotate(0.6deg); }
 }
-.btn-wood:hover:not(:disabled) {
-  background-color: #4a3024;
-  transform: translateY(-1px);
+.wobble { animation: wobble 4s ease-in-out infinite; }
+
+@keyframes wobble-strong {
+  0%, 100% { transform: rotate(-1.4deg) translateY(0); }
+  50%      { transform: rotate(1.4deg)  translateY(-2px); }
 }
-.btn-wood:active:not(:disabled) {
-  transform: translateY(1px);
+.wobble-strong { animation: wobble-strong 2.4s ease-in-out infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .wobble, .wobble-strong { animation: none !important; }
 }
 
-/* ─── Motion library ─────────────────────────────────────────────────────── */
+/* ─── Sparkle — golden flecks around a winning outcome banner ──────────── */
+
+@keyframes sparkle {
+  0%, 100% { transform: scale(0.6) rotate(0deg);  opacity: 0; }
+  20%      { opacity: 1; }
+  50%      { transform: scale(1.2) rotate(180deg); opacity: 1; }
+  80%      { opacity: 0.6; }
+}
+.sparkle { animation: sparkle 1.6s ease-in-out infinite; }
+
+/* ─── Pulse on the outcome banner so the win feels alive ───────────────── */
+
+@keyframes banner-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.02); }
+}
+.banner-pulse { animation: banner-pulse 1.8s ease-in-out infinite; }
+
+/* ─── Card deal animation ───────────────────────────────────────────────── */
+
+@keyframes card-deal {
+  0%   { opacity: 0; transform: translateY(-80px) translateX(20px) rotate(-22deg) scale(0.85); }
+  55%  { opacity: 1; transform: translateY(6px) translateX(-2px) rotate(6deg) scale(1.05); }
+  80%  { opacity: 1; transform: translateY(-2px) rotate(-1deg) scale(1); }
+  100% { opacity: 1; transform: translateY(0) rotate(var(--card-tilt, 0deg)) scale(1); }
+}
+.card-deal {
+  animation: card-deal 380ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+.deal-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.deal-stagger > *:nth-child(2) { animation-delay: 110ms; }
+.deal-stagger > *:nth-child(3) { animation-delay: 220ms; }
+.deal-stagger > *:nth-child(4) { animation-delay: 330ms; }
+.deal-stagger > *:nth-child(5) { animation-delay: 440ms; }
+.deal-stagger > *:nth-child(6) { animation-delay: 550ms; }
+
+/* ─── Card face flip ─────────────────────────────────────────────────────── */
+
+.card-3d { perspective: 800px; }
+.card-inner {
+  position: relative;
+  width: 100%; height: 100%;
+  transform-style: preserve-3d;
+  transition: transform 420ms ease;
+}
+.card-inner.flipped { transform: rotateY(180deg); }
+.card-face {
+  position: absolute;
+  inset: 0;
+  -webkit-backface-visibility: hidden;
+  backface-visibility: hidden;
+}
+.card-face-back {
+  transform: rotateY(180deg);
+}
+
+/* ─── Slide up panel (Chipy entrance) ───────────────────────────────────── */
+
+@keyframes slide-up {
+  0%   { transform: translateY(120%); opacity: 0; }
+  100% { transform: translateY(0);    opacity: 1; }
+}
+.slide-up {
+  animation: slide-up 320ms cubic-bezier(0.18, 0.89, 0.32, 1.18) both;
+}
+
+/* ─── Typewriter / bloop per character ──────────────────────────────────── */
+
+@keyframes bloop {
+  0%   { transform: scale(0.7); opacity: 0; }
+  60%  { transform: scale(1.08); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.bloop-char {
+  display: inline-block;
+  animation: bloop 180ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
+  transform-origin: bottom center;
+}
+
+/* ─── Shake (legacy, retained for error states) ─────────────────────────── */
 
 @keyframes shake {
   0%, 100% { transform: translateX(0); }
@@ -205,69 +276,37 @@ h1, h2, h3, h4 {
 }
 .animate-shake { animation: shake 0.4s ease-in-out; }
 
-/* Tompkins-style card deal — slide in from above with rotation + tiny overshoot */
-@keyframes deal-in {
-  0%   { opacity: 0; transform: translateY(-40px) translateX(20px) rotate(-12deg) scale(0.92); }
-  60%  { opacity: 1; transform: translateY(2px) translateX(0) rotate(2deg) scale(1.02); }
-  100% { opacity: 1; transform: translateY(0) translateX(0) rotate(0) scale(1); }
+/* ─── Shimmer (correct-answer button celebration) ───────────────────────── */
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
-.card-deal-in {
-  animation: deal-in 360ms cubic-bezier(0.22, 0.61, 0.36, 1) both;
-  will-change: transform, opacity;
+.shimmer-overlay::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(120deg,
+    transparent 0%,
+    rgba(244, 208, 63, 0) 35%,
+    rgba(244, 208, 63, 0.55) 50%,
+    rgba(244, 208, 63, 0) 65%,
+    transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.1s ease-out 1;
 }
 
-/* Per-card stagger via inline animation-delay — use this on the parent */
-.deal-stagger > *:nth-child(1) { animation-delay: 0ms; }
-.deal-stagger > *:nth-child(2) { animation-delay: 110ms; }
-.deal-stagger > *:nth-child(3) { animation-delay: 220ms; }
-.deal-stagger > *:nth-child(4) { animation-delay: 330ms; }
-.deal-stagger > *:nth-child(5) { animation-delay: 440ms; }
-
-/* Kowalski-style chrome reveal — 200ms opacity + 4px translate */
-@keyframes chrome-in {
-  0%   { opacity: 0; transform: translateY(4px); }
-  100% { opacity: 1; transform: translateY(0); }
+/* ─── Old saloon utility classes — neutered for backward compat ─────────── */
+.saloon-panel,
+.saloon-felt,
+.saloon-card,
+.btn-leather,
+.btn-wood,
+.engraved,
+.wordmark {
+  /* No-ops — these classes existed in the saloon era. Components that
+     still reference them now render as plain content. The Cuphead pass
+     should not rely on any of these; this block exists only so a
+     stray reference doesn't break a render. */
 }
-.chrome-in {
-  animation: chrome-in 220ms ease-out both;
-}
-
-/* Subtle row stagger for lobby table list */
-.stagger-rows > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-rows > *:nth-child(2) { animation-delay: 60ms; }
-.stagger-rows > *:nth-child(3) { animation-delay: 120ms; }
-.stagger-rows > *:nth-child(4) { animation-delay: 180ms; }
-.stagger-rows > *:nth-child(5) { animation-delay: 240ms; }
-
-/* Hover-lift on interactive cards */
-.hoverable-card {
-  transition: transform 180ms ease-out, box-shadow 180ms ease-out, background-color 180ms ease-out;
-  will-change: transform;
-}
-.hoverable-card:hover {
-  transform: translateY(-2px);
-}
-
-/* Streak counter pulse — fires when the data-streak key changes */
-@keyframes streak-pulse {
-  0%   { transform: scale(1); color: #d59140; }
-  40%  { transform: scale(1.12); color: #f0b269; text-shadow: 0 0 16px rgba(213, 145, 64, 0.7); }
-  100% { transform: scale(1); color: #d59140; text-shadow: none; }
-}
-.streak-pulse { animation: streak-pulse 480ms ease-out; }
-
-/* "Thinking dots" for Chipy — three dots bouncing */
-@keyframes bounce-dot {
-  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
-  40%           { transform: translateY(-4px); opacity: 1; }
-}
-.dot {
-  display: inline-block;
-  width: 5px; height: 5px;
-  border-radius: 9999px;
-  background: currentColor;
-  margin: 0 2px;
-  animation: bounce-dot 1.1s ease-in-out infinite;
-}
-.dot:nth-child(2) { animation-delay: 0.15s; }
-.dot:nth-child(3) { animation-delay: 0.30s; }

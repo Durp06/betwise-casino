@@ -1,63 +1,72 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Saloon palette — low-lit, candle-warm, walnut + oxblood + worn felt.
+ * Cuphead / rubber-hose / vintage-Vegas palette.
  *
- * Old token names (felt-green / card-red / chip-gold / chipy-dark) remain
- * as aliases pointing at the new palette so existing components inherit
- * the new look without rewrites.
+ * Bold saturated primaries (not pastels, not neons), cream paper for
+ * surfaces, deep ink for outlines. Every interactive element should be
+ * outlined with #1A0A00.
  */
 const config: Config = {
   content: ["./index.html", "./src/**/*.{ts,tsx}"],
   theme: {
     extend: {
       colors: {
-        // ── Saloon palette ──────────────────────────────────────────────
-        saloon: {
-          night:     "#15100a",  // base background, near-black walnut
-          wood:      "#241812",  // panel surface, dark stained walnut
-          oak:       "#3a261c",  // raised panel / divider
-          leather:   "#3b1f1d",  // booth banquette / accent surface
-          felt:      "#1f3527",  // worn table felt (still green, dimmer/grayer)
-          amber:     "#d59140",  // candle / lantern key accent
-          brass:     "#8a6a37",  // brass trim, secondary metal
-          parchment: "#ede2c2",  // card stock, body text on dark
-          ash:       "#9c8a72",  // muted text, secondary
-          blood:     "#7e2424",  // hearts/diamonds (deep oxblood, not bright)
-          ink:       "#1d1208",  // deepest near-black for card pips on parchment
+        felt: {
+          dark:  "#0D3B1F",   // table base
+          mid:   "#145A32",   // felt mid
+          light: "#1E8449",   // felt highlight
+        },
+        cream:  "#F5F0E8",    // off-white paper, all text/card bg
+        ink:    "#1A0A00",    // near-black, outlines + primary text
+        gold: {
+          bright: "#F4D03F",
+          mid:    "#D4AC0D",
+          dark:   "#9A7D0A",
+        },
+        chip: {
+          red:    "#C0392B",
+          blue:   "#1A5276",
+          green:  "#1E8449",
+          black:  "#1A1A1A",
+          white:  "#F5F0E8",
+          purple: "#6C3483",
+        },
+        action: {
+          hit:    "#E74C3C",
+          stand:  "#27AE60",
+          double: "#2980B9",
+          split:  "#8E44AD",
         },
 
-        // ── Legacy aliases (so existing components inherit the new look) ─
-        "felt-green": "#1f3527",  // → saloon.felt
-        "card-red":   "#7e2424",  // → saloon.blood
-        "chip-gold":  "#d59140",  // → saloon.amber
-        "chipy-dark": "#15100a",  // → saloon.night
+        // Legacy aliases — point old tokens at the new palette so any
+        // un-rewritten component still renders something sensible.
+        "felt-green": "#145A32",  // → felt.mid
+        "card-red":   "#C0392B",  // → chip.red
+        "chip-gold":  "#D4AC0D",  // → gold.mid
+        "chipy-dark": "#1A0A00",  // → ink
+        saloon: {
+          // Just enough to stop classes from breaking; cosmetics ignored.
+          night:     "#1A0A00",
+          wood:      "#1A0A00",
+          oak:       "#241812",
+          leather:   "#C0392B",
+          felt:      "#145A32",
+          amber:     "#D4AC0D",
+          brass:     "#9A7D0A",
+          parchment: "#F5F0E8",
+          ash:       "#9A9A9A",
+          blood:     "#C0392B",
+          ink:       "#1A0A00",
+        },
       },
       fontFamily: {
-        sans:    ["Inter", "ui-sans-serif", "system-ui", "sans-serif"],
-        display: ["'DM Serif Display'", "Playfair Display", "Georgia", "serif"],
-        // For the BetWise logo specifically — wood-type Western feel
-        logo:    ["Rye", "'DM Serif Display'", "Georgia", "serif"],
-      },
-      boxShadow: {
-        // Soft inner glow used on panel surfaces to suggest candlelight
-        candle: "inset 0 1px 0 0 rgba(255, 220, 160, 0.06), 0 24px 64px -32px rgba(0,0,0,0.7)",
-        // Pressed-leather feel for primary buttons
-        leather: "inset 0 1px 0 0 rgba(255,220,160,0.18), inset 0 -2px 0 0 rgba(0,0,0,0.35), 0 2px 0 0 rgba(0,0,0,0.25)",
-        // Brass trim ring used on important interactive surfaces
-        brass: "0 0 0 1px rgba(138,106,55,0.6), 0 8px 24px -8px rgba(0,0,0,0.6)",
-        // Card on table — settled, with shadow toward the bottom
-        card: "0 6px 12px -6px rgba(0,0,0,0.6), 0 1px 0 0 rgba(255,255,255,0.04)",
-      },
-      backgroundImage: {
-        // CSS-only noise + vignette layers for the body — no asset files needed
-        "saloon-vignette":
-          "radial-gradient(120% 90% at 50% 30%, rgba(213,145,64,0.06) 0%, transparent 45%), " +
-          "radial-gradient(120% 100% at 50% 100%, rgba(0,0,0,0.55) 50%, transparent 100%)",
-        "saloon-grain":
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.10 0 0 0 0 0.07 0 0 0 0 0.04 0 0 0 0.45 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
-        "saloon-parchment-grain":
-          "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.2' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 0.20 0 0 0 0 0.15 0 0 0 0 0.07 0 0 0 0.10 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E\")",
+        display: ["'Luckiest Guy'", "Impact", "system-ui", "sans-serif"],
+        ui:      ["'Lilita One'", "ui-sans-serif", "sans-serif"],
+        body:    ["'Fredoka One'", "ui-sans-serif", "sans-serif"],
+        flavor:  ["'Special Elite'", "Courier", "monospace"],
+        // Default sans falls back to Fredoka for readable copy
+        sans:    ["'Fredoka One'", "ui-sans-serif", "system-ui", "sans-serif"],
       },
     },
   },

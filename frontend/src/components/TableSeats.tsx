@@ -1,9 +1,8 @@
 /**
- * TableSeats.tsx — seated player chips.
+ * TableSeats.tsx — seat plaques shown across the top of the table.
  *
- * Each seat is a small "chip plaque" — engraved brass-trim card with
- * the username, seat #, chip balance, and current hand state. Current
- * user gets an amber edge ring and an inner candle highlight.
+ * Each seat is a cream plaque with thick ink outline + offset shadow.
+ * The current user gets a gold accent border.
  */
 import type { Seat, Hand } from "../types";
 import { t } from "../i18n";
@@ -21,23 +20,23 @@ function formatCents(cents: number): string {
 const HAND_STATUS_LABELS: Record<string, string> = {
   active:    "Playing",
   standing:  "Standing",
-  bust:      "Bust",
+  bust:      "Bust!",
   blackjack: "Blackjack!",
   finished:  "Done",
 };
 
-const HAND_STATUS_COLORS: Record<string, string> = {
-  active:    "text-saloon-amber",
-  standing:  "text-saloon-ash",
-  bust:      "text-saloon-blood",
-  blackjack: "text-saloon-amber",
-  finished:  "text-saloon-ash/60",
+const HAND_STATUS_COLOR: Record<string, string> = {
+  active:    "text-action-double",
+  standing:  "text-ink/60",
+  bust:      "text-action-hit",
+  blackjack: "text-gold-dark",
+  finished:  "text-ink/40",
 };
 
 export default function TableSeats({ seats, hands, currentUserId }: TableSeatsProps) {
   if (seats.length === 0) {
     return (
-      <div className="text-saloon-ash italic text-sm text-center py-4">
+      <div className="font-flavor text-cream/60 italic text-sm text-center py-4">
         {t("No players seated")}
       </div>
     );
@@ -52,49 +51,36 @@ export default function TableSeats({ seats, hands, currentUserId }: TableSeatsPr
         return (
           <div
             key={seat.id}
-            className={`saloon-panel flex flex-col items-center gap-1.5 px-4 py-3
-              rounded-md min-w-0 flex-1 chrome-in
-              ${isMe ? "ring-2 ring-saloon-amber/70" : "ring-1 ring-saloon-brass/30"}`}
+            className={`ink-outline rounded-md px-4 py-3 flex flex-col items-center
+              gap-1 flex-1 min-w-0 paper-grain`}
             style={{
+              backgroundColor: "#F5F0E8",
               boxShadow: isMe
-                ? "inset 0 1px 0 0 rgba(255,230,180,0.18), inset 0 -2px 0 0 rgba(0,0,0,0.35), 0 8px 24px -10px rgba(213,145,64,0.35)"
-                : undefined,
+                ? "0 0 0 4px #F4D03F, 4px 4px 0 0 #1A0A00"
+                : "3px 3px 0 0 #1A0A00",
             }}
           >
-            <span
-              className={`text-sm font-semibold truncate max-w-full tracking-wide
-                ${isMe ? "text-saloon-amber" : "text-saloon-parchment"}`}
-              style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}
-            >
+            <span className="font-ui text-ink text-sm truncate max-w-full">
               {seat.username ?? t("Player")}
               {isMe && (
-                <span className="ml-1 text-xs text-saloon-amber/70 italic">
-                  {t("(you)")}
-                </span>
+                <span className="ml-1 text-xs text-ink/60">{t("(you)")}</span>
               )}
             </span>
 
-            <span className="text-[9px] uppercase tracking-[0.3em] text-saloon-ash">
+            <span className="font-flavor text-ink/60 text-[10px] uppercase tracking-widest">
               {t("Seat")} {seat.seat_number}
             </span>
 
             {seat.chip_balance !== null && (
-              <span
-                className="text-base font-bold"
-                style={{
-                  fontFamily: "'DM Serif Display', Georgia, serif",
-                  color: "#d59140",
-                  textShadow: "0 1px 0 rgba(0,0,0,0.6), 0 0 12px rgba(213,145,64,0.25)",
-                }}
-              >
+              <span className="font-display text-gold-dark text-lg leading-none">
                 {formatCents(seat.chip_balance)}
               </span>
             )}
 
             {hand && (
               <span
-                className={`text-[10px] font-bold uppercase tracking-widest
-                  ${HAND_STATUS_COLORS[hand.status] ?? "text-saloon-parchment"}`}
+                className={`font-ui uppercase tracking-wider text-[10px]
+                  ${HAND_STATUS_COLOR[hand.status] ?? "text-ink"}`}
               >
                 {HAND_STATUS_LABELS[hand.status] ?? hand.status}
               </span>

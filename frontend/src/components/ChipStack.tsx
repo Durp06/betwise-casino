@@ -1,66 +1,77 @@
 /**
- * ChipStack.tsx — visual stack of denomination chips for a bet amount.
- * All monetary values are integers (fake cents): $10.00 = 1000.
+ * ChipStack.tsx — visual stack of chips for a bet amount.
+ *
+ * Drawn as stacked SVG ellipses (each offset 4 px up from the one below)
+ * to suggest physical chip layers. Total value below in display font.
  */
-import { t } from "../i18n";
-
 interface ChipStackProps {
-  amount: number; // in fake cents
+  /** Bet amount in cents */
+  amount: number;
   className?: string;
 }
 
-// Chip denominations in fake cents with display colors
-const DENOMINATIONS = [
-  { value: 50000, label: "500", color: "bg-purple-700", text: "text-white" },
-  { value: 10000, label: "100", color: "bg-gray-900 border border-gray-600", text: "text-white" },
-  { value: 2500,  label: "25",  color: "bg-green-600",  text: "text-white" },
-  { value: 500,   label: "5",   color: "bg-card-red",   text: "text-white" },
-  { value: 100,   label: "1",   color: "bg-white",      text: "text-gray-900" },
-] as const;
+const CHIP_VALUES = [50000, 10000, 2500, 500, 100] as const;
+const CHIP_FILL: Record<number, string> = {
+  50000: "#6C3483",
+  10000: "#1A1A1A",
+  2500:  "#1E8449",
+  500:   "#C0392B",
+  100:   "#F5F0E8",
+};
 
-/** Format fake cents as a dollar string: 1000 → "$10.00" */
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
+function breakdown(amount: number): Array<{ denom: number; count: number }> {
+  let remaining = amount;
+  const out: Array<{ denom: number; count: number }> = [];
+  for (const denom of CHIP_VALUES) {
+    if (remaining >= denom) {
+      const count = Math.floor(remaining / denom);
+      out.push({ denom, count });
+      remaining -= denom * count;
+    }
+  }
+  return out;
 }
 
 export default function ChipStack({ amount, className = "" }: ChipStackProps) {
-  // Break amount into denomination counts
-  const chips: Array<{ denomination: (typeof DENOMINATIONS)[number]; count: number }> = [];
-  let remaining = amount;
-  for (const denom of DENOMINATIONS) {
-    const count = Math.floor(remaining / denom.value);
-    if (count > 0) {
-      chips.push({ denomination: denom, count });
-      remaining -= count * denom.value;
-    }
-  }
+  const stacks = breakdown(amount);
+  const totalChips = stacks.reduce((sum, s) => sum + s.count, 0);
+  const maxVisible = 12;
+  const chipsToRender = Math.min(totalChips, maxVisible);
 
-  if (chips.length === 0) {
-    return (
-      <span className={`text-white/40 text-sm ${className}`}>
-        {t("No bet")}
-      </span>
-    );
+  const flat: string[] = [];
+  for (const { denom, count } of stacks) {
+    for (let i = 0; i < count; i++) flat.push(CHIP_FILL[denom]);
   }
+  const visible = flat.slice(0, chipsToRender);
 
   return (
-    <div className={`flex flex-col items-center gap-1 ${className}`} aria-label={`${t("Bet")}: ${formatCents(amount)}`}>
-      <div className="flex flex-row flex-wrap gap-1 justify-center">
-        {chips.map(({ denomination, count }) =>
-          Array.from({ length: Math.min(count, 5) }).map((_, i) => (
-            <div
-              key={`${denomination.value}-${i}`}
-              className={`w-10 h-10 rounded-full flex items-center justify-center
-                text-xs font-bold shadow-md ${denomination.color} ${denomination.text}
-                min-w-[44px] min-h-[44px]`}
-              title={`$${(denomination.value / 100).toFixed(0)}`}
+    <div className={`flex flex-col items-center gap-1 ${className}`}>
+      <div className="relative" style={{ width: 56, height: 18 + visible.length * 4 }}>
+        {visible.map((fill, i) => {
+          const bottom = i * 4;
+          return (
+            <svg
+              key={i}
+              viewBox="0 0 100 30"
+              width={56}
+              height={20}
+              style={{
+                position: "absolute",
+                left: 0,
+                bottom,
+                filter: "drop-shadow(2px 2px 0 #1A0A00)",
+              }}
             >
-              {denomination.label}
-            </div>
-          ))
-        )}
+              <ellipse cx={50} cy={20} rx={42} ry={6} fill="#1A0A00" />
+              <ellipse cx={50} cy={15} rx={42} ry={8} fill={fill} stroke="#1A0A00" strokeWidth={3} />
+              <ellipse cx={50} cy={12} rx={42} ry={6} fill={fill} stroke="#1A0A00" strokeWidth={2} />
+            </svg>
+          );
+        })}
       </div>
-      <span className="text-chip-gold text-sm font-bold">{formatCents(amount)}</span>
+      <span className="font-display text-gold-bright text-base gold-drop">
+        ${(amount / 100).toFixed(0)}
+      </span>
     </div>
   );
 }

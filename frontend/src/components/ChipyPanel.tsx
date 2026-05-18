@@ -1,20 +1,18 @@
 /**
- * ChipyPanel.tsx — AI coaching flow.
+ * ChipyPanel.tsx — Chipy coaching flow (rubber-hose pivot).
  *
  * Contract (tests/ChipyPanel.test.tsx):
  * - Renders Hit / Stand / Double / Split buttons for ALL four actions.
- * - Illegal actions (not in legalActions prop) are rendered but disabled.
+ * - Illegal actions disabled but still rendered.
  * - Clicking calls streamAdvice(handId, guess, ...).
- * - While streaming: show loading indicator (role="status" + aria-busy).
- * - After stream: show "Confirm <Action>" button.
- *
- * Saloon styling: dim corner-booth panel; amber for Chipy's voice, oxblood
- * for "not optimal" outcome.
+ * - While streaming: role="status" + aria-busy.
+ * - After stream: shows a "Confirm <Action>" button.
  */
 import { useState, useCallback } from "react";
 import type { Action, AdviceResult } from "../types";
 import { streamAdvice } from "../api/client";
 import { t } from "../i18n";
+import Chipy from "./Chipy";
 
 export interface ChipyPanelProps {
   handId: string;
@@ -33,11 +31,11 @@ const ACTION_LABELS: Record<Action, string> = {
   split:  "Split",
 };
 
-const ACTION_CLASSES: Record<Action, string> = {
-  hit:    "bg-saloon-leather hover:bg-saloon-blood text-saloon-parchment ring-saloon-brass/40",
-  stand:  "bg-saloon-night/60 hover:bg-saloon-oak text-saloon-parchment ring-saloon-brass/40",
-  double: "bg-saloon-amber hover:bg-saloon-amber/90 text-saloon-ink ring-saloon-brass/60",
-  split:  "bg-saloon-wood hover:bg-saloon-oak text-saloon-parchment ring-saloon-brass/40",
+const ACTION_BG: Record<Action, string> = {
+  hit:    "bg-action-hit",
+  stand:  "bg-action-stand",
+  double: "bg-action-double",
+  split:  "bg-action-split",
 };
 
 export default function ChipyPanel({
@@ -80,124 +78,151 @@ export default function ChipyPanel({
   );
 
   function handleConfirm(): void {
-    if (chosenAction) {
-      onConfirm(chosenAction);
-    }
+    if (chosenAction) onConfirm(chosenAction);
+  }
+
+  // Chipy expression based on flow state
+  let expression: "idle" | "thinking" | "happy" | "surprised" = "idle";
+  let animation: "idle" | "think" | "bounce" | "shake" | "none" = "idle";
+  let pose: "rest" | "wave" | "thumbsup" | "point" = "rest";
+
+  if (streaming) {
+    expression = "thinking";
+    animation = "think";
+  } else if (result?.was_correct) {
+    expression = "happy";
+    animation = "bounce";
+    pose = "thumbsup";
+  } else if (result && !result.was_correct) {
+    expression = "surprised";
+    animation = "shake";
+    pose = "point";
+  } else if (!result && !streaming) {
+    expression = "idle";
+    animation = "idle";
+    pose = "wave";
   }
 
   return (
-    <div className="saloon-panel flex flex-col gap-3 p-5 rounded-t-xl sm:rounded-xl
-      w-full ring-1 ring-saloon-brass/40 border-t-2 border-saloon-amber/60">
+    <div
+      className="ink-outline-thick rounded-xl w-full max-w-md slide-up"
+      style={{ backgroundColor: "#1A0A00", boxShadow: "8px 8px 0 0 #1A0A00" }}
+    >
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <span
-            className="text-saloon-amber font-bold text-lg"
-            style={{ fontFamily: "'DM Serif Display', Georgia, serif" }}
-          >
-            {t("Chipy")}
-          </span>
-          <span className="text-saloon-ash text-xs italic">— the house coach</span>
-        </div>
+      <div
+        className="flex items-center gap-3 px-4 py-3 border-b-[4px]"
+        style={{ borderColor: "#1A0A00", backgroundColor: "#D4AC0D" }}
+      >
+        <Chipy size={64} expression={expression} animation={animation} pose={pose} />
+        <h2 className="font-display text-ink text-3xl tracking-wider">CHIPY</h2>
         {accuracy !== undefined && (
-          <span className="text-xs text-saloon-ash uppercase tracking-wider">
+          <span className="ml-auto font-ui text-ink text-xs">
             {Math.round(accuracy * 100)}% {t("right")}
           </span>
         )}
       </div>
 
-      {/* Guess buttons */}
-      {!streaming && !result && (
-        <div className="flex flex-col gap-2">
-          <p className="text-saloon-parchment/90 text-sm italic">{t("What's your play, partner?")}</p>
-          <div className="grid grid-cols-2 gap-2">
-            {ALL_ACTIONS.map((action) => {
-              const isLegal = legalSet.has(action);
-              return (
-                <button
-                  key={action}
-                  onClick={() => handleGuess(action)}
-                  disabled={!isLegal}
-                  className={`py-3 rounded-md font-semibold text-sm uppercase tracking-wider
-                    ring-1 ${ACTION_CLASSES[action]}
-                    disabled:opacity-30 disabled:cursor-not-allowed
-                    active:scale-[0.98] transition-all
-                    min-h-[44px]`}
-                >
-                  {t(ACTION_LABELS[action])}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
+      {/* Body */}
+      <div
+        className="paper-grain p-4 flex flex-col gap-3"
+        style={{ backgroundColor: "#F5F0E8" }}
+      >
+        {/* Guess buttons */}
+        {!streaming && !result && (
+          <>
+            <p className="font-body text-ink text-base text-center">
+              {t("What's your move?")}
+            </p>
+            <div className="grid grid-cols-2 gap-2">
+              {ALL_ACTIONS.map((action) => {
+                const isLegal = legalSet.has(action);
+                return (
+                  <button
+                    key={action}
+                    onClick={() => handleGuess(action)}
+                    disabled={!isLegal}
+                    className={`ink-outline ink-shadow-sm py-3 rounded-md font-ui
+                      text-cream uppercase tracking-wider text-sm
+                      ${ACTION_BG[action]}
+                      disabled:opacity-40 disabled:saturate-50 disabled:cursor-not-allowed
+                      min-h-[44px]`}
+                  >
+                    {t(ACTION_LABELS[action])}
+                  </button>
+                );
+              })}
+            </div>
+          </>
+        )}
 
-      {/* Loading state */}
-      {streaming && (
-        <div role="status" aria-busy="true" aria-live="polite" className="flex flex-col gap-2">
-          <div className="flex items-center gap-2 text-saloon-amber">
-            <span className="text-sm italic">{t("Chipy's thinkin' it over")}</span>
-            <span aria-hidden="true">
-              <span className="dot" /><span className="dot" /><span className="dot" />
-            </span>
-          </div>
-          {message && (
-            <p className="text-saloon-parchment text-sm leading-relaxed italic">{message}</p>
-          )}
-        </div>
-      )}
-
-      {/* Result state */}
-      {!streaming && result && chosenAction && (
-        <div className="flex flex-col gap-3">
-          {message && (
-            <p className="text-saloon-parchment text-sm leading-relaxed italic">{message}</p>
-          )}
-
-          <div className="flex items-center justify-between text-xs uppercase tracking-wider">
-            {result.was_correct ? (
-              <span className="text-saloon-amber font-bold">{t("Smart play.")}</span>
-            ) : (
-              <span className="text-saloon-blood font-bold">
-                {t("Off the chart.")} {t("Book says:")} {t(ACTION_LABELS[result.optimal_action])}
-              </span>
+        {/* Loading state */}
+        {streaming && (
+          <div role="status" aria-busy="true" aria-live="polite" className="flex flex-col gap-2">
+            <p className="font-flavor text-ink text-sm italic">
+              {t("Chipy's thinkin' it over…")}
+            </p>
+            {message && (
+              <p className="font-body text-ink text-base leading-relaxed">{message}</p>
             )}
-            <span
-              key={result.current_streak}
-              className="text-saloon-amber streak-pulse font-bold tracking-widest"
-              aria-label={`Streak ${result.current_streak}`}
-            >
-              {t("Streak")} · {result.current_streak}
-            </span>
           </div>
+        )}
 
-          <button
-            onClick={handleConfirm}
-            className="btn-leather w-full py-3 rounded-md font-bold uppercase tracking-widest
-              min-h-[44px]"
-          >
-            {t("Confirm")} {t(ACTION_LABELS[chosenAction])}
-          </button>
-        </div>
-      )}
+        {/* Result state */}
+        {!streaming && result && chosenAction && (
+          <div className="flex flex-col gap-3">
+            {message && (
+              <p className="font-body text-ink text-base leading-relaxed">{message}</p>
+            )}
 
-      {/* Error state */}
-      {error && (
-        <div className="flex flex-col gap-2">
-          <p role="alert" className="text-saloon-blood text-sm italic">
-            {error}
-          </p>
-          <button
-            onClick={() => {
-              setError(null);
-              setChosenAction(null);
-            }}
-            className="text-saloon-amber text-xs underline text-left uppercase tracking-wider"
-          >
-            {t("Try again")}
-          </button>
-        </div>
-      )}
+            <div className="flex items-center justify-between font-ui uppercase tracking-wider text-xs">
+              {result.was_correct ? (
+                <span className="text-action-stand font-bold">
+                  {t("Smart play!")}
+                </span>
+              ) : (
+                <span className="text-action-hit font-bold">
+                  {t("Off the chart.")} {t("Best:")} {t(ACTION_LABELS[result.optimal_action])}
+                </span>
+              )}
+              <span
+                key={result.current_streak}
+                className="text-gold-dark"
+                aria-label={`Streak ${result.current_streak}`}
+              >
+                {t("Streak")} · {result.current_streak}
+              </span>
+            </div>
+
+            <button
+              onClick={handleConfirm}
+              className="ink-outline ink-shadow w-full py-3 rounded-md font-ui
+                text-cream uppercase tracking-wider bg-gold-mid
+                min-h-[48px]"
+              style={{ color: "#1A0A00" }}
+            >
+              {t("Confirm")} {t(ACTION_LABELS[chosenAction])}
+            </button>
+          </div>
+        )}
+
+        {/* Error state */}
+        {error && (
+          <div className="flex flex-col gap-2">
+            <p role="alert" className="font-flavor text-action-hit text-sm italic">
+              {error}
+            </p>
+            <button
+              onClick={() => {
+                setError(null);
+                setChosenAction(null);
+              }}
+              className="font-ui text-action-double text-xs underline self-start uppercase"
+            >
+              {t("Try again")}
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

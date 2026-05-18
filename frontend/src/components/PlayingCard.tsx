@@ -1,10 +1,9 @@
 /**
- * PlayingCard.tsx — renders a single playing card (face-up or face-down).
- * null → face-down back of card.
+ * PlayingCard.tsx — rubber-hose-cartoon playing card.
  *
- * 3D + motion: layered shadows (close/mid/far) for depth, slight rotation
- * jitter so a row of cards reads as "dealt" not "lined up." Deal-in
- * animation fires on mount; staggered via parent's .deal-stagger.
+ * White-cream face, 3 px black outline, chunky suit SVG in the center,
+ * Lilita One values in two corners. Back of card uses the diamond
+ * pattern in deep red. Deal-in animation via `.card-deal`.
  */
 import type { Card } from "../types";
 import { t } from "../i18n";
@@ -12,40 +11,66 @@ import { t } from "../i18n";
 interface PlayingCardProps {
   card: Card | null;
   className?: string;
-  /** Index in the hand — used for slight rotation jitter */
   index?: number;
-  /** Skip the deal-in animation (e.g. for already-shown cards on poll) */
   noAnimate?: boolean;
 }
 
-const SUIT_SYMBOLS: Record<string, string> = {
-  hearts:   "♥",
-  diamonds: "♦",
-  clubs:    "♣",
-  spades:   "♠",
-};
-
 const RED_SUITS = new Set(["hearts", "diamonds"]);
 
-// Light, deterministic rotation jitter based on index — so cards in a row
-// look like they were tossed, not stacked. Kept very subtle (±1.6°) so
-// the cards read as upright but not aligned to a CAD grid.
-function jitterRotation(index: number): string {
-  const pattern = [-1.6, 0.8, -0.5, 1.2, -1.0, 1.5];
-  return `${pattern[index % pattern.length]}deg`;
+function jitterDeg(index: number): number {
+  const pattern = [-2, 1.2, -0.8, 1.6, -1.4, 1.0];
+  return pattern[index % pattern.length];
 }
 
-const CARD_BOX_SHADOW =
-  // close, sharp shadow for definition
-  "0 1px 2px rgba(0, 0, 0, 0.45), " +
-  // mid, soft shadow for surface lift
-  "0 6px 10px -4px rgba(0, 0, 0, 0.55), " +
-  // far, broad shadow for room depth
-  "0 18px 24px -12px rgba(0, 0, 0, 0.5), " +
-  // brass-tone ring edge
-  "0 0 0 1px rgba(58, 38, 28, 0.5), " +
-  // inset top highlight from the candle
-  "inset 0 1px 0 rgba(255, 240, 200, 0.55)";
+// ─── Suit symbols as chunky SVG paths (with their own ink outlines) ──────
+
+function SuitGlyph({ suit }: { suit: string }) {
+  const fill = RED_SUITS.has(suit) ? "#C0392B" : "#1A0A00";
+  const stroke = "#1A0A00";
+
+  if (suit === "hearts") {
+    return (
+      <svg viewBox="0 0 32 32" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+        <path
+          d="M16 28 C 8 22 2 18 2 12 C 2 7 6 4 10 4 C 13 4 15 6 16 8 C 17 6 19 4 22 4 C 26 4 30 7 30 12 C 30 18 24 22 16 28 Z"
+          fill={fill} stroke={stroke} strokeWidth={2.5} strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (suit === "diamonds") {
+    return (
+      <svg viewBox="0 0 32 32" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+        <path
+          d="M16 3 L 28 16 L 16 29 L 4 16 Z"
+          fill={fill} stroke={stroke} strokeWidth={2.5} strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (suit === "spades") {
+    return (
+      <svg viewBox="0 0 32 32" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+        <path
+          d="M16 3 C 22 9 28 14 28 19 C 28 23 25 25 22 25 C 20 25 18 24 17 22 L 19 30 L 13 30 L 15 22 C 14 24 12 25 10 25 C 7 25 4 23 4 19 C 4 14 10 9 16 3 Z"
+          fill={fill} stroke={stroke} strokeWidth={2.5} strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  // clubs
+  return (
+    <svg viewBox="0 0 32 32" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+      <circle cx={16} cy={10} r={5.5} fill={fill} stroke={stroke} strokeWidth={2.5} />
+      <circle cx={9}  cy={18} r={5.5} fill={fill} stroke={stroke} strokeWidth={2.5} />
+      <circle cx={23} cy={18} r={5.5} fill={fill} stroke={stroke} strokeWidth={2.5} />
+      <path
+        d="M14 22 L 13 30 L 19 30 L 18 22 Z"
+        fill={fill} stroke={stroke} strokeWidth={2.5} strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
 
 export default function PlayingCard({
   card,
@@ -53,70 +78,62 @@ export default function PlayingCard({
   index = 0,
   noAnimate = false,
 }: PlayingCardProps) {
-  const rotation = jitterRotation(index);
-  const animClass = noAnimate ? "" : "card-deal-in";
+  const tilt = jitterDeg(index);
+  const animClass = noAnimate ? "" : "card-deal";
 
+  // Face-down
   if (!card) {
-    // Face-down — walnut back with a brass-tinted lattice
     return (
       <div
-        className={`${animClass} w-14 h-20 sm:w-16 sm:h-24 rounded-md
-          flex items-center justify-center ${className}`}
+        className={`card-back-pattern ink-outline-thick w-16 h-24 sm:w-20 sm:h-28 rounded-md
+          relative flex items-center justify-center ${animClass} ${className}`}
         aria-label={t("Face-down card")}
         style={{
-          backgroundColor: "#241812",
-          backgroundImage:
-            "linear-gradient(135deg, rgba(138,106,55,0.30) 25%, transparent 25%, transparent 50%, rgba(138,106,55,0.30) 50%, rgba(138,106,55,0.30) 75%, transparent 75%, transparent)",
-          backgroundSize: "10px 10px",
-          boxShadow:
-            "inset 0 0 0 2px #3a261c, inset 0 0 0 3px rgba(138,106,55,0.55), 0 1px 2px rgba(0,0,0,0.45), 0 6px 10px -4px rgba(0,0,0,0.55), 0 18px 24px -12px rgba(0,0,0,0.5)",
-          transform: `rotate(${rotation})`,
+          ["--card-tilt" as string]: `${tilt}deg`,
+          transform: noAnimate ? `rotate(${tilt}deg)` : undefined,
+          boxShadow: "3px 3px 0 0 #1A0A00",
         }}
-      />
+      >
+        {/* Inner cream border — accent ring */}
+        <div className="absolute inset-1 rounded-sm border-2 border-cream/70" />
+      </div>
     );
   }
 
   const isRed = RED_SUITS.has(card.suit);
-  const symbol = SUIT_SYMBOLS[card.suit] ?? card.suit;
-  const pipColor = isRed ? "#7e2424" : "#1d1208";
+  const cornerColor = isRed ? "#C0392B" : "#1A0A00";
 
   return (
     <div
-      className={`saloon-card ${animClass} relative
-        w-14 h-20 sm:w-16 sm:h-24 rounded-md
-        flex flex-col justify-between p-1.5 ${className}`}
+      className={`paper-grain ink-outline-thick w-16 h-24 sm:w-20 sm:h-28 rounded-md
+        relative flex flex-col justify-between p-1.5 ${animClass} ${className}`}
       aria-label={`${card.value} of ${card.suit}`}
       style={{
-        boxShadow: CARD_BOX_SHADOW,
-        transform: `rotate(${rotation})`,
+        backgroundColor: "#F5F0E8",
+        ["--card-tilt" as string]: `${tilt}deg`,
+        transform: noAnimate ? `rotate(${tilt}deg)` : undefined,
+        boxShadow: "4px 4px 0 0 #1A0A00",
       }}
     >
+      {/* Top-left value */}
       <span
-        className="text-sm font-bold leading-none"
-        style={{
-          color: pipColor,
-          fontFamily: "'DM Serif Display', Georgia, serif",
-          textShadow: "0 1px 0 rgba(255, 255, 255, 0.6)",
-        }}
+        className="text-xl leading-none font-ui"
+        style={{ color: cornerColor }}
       >
         {card.value}
       </span>
+
+      {/* Center suit */}
+      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+        <div style={{ width: "55%", height: "55%" }}>
+          <SuitGlyph suit={card.suit} />
+        </div>
+      </div>
+
+      {/* Bottom-right value (rotated) */}
       <span
-        className="text-2xl self-center leading-none"
-        style={{
-          color: pipColor,
-          textShadow: "0 1px 0 rgba(255, 255, 255, 0.5)",
-        }}
-      >
-        {symbol}
-      </span>
-      <span
-        className="text-sm font-bold leading-none self-end rotate-180"
-        style={{
-          color: pipColor,
-          fontFamily: "'DM Serif Display', Georgia, serif",
-          textShadow: "0 1px 0 rgba(255, 255, 255, 0.6)",
-        }}
+        className="text-xl leading-none font-ui self-end rotate-180"
+        style={{ color: cornerColor }}
       >
         {card.value}
       </span>

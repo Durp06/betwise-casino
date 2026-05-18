@@ -1,7 +1,8 @@
 /**
- * BettingControls.tsx — chip denomination buttons + bet display + confirm.
- * Shows loading state while POST /api/tables/:id/deal is in flight.
- * Shows error if bet is invalid or user has insufficient chips.
+ * BettingControls.tsx — chip-click interface (Cuphead pivot).
+ *
+ * Each denomination is a clickable SVG chip with the Cuphead notch ring.
+ * Current bet shown on a felt plaque. "Deal" button is the big gold CTA.
  */
 import { useState } from "react";
 import { t } from "../i18n";
@@ -16,7 +17,6 @@ interface BettingControlsProps {
   onDealSuccess?: () => void;
 }
 
-// Chip denominations in fake cents
 const CHIP_DENOMINATIONS = [100, 500, 2500, 10000, 50000] as const;
 type Denomination = (typeof CHIP_DENOMINATIONS)[number];
 
@@ -28,13 +28,55 @@ const CHIP_LABELS: Record<Denomination, string> = {
   50000: "$500",
 };
 
-const CHIP_COLORS: Record<Denomination, string> = {
-  100:   "bg-white text-gray-900",
-  500:   "bg-card-red text-white",
-  2500:  "bg-green-600 text-white",
-  10000: "bg-gray-900 text-white border border-gray-600",
-  50000: "bg-purple-700 text-white",
+const CHIP_FILL: Record<Denomination, string> = {
+  100:   "#F5F0E8",   // white
+  500:   "#C0392B",   // red
+  2500:  "#1E8449",   // green
+  10000: "#1A1A1A",   // black
+  50000: "#6C3483",   // purple
 };
+
+// Inline chip — small SVG with the notch ring and a denomination label
+function ChipSvg({ denom }: { denom: Denomination }) {
+  const fill = CHIP_FILL[denom];
+  const label = CHIP_LABELS[denom];
+  const labelColor = denom === 100 ? "#1A0A00" : "#F5F0E8";
+
+  const notches = [];
+  const count = 12;
+  const radius = 38;
+  for (let i = 0; i < count; i++) {
+    const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
+    const cx = 50 + Math.cos(angle) * radius;
+    const cy = 50 + Math.sin(angle) * radius;
+    const rotateDeg = (angle * 180) / Math.PI + 90;
+    notches.push(
+      <rect
+        key={i}
+        x={cx - 1.6} y={cy - 3}
+        width={3.2} height={6}
+        fill="#F5F0E8" stroke="#1A0A00" strokeWidth={0.8}
+        transform={`rotate(${rotateDeg} ${cx} ${cy})`}
+      />,
+    );
+  }
+
+  return (
+    <svg viewBox="0 0 100 100" width="100%" height="100%">
+      <ellipse cx={51.5} cy={53} rx={40} ry={40} fill="#1A0A00" />
+      <circle cx={50} cy={50} r={40} fill={fill} stroke="#1A0A00" strokeWidth={3} />
+      {notches}
+      <circle cx={50} cy={50} r={26} fill={fill} stroke="#1A0A00" strokeWidth={2} />
+      <text
+        x={50} y={56} textAnchor="middle"
+        fontFamily="Lilita One, sans-serif" fontSize={20}
+        fill={labelColor} stroke="#1A0A00" strokeWidth={0.5}
+      >
+        {label}
+      </text>
+    </svg>
+  );
+}
 
 export default function BettingControls({
   tableId,
@@ -62,7 +104,7 @@ export default function BettingControls({
       return;
     }
     if (betAmount > chipBalance) {
-      setError(t("Insufficient chips"));
+      setError(t("Not enough chips, partner."));
       return;
     }
     setError(null);
@@ -77,64 +119,63 @@ export default function BettingControls({
   }
 
   return (
-    <div className="flex flex-col items-center gap-3 w-full max-w-sm mx-auto">
-      {/* Chip denomination buttons */}
-      <div className="flex flex-row flex-wrap gap-2 justify-center">
+    <div className="flex flex-col items-center gap-4 w-full max-w-md mx-auto">
+      {/* Chip row */}
+      <div className="flex flex-row flex-wrap gap-3 justify-center">
         {CHIP_DENOMINATIONS.map((denom) => (
           <button
             key={denom}
             onClick={() => addChip(denom)}
             disabled={loading || betAmount + denom > chipBalance}
-            className={`w-12 h-12 rounded-full font-bold text-xs shadow-md
-              ${CHIP_COLORS[denom]}
-              disabled:opacity-40 disabled:cursor-not-allowed
-              hover:scale-110 active:scale-95 transition-transform
-              min-w-[44px] min-h-[44px]`}
+            className="ink-shadow-sm w-14 h-14 sm:w-16 sm:h-16 rounded-full
+              disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label={`${t("Add")} ${CHIP_LABELS[denom]}`}
           >
-            {CHIP_LABELS[denom]}
+            <ChipSvg denom={denom} />
           </button>
         ))}
       </div>
 
-      {/* Current bet display */}
-      <div className="flex items-center gap-2">
-        <span className="text-white/60 text-sm">{t("Bet:")}</span>
-        <span className="text-chip-gold font-bold text-lg">
+      {/* Bet plaque */}
+      <div
+        className="ink-outline rounded-md px-5 py-2 flex items-center gap-3"
+        style={{ backgroundColor: "#0D3B1F" }}
+      >
+        <span className="font-flavor text-cream text-xs uppercase tracking-wider">
+          {t("Bet")}
+        </span>
+        <span className="font-display text-gold-bright text-2xl gold-drop">
           ${(betAmount / 100).toFixed(2)}
         </span>
         {betAmount > 0 && (
           <button
             onClick={clearBet}
-            className="text-white/40 hover:text-white text-xs underline"
+            className="font-flavor text-cream text-xs underline ml-1"
           >
             {t("Clear")}
           </button>
         )}
       </div>
 
-      {/* Error state */}
+      {/* Error */}
       {error && (
-        <p role="alert" className="text-card-red text-sm text-center">
+        <p role="alert" className="font-flavor text-action-hit text-sm text-center">
           {error}
         </p>
       )}
 
-      {/* Confirm bet button */}
+      {/* Deal button */}
       <button
         onClick={handleDeal}
         disabled={loading || betAmount === 0}
-        className="w-full py-3 bg-chip-gold text-chipy-dark font-bold rounded-lg
+        className="ink-outline ink-shadow w-full py-3 rounded-md font-display
+          text-3xl tracking-wider uppercase
           disabled:opacity-40 disabled:cursor-not-allowed
-          hover:bg-yellow-400 active:scale-95 transition-all
-          min-h-[44px]"
+          min-h-[56px]"
+        style={{ backgroundColor: "#F4D03F", color: "#1A0A00" }}
         aria-busy={loading}
       >
-        {loading ? (
-          <span role="status">{t("Dealing...")}</span>
-        ) : (
-          t("Confirm Bet")
-        )}
+        {loading ? t("Dealin'…") : t("Deal")}
       </button>
     </div>
   );
