@@ -2,8 +2,8 @@
 
 A fake-money multiplayer blackjack lounge with an AI coaching buddy named **Chipy** who explains every decision against the canonical basic-strategy table. Sit down at a table with friends, place a bet, and before you confirm a Hit / Stand / Double / Split, Chipy tells you what the correct play is and *why* — using probability and expected-value reasoning, not just "wrong, try again." The point is that you walk away from the session a measurably better blackjack player; the chip leaderboard is the side effect.
 
-> **Live URL:** _<add the Railway URL after the first deploy>_
-> **GitHub:** _<add the repo URL once we push>_
+> **Live URL:** https://betwise-casino-production.up.railway.app
+> **GitHub:** https://github.com/Durp06/betwise-casino
 
 ## Tier targeted
 
@@ -11,7 +11,9 @@ A fake-money multiplayer blackjack lounge with an AI coaching buddy named **Chip
 
 ## Team members
 
-- _Add team members + one-line description per person before submission. The PDF rubric requires this and grades against `git log` from each named member._
+- **Myles ([@Durp06](https://github.com/Durp06))** — backend (FastAPI + SQLAlchemy + Supabase), frontend (React/TS + Cuphead design pivot), the basic-strategy engine, the Chipy coaching flow (proactive pre/post advice with markdown stripping), multiplayer polling + table state, deploy plumbing (Railway + Dockerfile).
+- _Teammate #2 — [name, GitHub handle, one-line summary of their owned area]_
+- _Teammate #3 — [name, GitHub handle, one-line summary of their owned area]_
 
 ## Where the nontrivial logic lives
 
@@ -33,9 +35,7 @@ A fake-money multiplayer blackjack lounge with an AI coaching buddy named **Chip
 
 ## Where the agents helped most and where we pushed back
 
-_Replace this paragraph honestly before submission. The PDF says this is read as a class — specifics > stories. Example draft from the build process:_
-
-Claude was extremely good at the basic-strategy table — laying out `HARD_TOTALS` / `SOFT_TOTALS` / `PAIRS` as nested dicts and getting every cell right on the first pass, including the 9-9 edge case (split vs 2-6 and 8-9, stand vs 7/10/A). It was also good at the SSE streaming endpoint and the Zustand reducer for optimistic-with-rollback Hit. Where we had to push back: it initially wanted the advice endpoint to commit the user's `current_streak` update in a *different* `AsyncSession` than the test fixture used, which meant the assertion in `test_advice_correct_increments_streak` couldn't see the write. We had to require the streak write happen on the dependency-injected session so the test session sees it. It also tried to write a `hand_cards_for(22)` helper for the resolve-hand test that returned a 2-card hand worth 19 instead of failing loudly that 22 isn't representable with two cards; we fixed that to use a 3-card bust.
+Claude was reliably good at the well-specified pieces — the basic-strategy table (HARD_TOTALS / SOFT_TOTALS / PAIRS dicts, every cell right on the first pass including the 9-9 split-vs-2-6/8-9/stand-vs-7/10/A edge cases), the SSE streaming endpoint, and the Zustand optimistic-with-rollback reducer. The patterns where we had to push back recurred: it loved opening a second `AsyncSession` for cross-cutting writes (which broke `test_advice_correct_increments_streak` until we forced the streak update onto the dependency-injected session); it wrote test helpers that silently masked impossible inputs (`hand_cards_for(22)` returning a 19-value 2-card hand instead of failing loudly that 22 isn't representable with two cards); and it shipped happy-path code that ignored every failure mode — a hard-coded `claude-sonnet-4-20250514` model alias that crashed silently when Anthropic deprecated it (we added a `CHIPY_MODEL` env var + try/except that emits graceful fallback chunks), a 409 "Round already in progress" guard on the deal endpoint that blocked the second player at a multiplayer table (caught during a two-user live test and removed), and a button-driven ChipyPanel quiz that interrupted actual play (redesigned as an always-visible side panel that streams pre-play suggestions and post-play critiques automatically). The pattern across all of these: agents nail the well-specified piece on the first try, then quietly assume the happy path holds everywhere — loading + error + concurrency + deprecation surface is where the human has to lean in hardest.
 
 ## How to run locally
 
