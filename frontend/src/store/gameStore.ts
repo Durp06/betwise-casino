@@ -28,6 +28,7 @@ interface GameState {
 
 interface GameActions {
   setTableState: (state: TableState) => void;
+  setMyHand: (hand: Hand | null) => void;
   openChipy: () => void;
   closeChipy: () => void;
   setChipyMessage: (message: string) => void;
@@ -66,6 +67,10 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
   setTableState: (newState: TableState) => {
     set({ tableState: newState });
+  },
+
+  setMyHand: (hand: Hand | null) => {
+    set({ myHand: hand });
   },
 
   openChipy: () => set({ chipyOpen: true }),

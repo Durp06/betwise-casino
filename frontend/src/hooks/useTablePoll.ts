@@ -32,11 +32,10 @@ export function useTablePoll(tableId: string, currentUserId: string | null): voi
       const newState = result.data;
       reconcileFromPoll(newState, currentUserId ?? "");
 
-      // Stop polling if session is finished
-      if (newState.session?.status === "finished") {
-        clearInterval(intervalId);
-        return;
-      }
+      // NOTE: polling continues even when session.status === "finished" so
+      // that clicking "Deal" to start a fresh round actually picks up the
+      // newly-created session within one tick. We used to clearInterval
+      // here, which left the page frozen on the finished hand forever.
 
       // Detect turn changes to open Chipy
       if (currentUserId) {

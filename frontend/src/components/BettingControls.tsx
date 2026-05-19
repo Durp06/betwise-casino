@@ -8,13 +8,16 @@ import { useState } from "react";
 import { t } from "../i18n";
 import { useGameStore } from "../store/gameStore";
 import { dealHand } from "../api/client";
+import type { Hand } from "../types";
 
 interface BettingControlsProps {
   tableId: string;
   minBet: number;
   maxBet: number;
   chipBalance: number;
-  onDealSuccess?: () => void;
+  /** Called with the newly-dealt hand so the parent can update its store
+   *  immediately instead of waiting 3 s for the next poll. */
+  onDealSuccess?: (newHand: Hand | null) => void;
 }
 
 const CHIP_DENOMINATIONS = [100, 500, 2500, 10000, 50000] as const;
@@ -85,7 +88,7 @@ export default function BettingControls({
   chipBalance,
   onDealSuccess,
 }: BettingControlsProps) {
-  const { betAmount, placeBet } = useGameStore();
+  const { betAmount, placeBet, setMyHand } = useGameStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -114,7 +117,12 @@ export default function BettingControls({
     if (result.error) {
       setError(result.error);
     } else {
-      onDealSuccess?.();
+      // Optimistic local update so the UI changes the instant the API returns,
+      // instead of leaving the user staring at the old outcome banner for the
+      // 3 seconds until the next poll lands.
+      setMyHand(result.data);
+      placeBet(0);
+      onDealSuccess?.(result.data);
     }
   }
 

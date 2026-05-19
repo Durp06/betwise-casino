@@ -197,7 +197,7 @@ export default function Table() {
           currentUserId={currentUserId}
         />
 
-        {/* Felt table inset */}
+        {/* Felt table inset — dealer at top, then every seated player's hand */}
         {tableState.session && (
           <div
             className="ink-outline rounded-2xl p-5 flex flex-col gap-5"
@@ -214,15 +214,59 @@ export default function Table() {
 
             <div className="h-1 bg-ink rounded-full" />
 
-            {myHand && (
-              <div>
-                <CardHand
-                  cards={myHand.cards}
-                  handValue={handValueDisplay(myHand.cards) ?? undefined}
-                  label="Your hand"
-                />
-              </div>
+            {/* Every player's hand — ordered by seat number (backend now sorts).
+                Active player's panel gets an amber glow to telegraph whose
+                turn it is. This is the multiplayer-feel pass. */}
+            {tableState.hands.length === 0 && (
+              <p className="font-flavor text-cream/60 italic text-sm text-center">
+                {t("Waiting for the deal...")}
+              </p>
             )}
+            {tableState.hands.map((hand) => {
+              const seat = tableState.seats.find((s) => s.user_id === hand.user_id);
+              const isMine = hand.user_id === currentUserId;
+              const isActive = hand.status === "active"
+                && tableState.session?.status === "playing";
+              const username = seat?.username ?? t("Player");
+
+              return (
+                <div
+                  key={hand.id}
+                  className={`rounded-xl p-3 transition-all duration-200
+                    ${isActive ? "ring-4 ring-gold-bright" : ""}`}
+                  style={{
+                    backgroundColor: isMine ? "rgba(244, 208, 63, 0.08)" : "rgba(0,0,0,0.18)",
+                    opacity: !isActive && !isMine && tableState.session?.status === "playing" ? 0.7 : 1,
+                  }}
+                >
+                  {/* Player header row: name, bet, status badge */}
+                  <div className="flex items-baseline justify-between mb-2 px-1 gap-2 flex-wrap">
+                    <div className="flex items-baseline gap-2">
+                      <span className="font-display text-cream text-lg uppercase tracking-wide">
+                        {isMine ? t("YOU") : username}
+                      </span>
+                      {isActive && (
+                        <span className="font-ui text-gold-bright text-[10px] uppercase tracking-widest animate-pulse">
+                          ← {t("their turn")}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex items-baseline gap-2 text-xs">
+                      <span className="font-flavor text-cream/70 uppercase tracking-wider">
+                        {t("Bet")}
+                      </span>
+                      <span className="font-display text-gold-bright">
+                        ${(hand.bet / 100).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                  <CardHand
+                    cards={hand.cards}
+                    handValue={handValueDisplay(hand.cards) ?? undefined}
+                  />
+                </div>
+              );
+            })}
           </div>
         )}
 

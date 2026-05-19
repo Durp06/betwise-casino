@@ -143,10 +143,16 @@ async def _join_seat(
 ) -> SeatOut:
     """Assign user to the lowest-numbered open seat.
 
-    Returns 409 if: table is full, or user is already seated.
+    Idempotent: if the user is already at this table, returns their seat.
+    Enforces "one seat per user across the casino" — joining a new table
+    automatically releases their seat at any other table they're at, so
+    stale seats from past sessions don't block re-entry and the model
+    extends cleanly to poker / other games.
+
+    Returns 409 only if the table is genuinely full.
     """
     from datetime import datetime, timezone  # noqa: PLC0415
-    from sqlalchemy import select  # noqa: PLC0415
+    from sqlalchemy import select, delete  # noqa: PLC0415
     from backend.models import CasinoTable, TableSeat  # noqa: PLC0415
 
     # Fetch table
@@ -155,14 +161,27 @@ async def _join_seat(
     if table is None:
         raise HTTPException(status_code=404, detail="Table not found")
 
-    # Check if user is already seated
+    # Idempotent: if already at this table, return existing seat
     result = await db.execute(
         select(TableSeat).where(
             (TableSeat.table_id == table_id) & (TableSeat.user_id == user_id)
         )
     )
-    if result.scalar_one_or_none() is not None:
-        raise HTTPException(status_code=409, detail="Already seated at this table")
+    existing = result.scalar_one_or_none()
+    if existing is not None:
+        return SeatOut(
+            id=existing.id,
+            user_id=existing.user_id,
+            seat_number=existing.seat_number,
+        )
+
+    # Auto-release any other table this user is at (one seat per user globally)
+    await db.execute(
+        delete(TableSeat).where(
+            (TableSeat.user_id == user_id) & (TableSeat.table_id != table_id)
+        )
+    )
+    await db.flush()
 
     # Find occupied seat numbers
     result = await db.execute(
