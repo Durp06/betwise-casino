@@ -19,7 +19,12 @@ interface ActionBarProps {
   onActionSuccess?: () => void;
 }
 
-const ALL_ACTIONS: Action[] = ["hit", "stand", "double", "split"];
+// Split is omitted on purpose: the schema currently has an implicit
+// UNIQUE(session_id, user_id) constraint on hands (one hand per user per
+// session), so backend POST /action with "split" returns 501. Rendering a
+// button that always errors looked broken — see CLAUDE.md "Known limitations."
+// Re-add once the (session_id, user_id, hand_index) migration ships.
+const ALL_ACTIONS: Action[] = ["hit", "stand", "double"];
 
 const ACTION_LABELS: Record<Action, string> = {
   hit:    "Hit",
@@ -44,7 +49,12 @@ export default function ActionBar({
 }: ActionBarProps) {
   const [loading, setLoading] = useState<Action | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const { beginChipyStream, appendChipyChunk, endChipyStream } = useGameStore();
+  const {
+    setMyHand,
+    beginChipyStream,
+    appendChipyChunk,
+    endChipyStream,
+  } = useGameStore();
 
   const legalSet = new Set(legalActions);
 
@@ -57,6 +67,12 @@ export default function ActionBar({
       setError(result.error);
       return;
     }
+
+    // Push the server's updated hand straight into the store so the new card
+    // (and any status change) appears instantly instead of waiting up to 3s
+    // for the next poll. Users were clicking Hit and seeing nothing move,
+    // then clicking Stand by mistake and ending the round prematurely.
+    setMyHand(result.data);
     onActionSuccess?.();
 
     // Fire Chipy's post-play critique — affirms or corrects with a reason.
