@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from backend.game.engine import can_split as _can_split_cards
-from backend.game.engine import card_rank, hand_value, is_soft
+from backend.game.blackjack.engine import can_split as _can_split_cards
+from backend.game.blackjack.engine import card_rank, hand_value, is_soft
 
 Action = Literal["hit", "stand", "double", "split"]
 

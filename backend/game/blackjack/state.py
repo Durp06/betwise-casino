@@ -15,7 +15,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.game import engine as eng
+from backend.game.blackjack import engine as eng
 
 
 # ─── Pure resolution ─────────────────────────────────────────────────────────

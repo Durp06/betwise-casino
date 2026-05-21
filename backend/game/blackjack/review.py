@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from backend.game.engine import card_rank, hand_value, is_soft, can_split
+from backend.game.blackjack.engine import card_rank, hand_value, is_soft, can_split
 
 # ─── Type aliases ─────────────────────────────────────────────────────────────
 
