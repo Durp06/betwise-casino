@@ -17,6 +17,7 @@ import BettingControls from "../components/BettingControls";
 import ActionBar from "../components/ActionBar";
 import ChipyCoach from "../components/ChipyCoach";
 import ReplayModal from "../components/ReplayModal";
+import SessionReviewModal from "../components/SessionReviewModal";
 import Chipy from "../components/Chipy";
 import type { ChipyExpression, ChipyAnimation, ChipyPose } from "../components/Chipy";
 import { t } from "../i18n";
@@ -89,6 +90,10 @@ export default function Table() {
 
   const [replayHandId, setReplayHandId] = useState<string | null>(null);
   const [leaveLoading, setLeaveLoading] = useState(false);
+  const [reviewState, setReviewState] = useState<{
+    sessionId: string;
+    handId: string;
+  } | null>(null);
 
   useTablePoll(tableId ?? "", currentUserId);
 
@@ -167,6 +172,9 @@ export default function Table() {
     // The Table-unmount effect will fire /leave on its own; this handler
     // just shows the spinner state and routes back to the lobby.
     if (!tableId) return;
+    if (myHand && tableState?.session) {
+      setReviewState({ sessionId: tableState.session.id, handId: myHand.id });
+    }
     setLeaveLoading(true);
     void navigate("/lobby");
   }
@@ -390,6 +398,21 @@ export default function Table() {
             {t("Review the hand")}
           </button>
         )}
+
+        {/* Session review button */}
+        {myHand && tableState.session && (
+          <button
+            onClick={() =>
+              setReviewState({
+                sessionId: tableState.session!.id,
+                handId: myHand.id,
+              })
+            }
+            className="font-ui text-cream uppercase tracking-wider text-xs underline text-center"
+          >
+            {t("Review session")}
+          </button>
+        )}
         </div>
 
         {/* Always-on Chipy side rail. Pinned to the top on desktop so it
@@ -400,6 +423,13 @@ export default function Table() {
 
       {replayHandId && (
         <ReplayModal handId={replayHandId} onClose={() => setReplayHandId(null)} />
+      )}
+      {reviewState && (
+        <SessionReviewModal
+          sessionId={reviewState.sessionId}
+          handId={reviewState.handId}
+          onClose={() => setReviewState(null)}
+        />
       )}
     </div>
   );
