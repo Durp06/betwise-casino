@@ -90,6 +90,7 @@ export default function Table() {
 
   const [replayHandId, setReplayHandId] = useState<string | null>(null);
   const [leaveLoading, setLeaveLoading] = useState(false);
+  const [reviewIsLeaveFlow, setReviewIsLeaveFlow] = useState(false);
   const [reviewState, setReviewState] = useState<{
     sessionId: string;
     handId: string;
@@ -169,14 +170,25 @@ export default function Table() {
   }
 
   async function handleLeave(): Promise<void> {
-    // The Table-unmount effect will fire /leave on its own; this handler
-    // just shows the spinner state and routes back to the lobby.
+    // Defer navigation until after the review modal closes — otherwise
+    // /lobby unmounts Table and the modal disappears with it.
     if (!tableId) return;
     if (myHand && tableState?.session) {
+      setReviewIsLeaveFlow(true);
       setReviewState({ sessionId: tableState.session.id, handId: myHand.id });
+      return;
     }
     setLeaveLoading(true);
     void navigate("/lobby");
+  }
+
+  function handleReviewClose(): void {
+    setReviewState(null);
+    if (reviewIsLeaveFlow) {
+      setReviewIsLeaveFlow(false);
+      setLeaveLoading(true);
+      void navigate("/lobby");
+    }
   }
 
   if (!tableId) {
@@ -428,7 +440,7 @@ export default function Table() {
         <SessionReviewModal
           sessionId={reviewState.sessionId}
           handId={reviewState.handId}
-          onClose={() => setReviewState(null)}
+          onClose={handleReviewClose}
         />
       )}
     </div>
