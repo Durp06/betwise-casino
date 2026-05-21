@@ -1,8 +1,12 @@
 name: BetWise Casino CI
 
 on:
+  # Run on every push to every branch so collaborators see green/red as
+  # they work, not only when they open a PR.
   push:
-    branches: [main]
+  # Also run on every PR to main so branch protection has a status to gate
+  # on. Without this, the same commit may not produce a check_run that
+  # branch protection can require.
   pull_request:
     branches: [main]
 
