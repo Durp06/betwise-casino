@@ -216,7 +216,7 @@ def explain_decision(
         if v == "A":
             hand_desc = "pair of aces"
         elif v in ("J", "Q", "K", "10"):
-            hand_desc = f"pair of 10s"
+            hand_desc = "pair of 10s"
         else:
             hand_desc = f"pair of {v}s"
     elif soft:

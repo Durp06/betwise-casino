@@ -223,7 +223,7 @@ async def _leave_seat(
     db: AsyncSession,
 ) -> None:
     """Remove user's seat. If last player, delete in-progress session."""
-    from sqlalchemy import select, delete  # noqa: PLC0415
+    from sqlalchemy import select  # noqa: PLC0415
     from backend.models import TableSeat, GameSession  # noqa: PLC0415
 
     # Remove seat

@@ -10,7 +10,6 @@ Design constraints (specs/betwise-casino.md §T7):
 from __future__ import annotations
 
 import uuid
-from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,7 +73,6 @@ async def get_current_player(session_id: uuid.UUID, db: AsyncSession):
     Uses LEFT JOIN on table_seats so that tests without seeded seats still work.
     Falls back to ordering by hand creation if no seat data is available.
     """
-    from sqlalchemy import outerjoin  # noqa: PLC0415
     from backend.models import Hand, TableSeat, GameSession, User  # noqa: PLC0415
 
     # Get the game session to find the table
