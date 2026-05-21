@@ -86,6 +86,7 @@ export default function Table() {
     appendChipyChunk,
     endChipyStream,
     resetChipy,
+    lastFinishedHandId,
   } = useGameStore();
 
   const [replayHandId, setReplayHandId] = useState<string | null>(null);
@@ -335,8 +336,14 @@ export default function Table() {
           </div>
         )}
 
-        {/* Outcome banner — Chipy reacts to the result, big readable announcement */}
-        {isHandFinished && chipyMood.title && (
+        {/* Outcome banner — Chipy reacts to the result, big readable announcement.
+            Gated on lastFinishedHandId so stale hands from a prior session
+            (visible to the user via tableState on first poll after joining)
+            don't fire the banner. ActionBar sets it when a play ends the
+            hand; BettingControls clears it on the next deal. */}
+        {isHandFinished
+          && myHand?.id === lastFinishedHandId
+          && chipyMood.title && (
           <div
             className="ink-outline rounded-2xl flex items-center gap-4 px-5 py-4 paper-grain"
             style={{
@@ -374,7 +381,7 @@ export default function Table() {
 
         {/* Betting controls — show when no session OR previous session finished */}
         {canStartNewRound && (
-          <div className="flex flex-col items-center gap-2">
+          <div id="post-hand-bet" className="flex flex-col items-center gap-2">
             {isHandFinished && (
               <p className="font-ui text-cream text-xl uppercase tracking-widest">
                 {t("Place your next bet")}
@@ -401,29 +408,51 @@ export default function Table() {
           />
         )}
 
-        {/* Replay button */}
-        {myHand && (myHand.status === "finished" || myHand.outcome) && (
-          <button
-            onClick={() => setReplayHandId(myHand.id)}
-            className="font-ui text-cream uppercase tracking-wider text-xs underline text-center"
-          >
-            {t("Review the hand")}
-          </button>
-        )}
-
-        {/* Session review button */}
-        {myHand && tableState.session && (
-          <button
-            onClick={() =>
-              setReviewState({
-                sessionId: tableState.session!.id,
-                handId: myHand.id,
-              })
-            }
-            className="font-ui text-cream uppercase tracking-wider text-xs underline text-center"
-          >
-            {t("Review session")}
-          </button>
+        {/* Post-hand menu — appears after the hand finishes and the user can
+            either deal again, replay the just-played hand, review the whole
+            session, or leave. Replaces the two stray underlined links. */}
+        {isHandFinished && tableState.session && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 w-full">
+            <button
+              onClick={() => {
+                document
+                  .getElementById("post-hand-bet")
+                  ?.scrollIntoView({ behavior: "smooth", block: "center" });
+              }}
+              className="ink-outline ink-shadow py-3 rounded-md font-ui text-ink uppercase
+                tracking-wider text-xs sm:text-sm bg-gold-bright min-h-[48px]"
+            >
+              {t("Play another hand")}
+            </button>
+            <button
+              onClick={() => setReplayHandId(myHand!.id)}
+              className="ink-outline ink-shadow py-3 rounded-md font-ui text-cream uppercase
+                tracking-wider text-xs sm:text-sm bg-action-stand min-h-[48px]"
+            >
+              {t("Review last hand")}
+            </button>
+            <button
+              onClick={() =>
+                setReviewState({
+                  sessionId: tableState.session!.id,
+                  handId: myHand!.id,
+                })
+              }
+              className="ink-outline ink-shadow py-3 rounded-md font-ui text-cream uppercase
+                tracking-wider text-xs sm:text-sm bg-action-double min-h-[48px]"
+            >
+              {t("Review session")}
+            </button>
+            <button
+              onClick={() => void handleLeave()}
+              disabled={leaveLoading}
+              className="ink-outline ink-shadow py-3 rounded-md font-ui text-cream uppercase
+                tracking-wider text-xs sm:text-sm bg-action-hit min-h-[48px]
+                disabled:opacity-40"
+            >
+              {leaveLoading ? t("…") : t("Leave table")}
+            </button>
+          </div>
         )}
         </div>
 

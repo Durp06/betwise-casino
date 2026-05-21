@@ -33,6 +33,12 @@ interface GameState {
   /** ID of the hand the current narration is about (so stale pre-streams
    *  for a previous hand can be ignored once a new one starts). */
   chipyHandId: string | null;
+  /** ID of the most recent hand the local player saw finish *during this
+   *  visit*. Used to gate the celebratory "DEALER WINS / YOU WIN" banner
+   *  so a stale finished hand from a prior session doesn't fire it on
+   *  fresh join or page refresh. Set by ActionBar on terminal result,
+   *  cleared by BettingControls on the next deal. */
+  lastFinishedHandId: string | null;
 }
 
 // ─── Actions shape ────────────────────────────────────────────────────────────
@@ -71,6 +77,8 @@ interface GameActions {
   endChipyStream: () => void;
   /** Wipe Chipy back to idle (e.g. after a round ends). */
   resetChipy: () => void;
+  /** Set or clear the "just finished this visit" hand id (banner gate). */
+  setLastFinishedHandId: (handId: string | null) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -89,6 +97,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   chipyStreaming: false,
   chipyPhase: "idle",
   chipyHandId: null,
+  lastFinishedHandId: null,
 
   setTableState: (newState: TableState) => {
     set({ tableState: newState });
@@ -197,5 +206,9 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       chipyPhase: "idle",
       chipyHandId: null,
     });
+  },
+
+  setLastFinishedHandId: (handId: string | null) => {
+    set({ lastFinishedHandId: handId });
   },
 }));
