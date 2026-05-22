@@ -151,6 +151,8 @@ async def get_advice(
             player_accuracy = 0.0
 
         # ── Build Chipy prompt ───────────────────────────────────────────────
+        from backend.game.blackjack import odds as _odds  # noqa: PLC0415
+
         hand_desc = strategy.explain_decision(
             player_cards=hand.cards,
             dealer_upcard=dealer_upcard,
@@ -158,13 +160,19 @@ async def get_advice(
             player_guess=body.player_guess,
             optimal=opt,
         )
+        bust_pct = _odds.dealer_bust_pct(dealer_upcard)
+        bust_pct_int = round(bust_pct * 100)
         messages = [
             {
                 "role": "user",
                 "content": (
                     f"I had {hand_desc} "
                     f"I guessed '{body.player_guess}' and the optimal play was '{opt}'. "
-                    f"Please explain why '{opt}' is {'correct' if was_correct else 'the better choice'}."
+                    f"Dealer bust probability for that upcard is {bust_pct_int}% "
+                    f"({bust_pct:.2f}). "
+                    f"Please explain why '{opt}' is "
+                    f"{'correct' if was_correct else 'the better choice'}, "
+                    f"and weave the dealer bust % into your reasoning."
                 ),
             }
         ]

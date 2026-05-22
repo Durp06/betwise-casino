@@ -8,6 +8,19 @@
 import { create } from "zustand";
 import type { Card, Hand, TableState } from "../types";
 
+const COACH_MODE_STORAGE_KEY = "betwise.coachMode";
+
+function loadCoachMode(): "quick" | "drill" {
+  if (typeof window === "undefined") return "quick";
+  try {
+    const raw = window.localStorage.getItem(COACH_MODE_STORAGE_KEY);
+    if (raw === "quick" || raw === "drill") return raw;
+  } catch {
+    // localStorage may throw in sandboxed iframes; fall through.
+  }
+  return "quick";
+}
+
 // ─── State shape ──────────────────────────────────────────────────────────────
 
 interface GameState {
@@ -39,6 +52,16 @@ interface GameState {
    *  fresh join or page refresh. Set by ActionBar on terminal result,
    *  cleared by BettingControls on the next deal. */
   lastFinishedHandId: string | null;
+
+  // ─── Drill Mode (active-retrieval coaching) ─────────────────────────────
+  /** Coaching style. "quick" = current behavior (Chipy reveals before you act).
+   *  "drill" = Chipy holds back the recommendation and quizzes you instead.
+   *  Persisted in localStorage under "betwise.coachMode". */
+  coachMode: "quick" | "drill";
+  /** Static drill-mode question shown when no narration is streaming. Owned
+   *  by Table.tsx's pre-stream effect; ChipyCoach reads it. Null in quick
+   *  mode or after Chipy starts narrating. */
+  chipyDrillPrompt: string | null;
 }
 
 // ─── Actions shape ────────────────────────────────────────────────────────────
@@ -79,6 +102,10 @@ interface GameActions {
   resetChipy: () => void;
   /** Set or clear the "just finished this visit" hand id (banner gate). */
   setLastFinishedHandId: (handId: string | null) => void;
+  /** Flip Quick/Drill and persist to localStorage. */
+  setCoachMode: (mode: "quick" | "drill") => void;
+  /** Set or clear the static drill prompt shown by ChipyCoach. */
+  setChipyDrillPrompt: (prompt: string | null) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -98,6 +125,8 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   chipyPhase: "idle",
   chipyHandId: null,
   lastFinishedHandId: null,
+  coachMode: loadCoachMode(),
+  chipyDrillPrompt: null,
 
   setTableState: (newState: TableState) => {
     set({ tableState: newState });
@@ -210,5 +239,20 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
   setLastFinishedHandId: (handId: string | null) => {
     set({ lastFinishedHandId: handId });
+  },
+
+  setCoachMode: (mode: "quick" | "drill") => {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(COACH_MODE_STORAGE_KEY, mode);
+      } catch {
+        // Swallow storage errors; in-memory state still updates below.
+      }
+    }
+    set({ coachMode: mode });
+  },
+
+  setChipyDrillPrompt: (prompt: string | null) => {
+    set({ chipyDrillPrompt: prompt });
   },
 }));
