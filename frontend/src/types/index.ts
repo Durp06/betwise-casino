@@ -148,6 +148,26 @@ export interface HandReplayAction {
   created_at: string;
 }
 
+// ─── Session review (Hand Review modal) ──────────────────────────────────────
+
+export type Classification = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+
+export interface ReviewAction extends HandReplayAction {
+  classification: Classification;
+  ev_loss_chips: number;
+}
+
+export interface SessionReview {
+  session_id: string;
+  hand_id: string;
+  total_actions: number;
+  optimal_count: number;
+  accuracy: number;
+  ev_lost_chips: number;
+  worst_action_id: string | null;
+  actions: ReviewAction[];
+}
+
 // ─── Advice streaming ────────────────────────────────────────────────────────
 
 export interface AdviceResult {

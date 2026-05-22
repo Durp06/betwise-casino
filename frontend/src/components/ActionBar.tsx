@@ -54,6 +54,7 @@ export default function ActionBar({
     beginChipyStream,
     appendChipyChunk,
     endChipyStream,
+    setLastFinishedHandId,
   } = useGameStore();
 
   const legalSet = new Set(legalActions);
@@ -73,6 +74,15 @@ export default function ActionBar({
     // for the next poll. Users were clicking Hit and seeing nothing move,
     // then clicking Stand by mistake and ending the round prematurely.
     setMyHand(result.data);
+    // If the action terminated the hand (bust/blackjack/standing/finished),
+    // record its id so Table.tsx knows to show the celebratory outcome banner
+    // for THIS hand. Stale finished hands from a prior session won't match.
+    if (
+      result.data &&
+      result.data.status !== "active"
+    ) {
+      setLastFinishedHandId(result.data.id);
+    }
     onActionSuccess?.();
 
     // Fire Chipy's post-play critique — affirms or corrects with a reason.

@@ -1,0 +1,37 @@
+[tool.ruff]
+# Project-wide ruff config. We lint backend/ from the project root in CI so
+# import paths resolve the same way pytest sees them.
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# Start with the bug-catchers only. Stylistic rules (import sort, pyupgrade,
+# pycodestyle) are deferred until we do one project-wide formatting pass —
+# turning them on now would force a 100+-fix change while feature work is in
+# flight. Collaborators: add E/I/UP to `select` when you do that cleanup.
+select = [
+  "F",      # pyflakes (unused imports, undefined names, real bugs)
+  "B",      # flake8-bugbear (likely-bugs only)
+]
+ignore = [
+  "B008",   # FastAPI deps legitimately use Depends(...) in default args
+  "B904",   # not requiring `from err` on every raise — too noisy for now
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Tests are allowed to use star imports and unused fixtures freely.
+# F841 (unused locals) is fine in tests — fixtures are often assigned for
+# documentation / side-effect purposes (seed_hand, seed_user) and not used
+# directly afterward.
+#
+# F821 (undefined name "backend") in conftest is a false positive on
+# string-typed return annotations like `-> "backend.models.User"` — those
+# already carry `# type: ignore[name-defined]` for mypy. Ruff can't see
+# through the string.
+#
+# B007 (loop var unused) on `for i, row in enumerate(rows)` reads cleaner
+# than `_i` in test seed helpers — ignore.
+"backend/tests/**" = ["F401", "F811", "F841", "F821", "B007"]
+# Root conftest holds the AsyncSession.commit() monkeypatch — its
+# `original_commit` is captured for clarity even though we never restore.
+"backend/conftest.py" = ["F841"]

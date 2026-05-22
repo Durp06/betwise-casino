@@ -88,7 +88,7 @@ export default function BettingControls({
   chipBalance,
   onDealSuccess,
 }: BettingControlsProps) {
-  const { betAmount, placeBet, setMyHand } = useGameStore();
+  const { betAmount, placeBet, setMyHand, setLastFinishedHandId } = useGameStore();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -122,6 +122,9 @@ export default function BettingControls({
       // 3 seconds until the next poll lands.
       setMyHand(result.data);
       placeBet(0);
+      // The previous hand's "you won / you lost" banner shouldn't linger
+      // once a new hand is in the air.
+      setLastFinishedHandId(null);
       onDealSuccess?.(result.data);
     }
   }

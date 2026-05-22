@@ -22,7 +22,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from backend.routers import users, tables, game, advice, leaderboard, analytics
+from backend.routers import users, tables, game, advice, leaderboard, analytics, sessions
 
 logger = logging.getLogger(__name__)
 
@@ -78,6 +78,7 @@ app.include_router(game.router, prefix="/api")
 app.include_router(advice.router, prefix="/api")
 app.include_router(leaderboard.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
+app.include_router(sessions.router, prefix="/api")
 
 
 # ─── Startup event ────────────────────────────────────────────────────────────

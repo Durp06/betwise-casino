@@ -15,8 +15,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-from backend.game.engine import can_split as _can_split_cards
-from backend.game.engine import card_rank, hand_value, is_soft
+from backend.game.blackjack.engine import can_split as _can_split_cards
+from backend.game.blackjack.engine import card_rank, hand_value, is_soft
 
 Action = Literal["hit", "stand", "double", "split"]
 
@@ -216,7 +216,7 @@ def explain_decision(
         if v == "A":
             hand_desc = "pair of aces"
         elif v in ("J", "Q", "K", "10"):
-            hand_desc = f"pair of 10s"
+            hand_desc = "pair of 10s"
         else:
             hand_desc = f"pair of {v}s"
     elif soft:

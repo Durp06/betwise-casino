@@ -13,6 +13,7 @@ import type {
   ApiResult,
   HandReplayAction,
   LeaderboardRow,
+  SessionReview,
   TableListRow,
   TableOut,
   TableState,
@@ -163,6 +164,12 @@ export async function getHandActions(
   handId: string,
 ): Promise<ApiResult<HandReplayAction[]>> {
   return apiFetch<HandReplayAction[]>(`/api/hands/${handId}/actions`);
+}
+
+export async function getSessionReview(
+  sessionId: string,
+): Promise<ApiResult<SessionReview>> {
+  return apiFetch<SessionReview>(`/api/sessions/${sessionId}/review`);
 }
 
 // ─── Leaderboard ─────────────────────────────────────────────────────────────

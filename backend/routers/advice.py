@@ -92,7 +92,7 @@ async def get_advice(
         raise HTTPException(status_code=403, detail="Cannot request advice for another player's hand")
 
     async def _sse_stream() -> AsyncGenerator[bytes, None]:
-        from sqlalchemy import select, update  # noqa: PLC0415
+        from sqlalchemy import select  # noqa: PLC0415
         from backend.models import Hand, GameSession, User  # noqa: PLC0415
         from backend.game import strategy  # noqa: PLC0415
         from backend.game import engine as eng  # noqa: PLC0415

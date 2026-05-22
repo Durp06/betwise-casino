@@ -190,3 +190,37 @@ class HandReplayActionOut(BaseModel):
     dealer_upcard: dict
     chipy_explanation: Optional[str] = None
     created_at: datetime
+
+
+# ─── Session review (Hand Review modal) ──────────────────────────────────────
+
+Classification = Literal["best", "good", "inaccuracy", "mistake", "blunder"]
+
+
+class ReviewActionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    hand_id: uuid.UUID
+    user_id: uuid.UUID
+    action: str
+    player_guess: str
+    optimal_action: str
+    was_correct: bool
+    hand_snapshot: list
+    dealer_upcard: dict
+    chipy_explanation: Optional[str] = None
+    created_at: datetime
+    classification: Classification
+    ev_loss_chips: int
+
+
+class SessionReviewOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    session_id: uuid.UUID
+    hand_id: uuid.UUID
+    total_actions: int
+    optimal_count: int
+    accuracy: float
+    ev_lost_chips: int
+    worst_action_id: Optional[uuid.UUID] = None
+    actions: list[ReviewActionOut]
