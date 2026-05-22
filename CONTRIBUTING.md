@@ -18,12 +18,14 @@ npm install
 npm test -- --run                  # Vitest
 npm run dev                        # localhost:5173, /api proxies to localhost:8000
 
-# Run the whole app
-cd ../backend
+# Run the whole app — from the REPO ROOT (not from backend/).
+# The `backend.main:app` import path needs the project root on sys.path,
+# which only works from the root directory.
+cd ..   # if you're inside frontend/ from the step above
 $env:BETWISE_DEV_USER_ID="aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"   # PowerShell; bash: BETWISE_DEV_USER_ID=...
 $env:BETWISE_TEST_DB_URL="sqlite+aiosqlite:///./dev.sqlite"
 python -m uvicorn backend.main:app --reload --port 8000 --reload-dir backend
-# Open http://localhost:5173
+# Open http://localhost:5173 (Vite dev) — /api proxies to localhost:8000
 ```
 
 The `BETWISE_DEV_USER_ID` bypass makes the backend treat every request as the same dev user — convenient for local dev, **NEVER set in production**.

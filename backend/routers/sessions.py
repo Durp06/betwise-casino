@@ -80,12 +80,20 @@ async def _get_session_review(
     worst_id: uuid.UUID | None = None
     worst_loss = 0
 
+    # hand.bet stores the FINAL bet, which has doubled if the player ever
+    # took the "double" action. To compute per-action EV losses honestly we
+    # need to know the bet at the moment of each decision: pre-double
+    # decisions risked the initial bet; the double itself risked 2x.
+    has_double = any(a.action == "double" for a in actions)
+    initial_bet = caller_hand.bet // 2 if has_double else caller_hand.bet
+
     for a in actions:
         total += 1
         if a.was_correct:
             optimal += 1
+        bet_at_action = initial_bet * 2 if a.action == "double" else initial_bet
         cls, loss = classify_action(
-            a.hand_snapshot, a.dealer_upcard, a.action, a.optimal_action, caller_hand.bet,
+            a.hand_snapshot, a.dealer_upcard, a.action, a.optimal_action, bet_at_action,
         )
         ev_total += loss
         if loss > worst_loss:

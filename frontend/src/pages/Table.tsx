@@ -172,9 +172,12 @@ export default function Table() {
 
   async function handleLeave(): Promise<void> {
     // Defer navigation until after the review modal closes — otherwise
-    // /lobby unmounts Table and the modal disappears with it.
+    // /lobby unmounts Table and the modal disappears with it. The review
+    // is only meaningful for a hand that's actually FINISHED; leaving
+    // mid-active-round shouldn't force the player through a partial review.
     if (!tableId) return;
-    if (myHand && tableState?.session) {
+    const handIsTerminal = myHand && myHand.status !== "active";
+    if (handIsTerminal && tableState?.session) {
       setReviewIsLeaveFlow(true);
       setReviewState({ sessionId: tableState.session.id, handId: myHand.id });
       return;

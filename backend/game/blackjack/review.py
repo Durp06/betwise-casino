@@ -66,11 +66,13 @@ EV_LOSS_TABLE: dict[str, dict[str, dict[str, float]]] = {
     },
 
     "hard_11": {
-        # optimal: double vs 2-10, hit vs ace
+        # optimal: always double (strategy.py HARD_TOTALS[11] returns _D for
+        # every upcard including ace, per 6-deck H17). The wrong action that
+        # needs grading is therefore "hit"/"stand"/"split", never "double".
         "weak":   {"hit": 0.02, "stand": 0.10, "split": 0.10},
         "strong": {"hit": 0.02, "stand": 0.10, "split": 0.10},
         "ten":    {"hit": 0.02, "stand": 0.10, "split": 0.10},
-        "ace":    {"double": 0.02, "stand": 0.10, "split": 0.10},
+        "ace":    {"hit": 0.02, "stand": 0.10, "split": 0.10},
     },
 
     "hard_12": {
@@ -195,20 +197,31 @@ EV_LOSS_TABLE: dict[str, dict[str, dict[str, float]]] = {
 
 # ─── Category helpers ─────────────────────────────────────────────────────────
 
-def _categorize_hand(cards: list[dict]) -> str:
+def _categorize_hand(
+    cards: list[dict],
+    player_action: str = "",
+    optimal_action: str = "",
+) -> str:
     """Map a hand (list of card dicts) to a HandCategory string."""
-    # Check pairs first
+    # Pair bucketing only applies when split is actually in play this turn.
+    # Otherwise we'd misgrade hands like 4,4 vs 2 (strategy says hit) as a
+    # pair_other_split deviation when the player stood — it's really a
+    # hard-8 blunder. Aces and 8s ALWAYS split per basic strategy, so we keep
+    # those buckets regardless of what the player chose to do.
     if can_split(cards):  # type: ignore[arg-type]
         v = cards[0]["value"]
         if v == "A":
             return "pair_aces"
         if v == "8":
             return "pair_8s"
-        # Face cards (J/Q/K/10) → pair_face (never split)
+        # Face cards (J/Q/K/10) → pair_face (never split, always treat as 20)
         if v in ("10", "J", "Q", "K"):
             return "pair_face"
-        # Other numeric pairs that are splittable
-        return "pair_other_split"
+        # For other splittable pairs, only use the pair bucket when split
+        # was the optimal call or the player chose to split. Otherwise fall
+        # through to the hand-total categorization below.
+        if "split" in (player_action, optimal_action):
+            return "pair_other_split"
 
     val = hand_value(cards)  # type: ignore[arg-type]
     soft = is_soft(cards)  # type: ignore[arg-type]
@@ -288,7 +301,7 @@ def classify_action(
     if player_action == optimal_action:
         return ("best", 0)
 
-    hand_cat = _categorize_hand(hand_cards)
+    hand_cat = _categorize_hand(hand_cards, player_action, optimal_action)
     dealer_cat = _categorize_dealer(dealer_upcard)
 
     # Look up the ev_loss_pct; default to 0.05 (mid "mistake") for unfilled cells

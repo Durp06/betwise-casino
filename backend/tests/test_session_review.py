@@ -115,6 +115,104 @@ class TestClassifyActionDeterministic:
         assert a == b
 
 
+class TestClassifyActionPairRouting:
+    """Regression for oracle finding: splittable pairs in non-split spots
+    used to fall into the pair_other_split bucket even when basic strategy
+    said to play the hand total. 4,4 vs 2 → strategy says HIT (it's hard
+    8); standing on it should be graded as a hard-8 blunder, not pair-bucket
+    noise.
+    """
+
+    def test_stand_on_44_vs_2_is_blunder_treated_as_hard_8(self):
+        from backend.game.review import classify_action  # type: ignore[import]
+
+        # 4,4 vs dealer 2 — strategy.py PAIRS["4"][2] is HIT (treat as hard 8),
+        # so optimal_action recorded is "hit". Player stood. This is the
+        # same situation as stand-on-hard-8-vs-6 → blunder.
+        cls, _ = classify_action(
+            [_h("4"), _h("4", "spades")], _h("2"), "stand", "hit", bet=1000,
+        )
+        assert cls == "blunder", (
+            f"4,4 vs 2 with optimal=hit should be graded as a hard-8 blunder; got {cls}"
+        )
+
+    def test_split_aces_still_uses_pair_bucket(self):
+        from backend.game.review import classify_action  # type: ignore[import]
+
+        # A,A is always split; missing the split is a real pair-bucket call.
+        # Should NOT fall through to hard/soft totals.
+        cls, _ = classify_action(
+            [_h("A"), _h("A", "spades")], _h("6"), "stand", "split", bet=1000,
+        )
+        assert cls == "blunder"
+
+    def test_split_88_still_uses_pair_bucket(self):
+        from backend.game.review import classify_action  # type: ignore[import]
+
+        # 8,8 is always split; standing on it is a pair-bucket blunder.
+        cls, _ = classify_action(
+            [_h("8"), _h("8", "spades")], _h("10", "clubs"), "stand", "split", bet=1000,
+        )
+        assert cls == "blunder"
+
+
+class TestClassifyActionHard11VsAce:
+    """Regression for oracle finding: the hard_11/ace row used to grade
+    'double' as the wrong action, but strategy.py says double IS optimal
+    here. The deviation that needs grading is 'hit' (the common defensive
+    play), and it should land in the inaccuracy bucket, not full mistake.
+    """
+
+    def test_hit_on_hard_11_vs_ace_is_inaccuracy(self):
+        from backend.game.review import classify_action  # type: ignore[import]
+
+        cls, _ = classify_action(
+            [_h("6"), _h("5")], _h("A", "spades"), "hit", "double", bet=1000,
+        )
+        assert cls == "inaccuracy", (
+            f"hit on hard 11 vs ace (optimal=double) should be inaccuracy; got {cls}"
+        )
+
+
+@pytest.mark.asyncio
+async def test_review_uses_per_action_bet_when_hand_doubled(client, db):
+    """Regression for oracle finding: pre-double actions used to be re-priced
+    at the doubled stake because the loop passed hand.bet (the final, doubled
+    value) into every classify_action call. A wrong stand BEFORE the double
+    should be priced at the initial bet, not 2x.
+    """
+    user = await seed_user(db, TEST_USER_ID, "doublepricing")
+    table = await seed_table(db)
+    session = await seed_session(db, table.id, status="finished")
+    # Final bet is 2000 because the hand was doubled. Initial was 1000.
+    hand = await seed_hand(db, session.id, user.id, bet=2000)
+    actions = await seed_actions(db, hand.id, user.id, [
+        # A wrong stand on hard 16 vs 10 → inaccuracy. Pre-double, so the
+        # EV cost should be ~3% of 1000 = ~30 chips, NOT ~3% of 2000 = ~60.
+        {"action": "stand", "optimal_action": "hit", "was_correct": False,
+         "hand_snapshot": [{"suit": "hearts", "value": "10"},
+                           {"suit": "clubs", "value": "6"}],
+         "dealer_upcard": {"suit": "spades", "value": "10"}},
+        # The double itself — wagered 2x. Doesn't matter for this test.
+        {"action": "double", "optimal_action": "double", "was_correct": True,
+         "hand_snapshot": [{"suit": "hearts", "value": "10"},
+                           {"suit": "clubs", "value": "6"}],
+         "dealer_upcard": {"suit": "spades", "value": "10"}},
+    ])
+
+    resp = await client.get(f"/api/sessions/{session.id}/review")
+    assert resp.status_code == 200
+    body = resp.json()
+    pre_double_loss = body["actions"][0]["ev_loss_chips"]
+    # If the bug were present, pre_double_loss would be ~60 (3% of 2000).
+    # With the fix it should be ~30 (3% of 1000). Allow a wide band for the
+    # heuristic bucket; the key assertion is that it's STRICTLY less than
+    # what 2x pricing would produce.
+    assert pre_double_loss < 50, (
+        f"pre-double action got re-priced at doubled stake: ev_loss={pre_double_loss}"
+    )
+
+
 # ─── Endpoint tests ──────────────────────────────────────────────────────────
 
 @pytest.mark.asyncio
