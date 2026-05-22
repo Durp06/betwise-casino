@@ -87,6 +87,8 @@ export default function Table() {
     endChipyStream,
     resetChipy,
     lastFinishedHandId,
+    coachMode,
+    setChipyDrillPrompt,
   } = useGameStore();
 
   const [replayHandId, setReplayHandId] = useState<string | null>(null);
@@ -99,14 +101,16 @@ export default function Table() {
 
   useTablePoll(tableId ?? "", currentUserId);
 
-  // Proactive Chipy: the moment my hand becomes active for the first time,
-  // fire the /pre stream so Chipy chimes in with a suggestion before I act.
-  // Tracked by hand ID so re-entering "active" on the same hand (e.g. polled
-  // twice while still active) doesn't restart the stream.
+  // Proactive Chipy. In "quick" mode we fire the pre-stream so Chipy chimes
+  // in with the recommendation before the player acts. In "drill" mode we
+  // hold the recommendation back and surface a static quiz prompt instead;
+  // the post-play stream still fires from ActionBar so Chipy reveals the
+  // answer + dealer-bust % after the player commits.
   const lastPreHandRef = useRef<string | null>(null);
   useEffect(() => {
     if (!myHand) {
       lastPreHandRef.current = null;
+      setChipyDrillPrompt(null);
       return;
     }
     const sessionPlaying = tableState?.session?.status === "playing";
@@ -118,15 +122,33 @@ export default function Table() {
     ) {
       lastPreHandRef.current = myHand.id;
       const handId = myHand.id;
-      beginChipyStream("pre", handId);
-      void streamPreAdvice(
-        handId,
-        (chunk) => appendChipyChunk(chunk),
-        () => endChipyStream(),
-        () => endChipyStream(),
-      );
+      if (coachMode === "quick") {
+        setChipyDrillPrompt(null);
+        beginChipyStream("pre", handId);
+        void streamPreAdvice(
+          handId,
+          (chunk) => appendChipyChunk(chunk),
+          () => endChipyStream(),
+          () => endChipyStream(),
+        );
+      } else {
+        // Drill mode: no proactive narration. Show the quiz line until the
+        // player commits an action; ActionBar's streamAdvice will replace
+        // it with the post-play reveal.
+        setChipyDrillPrompt(
+          t("Your call. Hit, stand, or double? What's the dealer most likely sitting on?"),
+        );
+      }
     }
-  }, [myHand, tableState?.session?.status, beginChipyStream, appendChipyChunk, endChipyStream]);
+  }, [
+    myHand,
+    tableState?.session?.status,
+    coachMode,
+    beginChipyStream,
+    appendChipyChunk,
+    endChipyStream,
+    setChipyDrillPrompt,
+  ]);
 
   // Wipe Chipy when leaving the table — keeps stale narration from flashing
   // when the user re-enters another table.
