@@ -247,11 +247,15 @@ async def _take_action(
     if current_player is None or current_player.id != user_id:
         raise HTTPException(status_code=403, detail="It is not your turn")
 
-    # Fetch caller's hand
+    # Fetch caller's hand — row-locked for the duration of the transaction.
+    # Under Postgres READ COMMITTED this prevents two concurrent requests from
+    # the same user both passing the turn check and both mutating cards/deck.
+    # SQLite (in-memory tests) silently ignores FOR UPDATE but serialises writes
+    # anyway, so behaviour is unchanged in the test suite.
     result = await db.execute(
-        select(Hand).where(
-            (Hand.session_id == session.id) & (Hand.user_id == user_id)
-        )
+        select(Hand)
+        .where((Hand.session_id == session.id) & (Hand.user_id == user_id))
+        .with_for_update()
     )
     hand = result.scalar_one_or_none()
     if hand is None:
@@ -294,10 +298,13 @@ async def _take_action(
         new_cards.append(new_card)
         session.deck_state = deck
 
-    # For double: double the bet and deduct original bet again from chip balance
+    # For double: double the bet and deduct original bet again from chip balance.
+    # Lock the User row too so concurrent double requests can't both deduct.
     if action == "double":
         from backend.models import User  # noqa: PLC0415
-        result = await db.execute(select(User).where(User.id == user_id))
+        result = await db.execute(
+            select(User).where(User.id == user_id).with_for_update()
+        )
         doubling_user = result.scalar_one_or_none()
         if doubling_user is not None:
             doubling_user.chip_balance -= hand.bet
