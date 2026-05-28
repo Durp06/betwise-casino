@@ -21,7 +21,10 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
+from backend.ratelimit import limiter
 from backend.routers import users, tables, game, advice, leaderboard, analytics, sessions
 
 logger = logging.getLogger(__name__)
@@ -30,11 +33,27 @@ logger = logging.getLogger(__name__)
 
 app = FastAPI(title="BetWise Casino", version="1.0.0")
 
-# CORS — read allowed origin from env; default to localhost for dev
-_cors_origins = os.environ.get(
-    "BETWISE_CORS_ORIGINS",
-    "http://localhost:5173",
-).split(",")
+# Register the shared slowapi limiter so route-level @limiter.limit(...)
+# decorators can find it via app.state and the global 429 handler fires.
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+# CORS — read allowed origins from env; default to localhost for dev.
+# Fail fast if anyone ever sets BETWISE_CORS_ORIGINS="*" — wildcard origins
+# combined with allow_credentials=True is insecure (and browsers reject the
+# response). Catching it at startup beats catching it during incident review.
+_cors_origins = [
+    o.strip()
+    for o in os.environ.get("BETWISE_CORS_ORIGINS", "http://localhost:5173").split(",")
+    if o.strip()
+]
+
+if "*" in _cors_origins:
+    raise RuntimeError(
+        "BETWISE_CORS_ORIGINS contains '*' and allow_credentials=True — "
+        "this combination is insecure and rejected by browsers. "
+        "Set BETWISE_CORS_ORIGINS to an explicit comma-separated list of allowed origins."
+    )
 
 app.add_middleware(
     CORSMiddleware,

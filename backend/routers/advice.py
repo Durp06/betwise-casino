@@ -20,9 +20,11 @@ from typing import AsyncGenerator
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from backend.auth import CurrentUser
 from backend.database import get_db
+from backend.ratelimit import ADVICE_RATE_LIMIT, limiter
 from backend.schemas import AdviceIn
 
 router = APIRouter(prefix="/advice", tags=["advice"])
@@ -73,7 +75,9 @@ async def _stream_anthropic(messages: list[dict]) -> AsyncGenerator[str, None]:
 # ─── Route handlers ───────────────────────────────────────────────────────────
 
 @router.post("/{hand_id}")
+@limiter.limit(ADVICE_RATE_LIMIT)
 async def get_advice(
+    request: Request,
     hand_id: uuid.UUID,
     body: AdviceIn,
     current_user: CurrentUser,
@@ -82,6 +86,10 @@ async def get_advice(
     """Stream Chipy's coaching explanation and update the user's streak."""
     from sqlalchemy import select  # noqa: PLC0415
     from backend.models import Hand  # noqa: PLC0415
+
+    # Stash the authenticated user on request.state so the slowapi key function
+    # (in backend/ratelimit.py) keys on user instead of remote IP.
+    request.state.user_id = str(current_user)
 
     # ── Ownership check before streaming begins ──────────────────────────────
     pre_result = await db.execute(select(Hand).where(Hand.id == hand_id))
@@ -212,7 +220,9 @@ async def get_advice(
 
 
 @router.post("/{hand_id}/pre")
+@limiter.limit(ADVICE_RATE_LIMIT)
 async def get_pre_advice(
+    request: Request,
     hand_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
@@ -227,6 +237,9 @@ async def get_pre_advice(
     """
     from sqlalchemy import select  # noqa: PLC0415
     from backend.models import Hand  # noqa: PLC0415
+
+    # Per-user rate-limit key (see backend/ratelimit.py).
+    request.state.user_id = str(current_user)
 
     # ── Ownership check before streaming begins ──────────────────────────────
     pre_result = await db.execute(select(Hand).where(Hand.id == hand_id))

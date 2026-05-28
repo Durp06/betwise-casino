@@ -38,6 +38,12 @@ COPY backend/ ./backend/
 # (main.py resolves `frontend/dist` relative to `__file__`, so this layout matches)
 COPY --from=frontend-builder /build/dist ./frontend/dist
 
+# Create a non-root user and hand it ownership of /app.
+# Railway also sandboxes containers, but defense-in-depth — don't run as root.
+RUN useradd --create-home --shell /bin/bash --uid 1000 app \
+    && chown -R app:app /app
+USER app
+
 # Run uvicorn from /app so absolute imports `from backend.X import …` resolve.
 # PORT is injected by Railway; fall back to 8000 for local docker run.
 EXPOSE 8000
