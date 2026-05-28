@@ -118,9 +118,15 @@ async def reset_chips(
 @router.get("/{user_id}/hands", response_model=list[HandOut])
 async def get_user_hands(
     user_id: uuid.UUID,
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> list[HandOut]:
-    """Return the last 20 hands for a user, ordered newest-first. Returns [] if none."""
+    """Return the caller's last 20 hands (approximate insertion order). Cannot view another player's history."""
+    if user_id != current_user:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot view another player's hand history",
+        )
     hands = await _get_user_hands(user_id, db)
     return [
         HandOut(
