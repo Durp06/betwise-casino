@@ -181,3 +181,119 @@ export interface AdviceResult {
 // ─── API result wrapper ──────────────────────────────────────────────────────
 
 export type ApiResult<T> = { data: T; error: null } | { data: null; error: string };
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Texas Hold'em — mirrors backend/schemas.py Poker* models
+// ═════════════════════════════════════════════════════════════════════════════
+
+export type PokerAdviceMode = "reads" | "odds";
+export type PokerActionType = "fold" | "check" | "call" | "raise" | "all_in";
+export type PokerConfidenceTier = "DETERMINISTIC" | "HEURISTIC";
+export type PokerVerdict =
+  | "best"
+  | "good"
+  | "inaccuracy"
+  | "mistake"
+  | "blunder"
+  | "no_verdict";
+export type PokerStreet = "preflop" | "flop" | "turn" | "river" | "complete";
+
+export interface PokerCard {
+  suit: Suit;
+  value: Value;
+}
+
+export interface PokerTournament {
+  id: string;
+  bot_count: number;
+  advice_mode: string;
+  buy_in_cents: number;
+  starting_stack_chips: number;
+  hands_per_level: number;
+  seed: number;
+  status: string;
+  button_seat: number;
+  current_hand_number: number;
+  created_at: string;
+}
+
+export interface PokerSeat {
+  seat_number: number;
+  user_id: string | null;
+  archetype_name: string | null;
+  starting_stack: number;
+  current_stack: number;
+  is_bust: boolean;
+  is_bot: boolean;
+}
+
+export interface PokerHandSeatState {
+  seat_number: number;
+  hole_cards: (PokerCard | null)[]; // [null, null] for opponents during play
+  starting_stack: number;
+  final_stack: number;
+  current_bet: number;
+  is_folded: boolean;
+  is_all_in: boolean;
+}
+
+export interface PokerAction {
+  id: string;
+  seat_number: number;
+  user_id: string | null;
+  action_index: number;
+  street: string;
+  action: string;
+  amount: number;
+  recommended_action: string | null;
+  confidence_tier: PokerConfidenceTier | null;
+  verdict: PokerVerdict | null;
+  ev_loss_chips: number | null;
+  live_equity: number | null;
+  chipy_explanation: string | null;
+  is_human: boolean;
+  created_at: string;
+}
+
+export interface PokerHandState {
+  id: string;
+  hand_number: number;
+  button_seat: number;
+  small_blind: number;
+  big_blind: number;
+  ante: number;
+  board: PokerCard[];
+  pot_total: number;
+  side_pots: Array<{ amount: number; eligible: number[] }>;
+  street: string;
+  current_bet_to_match: number;
+  current_to_act_seat: number | null;
+  last_aggressor_seat: number | null;
+  min_raise_increment: number;
+  status: string;
+  seats: PokerHandSeatState[];
+  actions: PokerAction[];
+}
+
+export interface PokerTournamentState {
+  tournament: PokerTournament;
+  seats: PokerSeat[];
+  current_hand: PokerHandState | null;
+  your_seat_number: number | null;
+}
+
+export interface PokerAdviceResult {
+  recommended_action: PokerActionType | null;
+  confidence_tier: PokerConfidenceTier;
+  verdict: PokerVerdict;
+  ev_loss_chips: number | null;
+  principle_note: string | null;
+}
+
+export interface PokerCreateTournamentPayload {
+  bot_count: number;
+  advice_mode: PokerAdviceMode;
+  buy_in_cents: number;
+  starting_stack_chips: number;
+  hands_per_level?: number;
+}

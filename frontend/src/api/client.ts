@@ -20,6 +20,10 @@ import type {
   UserStats,
   WeakSpot,
   Hand,
+  PokerCreateTournamentPayload,
+  PokerTournament,
+  PokerTournamentState,
+  PokerActionType,
 } from "../types";
 
 // ─── Auth header helper ───────────────────────────────────────────────────────
@@ -282,6 +286,35 @@ export async function streamPreAdvice(
     onError(NETWORK_ERROR_MSG);
   }
 }
+
+// ─── Texas Hold'em ───────────────────────────────────────────────────────────
+
+export async function createPokerTournament(
+  payload: PokerCreateTournamentPayload,
+): Promise<ApiResult<PokerTournament>> {
+  return apiFetch<PokerTournament>("/api/poker/tournaments", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listPokerTournaments(): Promise<ApiResult<PokerTournament[]>> {
+  return apiFetch<PokerTournament[]>("/api/poker/tournaments");
+}
+
+export async function getPokerTournamentState(
+  tournamentId: string,
+): Promise<ApiResult<PokerTournamentState>> {
+  return apiFetch<PokerTournamentState>(
+    `/api/poker/tournaments/${tournamentId}/state`,
+  );
+}
+
+// Note: actPoker and streamPokerAdvice wrappers will land in the next session
+// alongside the poker_game.py + poker_advice.py routers. Keeping the surface
+// minimal here so tsc stays clean without uncalled stubs.
+// Placeholder for type-checking:
+export type _PokerActionTypeMarker = PokerActionType;
 
 export async function streamAdvice(
   handId: string,
