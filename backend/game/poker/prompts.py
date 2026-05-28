@@ -10,7 +10,7 @@ Design constraints (specs/texas-holdem.md §AC-B44, AC-B45):
 
 from __future__ import annotations
 
-from .archetypes import ARCHETYPE_REGISTRY, ArchetypeSpec
+from .archetypes import ArchetypeSpec
 from .cards import Card, card_str
 from .oracle import DecisionSnapshot
 

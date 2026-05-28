@@ -20,14 +20,11 @@ decision — keep bots fast and behavior-stable across runs).
 from __future__ import annotations
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Final, Literal
 
 from .cards import Card
 from .ranges import (
-    SC_RANK_INDEX,
-    SKLANSKY_GROUPS,
-    chen_score,
     hand_str,
     top_pct,
     union_of_groups,

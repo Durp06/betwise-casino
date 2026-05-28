@@ -23,7 +23,7 @@ from typing import Optional
 
 from .cards import Card, SUITS, RANKS, remove_cards
 from .evaluator import best_5_of_7
-from .ranges import ALL_HANDS, combos_for, hand_str
+from .ranges import hand_str
 
 
 # ─── Public types ─────────────────────────────────────────────────────────────

@@ -21,7 +21,6 @@ from __future__ import annotations
 
 from typing import Final, Literal
 
-from .ranges import ALL_HANDS, SC_RANK_ORDER, top_pct
 
 
 Position = Literal["SB", "BB", "BTN", "CO", "HJ", "MP", "UTG", "UTG1", "UTG2"]

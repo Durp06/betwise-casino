@@ -507,7 +507,7 @@ def award_pots(
         )
 
     new_stacks = [s.stack for s in state.seats]
-    for (pot_amount, eligible), winners in zip(pots, winners_per_pot, strict=False):
+    for (pot_amount, _eligible), winners in zip(pots, winners_per_pot, strict=False):
         if not winners:
             continue
         per_winner = pot_amount // len(winners)
