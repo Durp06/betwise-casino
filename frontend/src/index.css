@@ -122,49 +122,7 @@ h1, h2, h3, h4 {
   transform: rotate(-5deg);
 }
 
-/* ─── Chipy animations (all keyframes prefers-reduced-motion-gated below) ─ */
-
-@keyframes chipy-idle {
-  0%, 100% { transform: translateY(0); }
-  50%      { transform: translateY(-4px); }
-}
-@keyframes chipy-bounce {
-  0%, 100% { transform: translateY(0)   scale(1, 1); }
-  20%      { transform: translateY(-12px) scale(1.05, 0.95); }
-  40%      { transform: translateY(0)   scale(0.95, 1.05); }
-  60%      { transform: translateY(-6px) scale(1.02, 0.98); }
-  80%      { transform: translateY(0)   scale(1, 1); }
-}
-@keyframes chipy-shake {
-  0%, 100% { transform: translateX(0); }
-  10%      { transform: translateX(-6px) rotate(-3deg); }
-  30%      { transform: translateX(6px)  rotate(3deg); }
-  50%      { transform: translateX(-4px) rotate(-2deg); }
-  70%      { transform: translateX(4px)  rotate(2deg); }
-  90%      { transform: translateX(-2px) rotate(-1deg); }
-}
-@keyframes chipy-spin {
-  0%   { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-@keyframes chipy-think {
-  0%, 100% { transform: rotate(-4deg); }
-  50%      { transform: rotate(4deg); }
-}
-
-.chipy-animate-idle   { animation: chipy-idle   3.0s ease-in-out infinite; }
-.chipy-animate-bounce { animation: chipy-bounce 0.7s ease-out 1; }
-.chipy-animate-shake  { animation: chipy-shake  0.6s ease-in-out 1; }
-.chipy-animate-spin   { animation: chipy-spin   0.9s ease-in-out 1; }
-.chipy-animate-think  { animation: chipy-think  1.6s ease-in-out infinite; }
-
-@media (prefers-reduced-motion: reduce) {
-  .chipy-animate-idle,
-  .chipy-animate-bounce,
-  .chipy-animate-shake,
-  .chipy-animate-spin,
-  .chipy-animate-think { animation: none !important; }
-}
+/* Chipy keyframes removed — motion now lives inside Chipy.tsx via Framer Motion. */
 
 /* ─── Wobble — gentle hand-drawn life on stationary plaques ───────────── */
 
