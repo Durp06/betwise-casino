@@ -25,4 +25,17 @@ GAME_TYPE = "poker"
 # Re-export submodules so `from backend.game.poker import cards, evaluator, ...`
 # works without a chain of imports inside callers. The submodules are pure-sync;
 # importing this package does not touch the DB or the network.
-from . import cards  # noqa: F401,E402
+from . import (  # noqa: F401,E402
+    archetypes,
+    cards,
+    equity,
+    evaluator,
+    icm,
+    nash,
+    oracle,
+    pot_odds,
+    prompts,
+    ranges,
+    state,
+    tournament,
+)

@@ -14,13 +14,13 @@ from __future__ import annotations
 from types import ModuleType
 from typing import Mapping
 
-from backend.game import blackjack
+from backend.game import blackjack, poker
 from backend.game import GameModule  # noqa: F401  # re-exported for type-check sites
 
 # Mapping is intentionally typed as ModuleType (concrete) rather than GameModule
-# (Protocol) because today's only entry is a package, and runtime isinstance
-# against a Protocol is more friction than it's worth. Document the convention
-# in GameModule's docstring; trust the convention.
+# (Protocol) because runtime isinstance against a Protocol is more friction
+# than it's worth. Document the convention in GameModule's docstring; trust it.
 GAME_REGISTRY: Mapping[str, ModuleType] = {
     blackjack.GAME_TYPE: blackjack,
+    poker.GAME_TYPE: poker,
 }
