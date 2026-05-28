@@ -98,8 +98,8 @@ export default function Lobby() {
           >
             {t("Leaderboard")}
           </button>
-          <div className="chipy-animate-idle ml-2 hidden sm:block">
-            <Chipy size={80} expression="idle" animation="none" pose="wave" />
+          <div className="ml-2 hidden sm:block">
+            <Chipy size={80} expression="idle" animation="idle" pose="wave" />
           </div>
         </nav>
       </header>

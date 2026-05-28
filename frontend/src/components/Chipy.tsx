@@ -1,18 +1,24 @@
 /**
- * Chipy.tsx — the BetWise Casino mascot.
+ * Chipy.tsx — the BetWise Casino mascot ("V4 Modern").
  *
- * A poker chip viewed at a slight 3/4 angle, with cartoon eyes, a wide
- * grin, and white Mickey-Mouse-style gloves on stub arms. Built as an
- * inline SVG so every stroke can be themed; no external assets.
- *
- * All animations are CSS keyframes (see index.css), wrapped behind
+ * Clean chip identity that reads as a modern UI mascot, not a 1930s
+ * rubber-hose cartoon. Eight thin notches around the rim, a single inner
+ * ring for chip definition, big white eyes with one shine dot each, thin
+ * minimal eyebrows, and a single-curve smile (no teeth). Framer Motion
+ * drives idle "breathing" + occasional blinks; respects
  * `prefers-reduced-motion`.
+ *
+ * Props shape kept identical to the previous Cuphead-style Chipy so every
+ * caller still works. The `animation` prop's "bounce" / "shake" / "spin" /
+ * "think" branches map onto the idle motion config — they're kept for
+ * back-compat but no longer drive separate CSS keyframes.
  */
-import type { CSSProperties } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
+import { motion, useReducedMotion } from "framer-motion";
 
 export type ChipyExpression = "idle" | "thinking" | "happy" | "surprised";
-export type ChipyAnimation  = "idle" | "bounce"   | "shake" | "spin" | "think" | "none";
-export type ChipyPose       = "rest" | "wave"     | "thumbsup" | "point";
+export type ChipyAnimation  = "idle" | "bounce" | "shake" | "spin" | "think" | "none";
+export type ChipyPose       = "rest" | "wave" | "thumbsup" | "point";
 
 interface ChipyProps {
   size?: number;
@@ -23,18 +29,17 @@ interface ChipyProps {
   style?: CSSProperties;
 }
 
-// ─── Palette (locked at component scope so Chipy reads the same anywhere) ───
-const FACE_RED       = "#C0392B";
-const RIM_RED        = "#922B21";
-const CREAM          = "#F5F0E8";
-const INK            = "#1A0A00";
-const GLOVE_WHITE    = "#FFFFFF";
-const TONGUE_PINK    = "#E67373";
+// ─── Palette ──────────────────────────────────────────────────────────────────
+const FACE_RED = "#C0392B";
+const RIM_RED  = "#922B21";
+const CREAM    = "#F5F0E8";
+const INK      = "#1A0A00";
+const WHITE    = "#FFFFFF";
 
-// Notch ring — 16 small rectangles arranged at radius around the chip face
+// ─── Notch ring (8 thin notches around the chip edge) ─────────────────────────
 function NotchRing() {
-  const count = 16;
-  const radius = 38;
+  const count = 8;
+  const radius = 39;
   const notches = [];
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * 2 * Math.PI - Math.PI / 2;
@@ -44,13 +49,10 @@ function NotchRing() {
     notches.push(
       <rect
         key={i}
-        x={cx - 1.8}
-        y={cy - 3}
-        width={3.6}
-        height={6}
-        fill={CREAM}
-        stroke={INK}
-        strokeWidth={0.8}
+        x={cx - 1} y={cy - 2.5}
+        width={2} height={5}
+        rx={1}
+        fill={CREAM} stroke={INK} strokeWidth={0.7}
         transform={`rotate(${rotateDeg} ${cx} ${cy})`}
       />,
     );
@@ -58,192 +60,160 @@ function NotchRing() {
   return <g>{notches}</g>;
 }
 
-// Iris position based on expression
-function irisOffsetFor(expression: ChipyExpression): { x: number; y: number } {
+// ─── Eyebrows ─────────────────────────────────────────────────────────────────
+function Eyebrows({ expression }: { expression: ChipyExpression }) {
+  const stroke = { stroke: INK, strokeWidth: 1.8, strokeLinecap: "round" as const, fill: "none" };
   switch (expression) {
-    case "thinking":  return { x: -1.5, y: -1.5 };  // up-left, "pondering"
-    case "happy":     return { x: 0, y: 0 };         // n/a (squint path)
-    case "surprised": return { x: 0, y: 0 };
-    default:          return { x: 0, y: 0 };
+    case "happy":
+      return (
+        <g {...stroke}>
+          <path d="M 32 30 Q 38 27 44 29" />
+          <path d="M 56 29 Q 62 27 68 30" />
+        </g>
+      );
+    case "surprised":
+      return (
+        <g {...stroke}>
+          <path d="M 32 27 Q 38 24 44 27" />
+          <path d="M 56 27 Q 62 24 68 27" />
+        </g>
+      );
+    case "thinking":
+      return (
+        <g {...stroke}>
+          <path d="M 32 30 L 44 28" />
+          <path d="M 56 28 Q 62 25 68 29" />
+        </g>
+      );
+    default:
+      return (
+        <g {...stroke}>
+          <path d="M 32 30 Q 38 28.5 44 30" />
+          <path d="M 56 30 Q 62 28.5 68 30" />
+        </g>
+      );
   }
 }
 
-function Eyes({ expression }: { expression: ChipyExpression }) {
-  const irisOffset = irisOffsetFor(expression);
-
-  // Happy squint — both eyes are upward-curving arcs (no irises)
+// ─── Eyes ─────────────────────────────────────────────────────────────────────
+function Eyes({ expression, blink }: { expression: ChipyExpression; blink: boolean }) {
+  if (blink) {
+    return (
+      <g stroke={INK} strokeWidth={2.4} strokeLinecap="round" fill="none">
+        <path d="M 33 40 Q 39 43 45 40" />
+        <path d="M 55 40 Q 61 43 67 40" />
+      </g>
+    );
+  }
   if (expression === "happy") {
     return (
-      <g>
-        <path
-          d="M 32 38 Q 38 31 44 38"
-          stroke={INK} strokeWidth={2.5} fill="none" strokeLinecap="round"
-        />
-        <path
-          d="M 56 38 Q 62 31 68 38"
-          stroke={INK} strokeWidth={2.5} fill="none" strokeLinecap="round"
-        />
+      <g stroke={INK} strokeWidth={2.6} strokeLinecap="round" fill="none">
+        <path d="M 33 40 Q 39 33 45 40" />
+        <path d="M 55 40 Q 61 33 67 40" />
       </g>
     );
   }
-
-  // Surprised — small irises, wide eye whites
-  if (expression === "surprised") {
-    return (
-      <g>
-        <circle cx={38} cy={38} r={7.5} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2.2} />
-        <circle cx={62} cy={38} r={7.5} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2.2} />
-        <circle cx={38} cy={38} r={1.5} fill={INK} />
-        <circle cx={62} cy={38} r={1.5} fill={INK} />
-      </g>
-    );
-  }
-
-  // Idle / thinking — normal eyes, with offset irises
+  const offsetX = expression === "thinking" ? -1 : 0;
+  const offsetY = expression === "thinking" ? -1 : 0;
+  const radius = expression === "surprised" ? 8 : 6.8;
   return (
     <g>
-      <circle cx={38} cy={38} r={7} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2.2} />
-      <circle cx={62} cy={38} r={7} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2.2} />
-      <circle cx={38 + irisOffset.x} cy={38 + irisOffset.y} r={3} fill={INK} />
-      <circle cx={62 + irisOffset.x} cy={38 + irisOffset.y} r={3} fill={INK} />
-      {/* Glint highlights */}
-      <circle cx={39.5 + irisOffset.x} cy={36.5 + irisOffset.y} r={1.1} fill={CREAM} />
-      <circle cx={63.5 + irisOffset.x} cy={36.5 + irisOffset.y} r={1.1} fill={CREAM} />
+      <circle cx={39} cy={40} r={radius} fill={WHITE} stroke={INK} strokeWidth={2} />
+      <circle cx={61} cy={40} r={radius} fill={WHITE} stroke={INK} strokeWidth={2} />
+      <circle cx={39 + offsetX} cy={40 + offsetY} r={2.8} fill={INK} />
+      <circle cx={61 + offsetX} cy={40 + offsetY} r={2.8} fill={INK} />
+      <circle cx={40.5 + offsetX} cy={38 + offsetY} r={1.1} fill={WHITE} />
+      <circle cx={62.5 + offsetX} cy={38 + offsetY} r={1.1} fill={WHITE} />
     </g>
   );
 }
 
+// ─── Mouth ────────────────────────────────────────────────────────────────────
 function Mouth({ expression }: { expression: ChipyExpression }) {
-  // Open excited (happy) — wide grin with teeth visible
   if (expression === "happy") {
     return (
       <g>
-        {/* Outer mouth */}
         <path
-          d="M 30 56 Q 50 76 70 56 Q 50 70 30 56 Z"
-          fill={INK} stroke={INK} strokeWidth={2.4} strokeLinejoin="round"
+          d="M 35 56 Q 50 70 65 56"
+          stroke={INK} strokeWidth={2.6} fill="none" strokeLinecap="round"
         />
-        {/* Teeth row */}
-        <rect x={36} y={58} width={5} height={6} fill={CREAM} stroke={INK} strokeWidth={1} />
-        <rect x={42} y={59} width={5} height={7} fill={CREAM} stroke={INK} strokeWidth={1} />
-        <rect x={48} y={60} width={5} height={7} fill={CREAM} stroke={INK} strokeWidth={1} />
-        <rect x={54} y={59} width={5} height={7} fill={CREAM} stroke={INK} strokeWidth={1} />
-        {/* Tongue peek */}
-        <ellipse cx={50} cy={67} rx={6} ry={2.5} fill={TONGUE_PINK} stroke={INK} strokeWidth={1} />
+        <path
+          d="M 38 58 Q 50 67 62 58 Q 50 62 38 58 Z"
+          fill={INK} opacity={0.8}
+        />
       </g>
     );
   }
-
-  // Surprised — small round O mouth
   if (expression === "surprised") {
-    return (
-      <ellipse cx={50} cy={62} rx={4.5} ry={5.5} fill={INK} stroke={INK} strokeWidth={2} />
-    );
+    return <ellipse cx={50} cy={60} rx={3.5} ry={5} fill={INK} />;
   }
-
-  // Thinking — flat neutral line with slight curve
   if (expression === "thinking") {
     return (
       <path
-        d="M 38 62 Q 50 60 62 62"
-        stroke={INK} strokeWidth={2.5} fill="none" strokeLinecap="round"
+        d="M 41 62 Q 50 60 58 63"
+        stroke={INK} strokeWidth={2.4} fill="none" strokeLinecap="round"
       />
     );
   }
-
-  // Idle — wide rubber-hose grin with three teeth
   return (
-    <g>
-      <path
-        d="M 34 56 Q 50 70 66 56"
-        stroke={INK} strokeWidth={2.8} fill="none" strokeLinecap="round"
-      />
-      {/* Teeth peeking under the smile line — small rectangles */}
-      <g transform="translate(0, 1)">
-        <rect x={42} y={58.5} width={4} height={4} fill={CREAM} stroke={INK} strokeWidth={0.8} />
-        <rect x={46} y={59.5} width={4} height={4.5} fill={CREAM} stroke={INK} strokeWidth={0.8} />
-        <rect x={50} y={59.5} width={4} height={4.5} fill={CREAM} stroke={INK} strokeWidth={0.8} />
-        <rect x={54} y={58.5} width={4} height={4} fill={CREAM} stroke={INK} strokeWidth={0.8} />
-      </g>
-    </g>
+    <path
+      d="M 37 57 Q 50 65 63 57"
+      stroke={INK} strokeWidth={2.6} fill="none" strokeLinecap="round"
+    />
   );
 }
 
+// ─── Gloves ───────────────────────────────────────────────────────────────────
 function Glove({ side, pose }: { side: "left" | "right"; pose: ChipyPose }) {
-  // Left glove always at rest; only the right glove changes pose
   if (side === "left") {
     return (
       <g>
-        {/* Stub arm */}
-        <line x1={18} y1={54} x2={9} y2={62} stroke={INK} strokeWidth={4} strokeLinecap="round" />
-        {/* Glove — circular hand with three finger bumps on top */}
-        <g transform="translate(2, 60)">
-          <circle cx={6} cy={3} r={5.5} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2} />
-          {/* Three finger bumps */}
-          <circle cx={2.5} cy={-1} r={1.6} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
-          <circle cx={6}   cy={-2} r={1.8} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
-          <circle cx={9.5} cy={-1} r={1.6} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
-        </g>
+        <path d="M 18 56 Q 14 62 10 66" stroke={INK} strokeWidth={4} strokeLinecap="round" fill="none" />
+        <ellipse cx={9} cy={68} rx={7} ry={6} fill={WHITE} stroke={INK} strokeWidth={2} />
       </g>
     );
   }
-
-  // Right glove — varies by pose
   if (pose === "wave") {
     return (
       <g>
-        <line x1={82} y1={50} x2={92} y2={32} stroke={INK} strokeWidth={4} strokeLinecap="round" />
-        <g transform="translate(88, 22) rotate(15)">
-          <circle cx={4} cy={4} r={5.5} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2} />
-          <circle cx={0}  cy={2} r={1.8} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
-          <circle cx={4}  cy={0} r={2}   fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
-          <circle cx={8}  cy={2} r={1.8} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
+        <path d="M 82 50 Q 88 40 92 32" stroke={INK} strokeWidth={4} strokeLinecap="round" fill="none" />
+        <g transform="translate(91, 28) rotate(15)">
+          <ellipse cx={0} cy={0} rx={7} ry={6} fill={WHITE} stroke={INK} strokeWidth={2} />
         </g>
       </g>
     );
   }
-
   if (pose === "thumbsup") {
     return (
       <g>
-        <line x1={82} y1={50} x2={92} y2={36} stroke={INK} strokeWidth={4} strokeLinecap="round" />
-        <g transform="translate(89, 26)">
-          {/* Fist */}
-          <circle cx={4} cy={6} r={5.5} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2} />
-          {/* Thumb pointing up */}
-          <rect x={2.5} y={-2} width={3.5} height={6} rx={1.7} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.6} />
+        <path d="M 82 50 Q 88 44 92 36" stroke={INK} strokeWidth={4} strokeLinecap="round" fill="none" />
+        <g transform="translate(92, 36)">
+          <ellipse cx={0} cy={4} rx={7} ry={6} fill={WHITE} stroke={INK} strokeWidth={2} />
+          <rect x={-2.5} y={-5} width={5} height={8} rx={2.4} fill={WHITE} stroke={INK} strokeWidth={1.8} />
         </g>
       </g>
     );
   }
-
   if (pose === "point") {
     return (
       <g>
-        <line x1={82} y1={50} x2={94} y2={42} stroke={INK} strokeWidth={4} strokeLinecap="round" />
-        <g transform="translate(90, 36)">
-          <circle cx={4} cy={6} r={5.5} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2} />
-          {/* Pointing finger */}
-          <rect x={8} y={4.5} width={6} height={3} rx={1.5} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.6} />
+        <path d="M 82 50 Q 88 46 94 42" stroke={INK} strokeWidth={4} strokeLinecap="round" fill="none" />
+        <g transform="translate(94, 42)">
+          <ellipse cx={0} cy={4} rx={7} ry={6} fill={WHITE} stroke={INK} strokeWidth={2} />
+          <rect x={6} y={2} width={8} height={4} rx={2} fill={WHITE} stroke={INK} strokeWidth={1.8} />
         </g>
       </g>
     );
   }
-
-  // Rest — glove hanging at side
   return (
     <g>
-      <line x1={82} y1={54} x2={91} y2={62} stroke={INK} strokeWidth={4} strokeLinecap="round" />
-      <g transform="translate(88, 60)">
-        <circle cx={6} cy={3} r={5.5} fill={GLOVE_WHITE} stroke={INK} strokeWidth={2} />
-        <circle cx={2.5} cy={-1} r={1.6} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
-        <circle cx={6}   cy={-2} r={1.8} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
-        <circle cx={9.5} cy={-1} r={1.6} fill={GLOVE_WHITE} stroke={INK} strokeWidth={1.4} />
-      </g>
+      <path d="M 82 56 Q 86 62 90 66" stroke={INK} strokeWidth={4} strokeLinecap="round" fill="none" />
+      <ellipse cx={91} cy={68} rx={7} ry={6} fill={WHITE} stroke={INK} strokeWidth={2} />
     </g>
   );
 }
 
+// ─── Chipy root ───────────────────────────────────────────────────────────────
 export default function Chipy({
   size = 96,
   expression = "idle",
@@ -252,39 +222,74 @@ export default function Chipy({
   className = "",
   style,
 }: ChipyProps) {
-  const animClass =
-    animation === "none" ? "" : `chipy-animate-${animation}`;
+  const reduceMotion = useReducedMotion();
+  const [blink, setBlink] = useState(false);
+
+  // Periodic blinks (~ every 4-6 s). Skipped under prefers-reduced-motion.
+  useEffect(() => {
+    if (reduceMotion) return;
+    let cancelled = false;
+    const schedule = () => {
+      const delay = 4200 + Math.random() * 2500;
+      const id = window.setTimeout(() => {
+        if (cancelled) return;
+        setBlink(true);
+        window.setTimeout(() => {
+          if (cancelled) return;
+          setBlink(false);
+          schedule();
+        }, 130);
+      }, delay);
+      return id;
+    };
+    const id = schedule();
+    return () => {
+      cancelled = true;
+      if (id !== undefined) window.clearTimeout(id);
+    };
+  }, [reduceMotion]);
+
+  // Idle "breathing" loop — subtle scale + a tiny rotational sway.
+  // animation === "none" disables motion entirely.
+  const idleAnim = reduceMotion || animation === "none"
+    ? {}
+    : { scale: [1, 1.025, 1], rotate: [0, -1, 1, 0] };
+
+  const idleTransition = reduceMotion || animation === "none"
+    ? { duration: 0 }
+    : { duration: 3.4, repeat: Infinity, ease: "easeInOut" as const };
 
   return (
-    <div
-      className={`${animClass} ${className}`}
+    <motion.div
+      className={className}
       style={{ width: size, height: size, display: "inline-block", ...style }}
       role="img"
       aria-label={`Chipy mascot, ${expression}`}
+      animate={idleAnim}
+      transition={idleTransition}
     >
       <svg viewBox="0 0 100 100" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
-        {/* Chip rim — slight 3/4 angle suggested via offset darker ellipse */}
-        <ellipse cx={51.5} cy={53} rx={40} ry={40} fill={RIM_RED} stroke={INK} strokeWidth={3} />
+        <defs>
+          <filter id="chipy-shadow" x="-20%" y="-20%" width="140%" height="140%">
+            <feDropShadow dx="0" dy="2.5" stdDeviation="1.4" floodColor={INK} floodOpacity={0.4} />
+          </filter>
+        </defs>
 
-        {/* Chip face — sits on top, slightly up-left so the rim peeks bottom-right */}
-        <circle cx={50} cy={50} r={38} fill={FACE_RED} stroke={INK} strokeWidth={3} />
-
-        {/* Notch ring around the inner edge */}
+        {/* Rim peek */}
+        <circle cx={50} cy={51.5} r={41} fill={RIM_RED} stroke={INK} strokeWidth={2.5} filter="url(#chipy-shadow)" />
+        {/* Face */}
+        <circle cx={50} cy={50} r={39} fill={FACE_RED} stroke={INK} strokeWidth={2.5} />
         <NotchRing />
+        {/* Inner ring — chip-identity reinforcement */}
+        <circle cx={50} cy={50} r={30} fill="none" stroke={INK} strokeWidth={1.5} opacity={0.5} />
 
-        {/* Inner face circle (lighter cream-edge ring for definition) */}
-        <circle cx={50} cy={50} r={28} fill={FACE_RED} stroke={INK} strokeWidth={2} />
-
-        {/* Eyes */}
-        <Eyes expression={expression} />
-
-        {/* Mouth */}
+        <Eyebrows expression={expression} />
+        <Eyes expression={expression} blink={blink} />
         <Mouth expression={expression} />
 
-        {/* Gloves */}
-        <Glove side="left" pose="rest" />
+        <Glove side="left"  pose="rest" />
         <Glove side="right" pose={pose} />
       </svg>
-    </div>
+    </motion.div>
   );
 }

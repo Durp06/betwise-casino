@@ -81,10 +81,8 @@ export default function Login() {
       className="min-h-screen flex flex-col items-center justify-center px-4 py-10 gap-6"
       style={{ backgroundColor: "#1A0A00" }}
     >
-      {/* Chipy mascot greeting — large + idle bob */}
-      <div className="chipy-animate-idle">
-        <Chipy size={200} expression="happy" animation="none" pose="wave" />
-      </div>
+      {/* Chipy mascot greeting — large + idle bob (animation runs inside Chipy itself now) */}
+      <Chipy size={200} expression="happy" animation="idle" pose="wave" />
 
       {/* Card */}
       <div
