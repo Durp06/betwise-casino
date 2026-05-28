@@ -224,3 +224,188 @@ class SessionReviewOut(BaseModel):
     ev_lost_chips: int
     worst_action_id: Optional[uuid.UUID] = None
     actions: list[ReviewActionOut]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
+# Texas Hold'em schemas (specs/texas-holdem.md §AC-S1..S4)
+# ═════════════════════════════════════════════════════════════════════════════
+
+PokerAdviceMode = Literal["reads", "odds"]
+PokerActionType = Literal["fold", "check", "call", "raise", "all_in"]
+PokerConfidenceTier = Literal["DETERMINISTIC", "HEURISTIC"]
+PokerVerdict = Literal["best", "good", "inaccuracy", "mistake", "blunder", "no_verdict"]
+PokerStreet = Literal["preflop", "flop", "turn", "river", "complete"]
+
+
+class PokerCardOut(BaseModel):
+    """Card as JSON object. Same shape as blackjack CardOut. None values for
+    masked opponent hole cards."""
+
+    model_config = ConfigDict(from_attributes=True)
+    suit: str
+    value: str
+
+
+class PokerTournamentCreateIn(BaseModel):
+    bot_count: int                     # 2..7
+    advice_mode: PokerAdviceMode = "odds"
+    buy_in_cents: int
+    starting_stack_chips: int = 1500
+    hands_per_level: int = 10
+
+
+class PokerTournamentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    bot_count: int
+    advice_mode: str
+    buy_in_cents: int
+    starting_stack_chips: int
+    hands_per_level: int
+    seed: int
+    status: str
+    button_seat: int
+    current_hand_number: int
+    created_at: datetime
+
+
+class PokerSeatOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    seat_number: int
+    user_id: Optional[uuid.UUID] = None
+    archetype_name: Optional[str] = None
+    starting_stack: int
+    current_stack: int
+    is_bust: bool
+    is_bot: bool
+
+
+class PokerHandSeatStateOut(BaseModel):
+    """Per-seat per-hand visible state in the polled /state endpoint.
+
+    Hole cards are masked ([null, null]) for opponents during the hand.
+    The router populates them only for the requesting user's own seat
+    until showdown.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+    seat_number: int
+    hole_cards: list                 # [Card, Card] or [None, None]
+    starting_stack: int
+    final_stack: int
+    current_bet: int
+    is_folded: bool
+    is_all_in: bool
+
+
+class PokerActionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    seat_number: int
+    user_id: Optional[uuid.UUID] = None
+    action_index: int
+    street: str
+    action: str
+    amount: int
+    recommended_action: Optional[str] = None
+    confidence_tier: Optional[str] = None
+    verdict: Optional[str] = None
+    ev_loss_chips: Optional[int] = None
+    live_equity: Optional[float] = None
+    chipy_explanation: Optional[str] = None
+    is_human: bool
+    created_at: datetime
+
+
+class PokerHandStateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    hand_number: int
+    button_seat: int
+    small_blind: int
+    big_blind: int
+    ante: int
+    board: list
+    pot_total: int
+    side_pots: list
+    street: str
+    current_bet_to_match: int
+    current_to_act_seat: Optional[int] = None
+    last_aggressor_seat: Optional[int] = None
+    min_raise_increment: int
+    status: str
+    seats: list[PokerHandSeatStateOut]
+    actions: list[PokerActionOut]
+
+
+class PokerTournamentStateOut(BaseModel):
+    """The polled endpoint payload. Holds the tournament summary + the seats
+    + the current hand state (board, pot, action log)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    tournament: PokerTournamentOut
+    seats: list[PokerSeatOut]
+    current_hand: Optional[PokerHandStateOut] = None
+    your_seat_number: Optional[int] = None
+
+
+class PokerActIn(BaseModel):
+    action: PokerActionType
+    amount: int = 0  # raise-to chip level for 'raise'; ignored otherwise
+
+
+class PokerAdviceIn(BaseModel):
+    mode: PokerAdviceMode = "odds"
+
+
+class PokerAdviceOut(BaseModel):
+    """Final SSE event payload for /api/poker/hands/{hand_id}/advice."""
+
+    recommended_action: Optional[PokerActionType] = None
+    confidence_tier: PokerConfidenceTier
+    verdict: PokerVerdict
+    ev_loss_chips: Optional[int] = None
+    principle_note: Optional[str] = None
+
+
+# ─── Replay + review ─────────────────────────────────────────────────────────
+
+
+class PokerHandReplayOut(BaseModel):
+    """Step-through replay of a finished hand."""
+
+    model_config = ConfigDict(from_attributes=True)
+    hand_id: uuid.UUID
+    hand_number: int
+    seed: int
+    button_seat: int
+    board: list
+    seats: list[PokerHandSeatStateOut]
+    actions: list[PokerActionOut]
+    result: Optional[dict] = None
+
+
+class PokerReviewActionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    hand_number: int
+    street: str
+    action: str
+    recommended_action: Optional[str] = None
+    confidence_tier: Optional[str] = None
+    verdict: Optional[str] = None
+    ev_loss_chips: Optional[int] = None
+    principle_note: Optional[str] = None
+
+
+class PokerSessionReviewOut(BaseModel):
+    """Per-tournament chess.com-style review. Only DETERMINISTIC spots get
+    EV-loss; HEURISTIC spots get principle notes."""
+
+    model_config = ConfigDict(from_attributes=True)
+    tournament_id: uuid.UUID
+    total_actions: int
+    deterministic_actions: int
+    optimal_count: int
+    ev_lost_chips: int
+    actions: list[PokerReviewActionOut]
