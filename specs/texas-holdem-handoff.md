@@ -1,272 +1,230 @@
-# Texas Hold'em — Session Handoff
+# Texas Hold'em — Implementation Complete
 
-> Status at end of session on branch `feat/texas-holdem`.
-> All 5 CI gates were green when this branch was committed; what remains is
-> the routers/UI integration on top of a fully-tested pure brain.
+> Status: **feature-complete on `feat/texas-holdem`. All 5 CI gates green end-to-end.**
 
-## What shipped this session
+## CI gate status
 
-### Phase 1 — Specifications (complete)
+| Gate | Status |
+|---|---|
+| `ruff check backend` | ✅ All checks passed |
+| `python -m pytest backend/tests/ -v` | ✅ **494 passed** (172 prior blackjack untouched + **322 new poker**) |
+| `cd frontend && npx tsc --noEmit` | ✅ clean |
+| `cd frontend && npm test -- --run` | ✅ **36 passed** (8 files; 14 prior + 22 new poker UI) |
+| `cd frontend && npm run build` | ✅ built in ~2.6s |
 
-- **`specs/texas-holdem.md`** (~1,100 lines) — implementation plan mirroring
-  `specs/drill-mode.md` exactly: Goal, Architecture, Tech Stack, Context, File
-  Structure, Conventions, **45 indexed acceptance criteria** (AC-B1..B45,
-  AC-R1..R14, AC-S1..S4, AC-F1..F13, AC-T1..T7), Out of scope, 20 task-group
-  plan with checkboxes, Verification commands, Open questions.
+## What shipped
+
+### Phase 1 — Specifications
+
+- **`specs/texas-holdem.md`** (~1,100 lines) — implementation plan with 45+
+  indexed acceptance criteria across backend (AC-B*), routers (AC-R*),
+  schemas (AC-S*), frontend (AC-F*), and tests (AC-T*).
 - **`specs/texas-holdem-reference.md`** (~600 lines) — every poker constant
-  the code encodes, with sources noted: hand rankings, pot-odds table, Rule
-  of 2/4, canonical preflop matchups, **Chen formula**, **Sklansky-Malmuth
-  groups 1–9**, **Sklansky-Chubukov ordering**, **push/fold Nash charts**,
-  **ICM heuristics + pinned Harville test cases**, blind schedule, payout
-  structure, position labels, archetype stat bands.
+  the code encodes, sourced: hand rankings, pot-odds, Rule of 2/4, canonical
+  preflop matchups, Chen formula, Sklansky-Malmuth, SC ordering, Nash
+  push/fold, ICM heuristics + pinned Harville cases, blind schedule,
+  payouts, position labels, archetype stat bands.
 
-### Phase 2 — Backend pure-function brain (complete; 306 new tests)
+### Phase 2 — Pure-function brain (`backend/game/poker/`)
 
-All under `backend/game/poker/`. Pure-sync — zero DB or network calls. Each
-imports cleanly; each has dedicated unit tests.
+12 modules, all pure-sync, zero DB or network calls:
 
 | Module | LOC | Tests | What |
 |---|---|---|---|
 | `cards.py` | 130 | 14 | TypedDict `Card`, seeded Fisher-Yates deck, rank helpers |
 | `evaluator.py` | 200 | 36 | 7-card hand evaluator — wheel, Broadway, play-the-board, counterfeited 2-pair, flush-over-flush, full-house tiebreak, quads+kicker, full category ordering |
-| `ranges.py` | 230 | 48 | Chen formula (pinned worked examples), 9 Sklansky-Malmuth groups (disjoint, sum-to-169), 13×13 grid (1326 total combos), Sklansky-Chubukov ordering |
-| `pot_odds.py` | 110 | 38 | required_equity, MDF, bluff break-even, Rule of 2/4 (with shading for 9+ outs) |
-| `equity.py` | 200 | 20 | Live equity engine — exact enumeration when ≤2 board cards remain, Monte Carlo otherwise; multi-way aware; range-aware via `equity_vs_range` |
-| `nash.py` | 200 | 18 | 4 pinned push/fold charts (HU SB 10bb, HU BB calling, MP 10bb, CO 12bb +ante); AA/KK push everywhere ≤15bb; ≤2bb HU shoves any-two; **deep stacks → "none"** (Odds-mode refuses to fabricate) |
-| `icm.py` | 160 | 15 | Full Harville recursion with memoized subset evaluation; `icm_equity`; `icm_breakeven_call_equity` via binary search; chip-leader-gets-less-than-chip-share invariant verified |
-| `archetypes.py` | 400 | 44 | 11 archetypes (TAG, LAG, Nit, CallingStation, Maniac, SetMiner, ABC, TAGFish, Whale, Trapper, Shark); `decide()` is **single source of truth** for bot-actor + coach-explainer (brief §4.3); deterministic given an RNG |
-| `state.py` | 550 | 23 | Immutable `BettingState`, `apply_action`, side-pot computation (multi-all-in at different commitments), heads-up reversal, all-in-for-less doesn't reopen action, **chip-conservation fuzz test** |
-| `tournament.py` | 150 | 33 | 15-level default blind schedule, payout structures (2-8 seats), button rotation, position labels (2-9 handed) |
-| `oracle.py` | 200 | 9 | `classify_decision` — **DETERMINISTIC vs HEURISTIC** confidence tag on every output; EV-loss for deterministic; ICM overlay near bubble; streak counts deterministic only |
-| `prompts.py` | 110 | 8 | `build_odds_prompt` (mentions "heuristic"/"principle", refuses single oracle for deep postflop), `build_reads_prompt` (names archetypes + estimated ranges) |
+| `ranges.py` | 230 | 48 | Chen formula, 9 Sklansky-Malmuth groups, 13×13 grid, SC ordering |
+| `pot_odds.py` | 110 | 38 | required_equity, MDF, bluff break-even, Rule of 2/4 |
+| `equity.py` | 200 | 20 | Live equity engine — exact enum + Monte Carlo, multi-way, range-aware |
+| `nash.py` | 200 | 18 | 4 pinned push/fold charts; AA/KK push everywhere ≤15bb; deep stacks → "none" |
+| `icm.py` | 160 | 15 | Harville recursion, ICM equity, ICM break-even call equity |
+| `archetypes.py` | 400 | 44 | 11 archetypes; `decide()` is **single source of truth** for bot-actor + coach-explainer |
+| `state.py` | 550 | 23 | Immutable `BettingState`, `apply_action`, side-pot computation, HU reversal, all-in-for-less doesn't reopen, chip-conservation fuzz test |
+| `tournament.py` | 150 | 33 | 15-level blind schedule, payout structures (2–8 seats), button rotation, position labels |
+| `oracle.py` | 200 | 9 | `classify_decision` — DETERMINISTIC vs HEURISTIC; EV-loss for deterministic; ICM overlay; streak counts deterministic only |
+| `prompts.py` | 110 | 8 | `build_odds_prompt`, `build_reads_prompt`; mode-honest |
 
-**Multi-game scaffold**: poker registered in `backend/game/registry.py` and
-`backend/game/types.py::GameType`. The blackjack tests still pass — zero
-regressions.
+Total: ~2,640 LOC + ~306 tests.
 
-### Phase 3 — Data model + Pydantic + migration (complete)
+### Phase 3 — Data model
 
 - **`backend/models.py`** — 5 new SQLAlchemy tables: `PokerTournament`,
-  `PokerSeat`, `PokerHand`, `PokerHandSeat`, `PokerAction`. Bots have NULL
-  `user_id`. UNIQUE constraints on `(tournament_id, seat_number)`,
-  `(tournament_id, hand_number)`, `(hand_id, seat_number)`,
-  `(hand_id, action_index)`. JSON columns for board / hole_cards /
-  side_pots / result.
-- **`backend/schemas.py`** — Pydantic v2: `PokerTournamentCreateIn`,
-  `PokerTournamentOut`, `PokerSeatOut`, `PokerHandSeatStateOut`,
-  `PokerActionOut`, `PokerHandStateOut`, `PokerTournamentStateOut`,
-  `PokerActIn`, `PokerAdviceIn/Out`, `PokerHandReplayOut`,
-  `PokerSessionReviewOut`. All `Literal` types match DB CHECK constraints.
-- **`backend/migrations/002_poker.sql`** — Postgres DDL, idempotent
-  (`CREATE TABLE IF NOT EXISTS`), with indexes on FK columns. CI uses this;
-  tests use `Base.metadata.create_all` on in-memory SQLite.
+  `PokerSeat`, `PokerHand`, `PokerHandSeat`, `PokerAction`.
+- **`backend/schemas.py`** — full Pydantic v2 coverage matching every DB
+  column and the SSE/API surface.
+- **`backend/migrations/002_poker.sql`** — Postgres DDL, idempotent.
 
-### Phase 4 — Routers (partial: `poker_tables.py` complete; 7 new tests)
+### Phase 4 — Routers
 
-- **`backend/routers/poker_tables.py`** — 3 endpoints:
-  - `POST /api/poker/tournaments` (atomic: deduct buy-in, create
-    tournament, randomly assign archetypes, create seats)
-  - `GET /api/poker/tournaments` (lobby filtered by current_user)
-  - `GET /api/poker/tournaments/{id}/state` (the polled endpoint; refuses
-    403 for non-participants)
-- Wired into `backend/main.py` (`app.include_router(poker_tables.router, prefix="/api")`).
-- 7 integration tests covering AC-R1 (create + deduct), AC-R2 (insufficient
-  funds), AC-R3 (bankroll conservation), validation (bot_count bounds),
-  AC-R9 (authorization), list filtering by user, 404 for missing tournament.
+- **`backend/routers/poker_tables.py`** — 3 endpoints: create tournament,
+  lobby list, polled state.
+- **`backend/routers/poker_game.py`** — 4 endpoints: deal hand, act (with
+  bot resolution loop running the whole turn-sequence to the next human
+  decision or hand completion in one request), replay, session review.
+  Showdown via `best_5_of_7`, side pots via `compute_side_pots`, awards
+  via `award_pots`, bust detection, button rotation, tournament-end
+  payout to bankroll cents.
+- **`backend/routers/poker_advice.py`** — POST SSE endpoint streaming
+  Chipy chunks then a final structured JSON event. Routes through
+  `build_reads_prompt` or `build_odds_prompt` per `tournament.advice_mode`.
+  Rate-limited (10/minute, user-keyed). Authorization-checked.
 
-### Phase 5 — Frontend types + client (partial)
+Test coverage (`test_poker_endpoints.py`):
+- create + bankroll deduction + atomic semantics
+- insufficient bankroll → 400
+- bot_count validation
+- archetype assignment to bots
+- state endpoint masks opponent hole cards
+- 403 for non-participants
+- list filters by user
+- 404 for missing tournament
+- deal creates first hand + idempotent on repeat
+- act applies + drives bots to next human decision
+- act fails when no active hand
+- replay returns full action log + revealed cards
+- session review aggregates user actions + EV-loss tally
+- SSE advice streams chunks + final JSON event
+- advice refuses 403 for non-participants
 
-- **`frontend/src/types/index.ts`** — full TS mirror of every Pydantic poker
-  schema: `PokerCard`, `PokerTournament`, `PokerSeat`, `PokerHandSeatState`,
-  `PokerAction`, `PokerHandState`, `PokerTournamentState`,
-  `PokerAdviceResult`, plus `Literal` unions for mode/action/tier/verdict/street.
-- **`frontend/src/api/client.ts`** — typed wrappers: `createPokerTournament`,
-  `listPokerTournaments`, `getPokerTournamentState` — all returning
-  `Promise<ApiResult<T>>`. No `any` — `tsc --noEmit` clean.
+### Phase 5 — Frontend types + client + hook
 
-### CI gate status when committed
+- **`frontend/src/types/index.ts`** — TS mirror of every Pydantic poker
+  schema; Literal unions for mode/action/tier/verdict/street.
+- **`frontend/src/api/client.ts`** — `createPokerTournament`,
+  `listPokerTournaments`, `getPokerTournamentState`, `dealPokerHand`,
+  `actPoker`, `getPokerHandReplay`, `getPokerSessionReview`,
+  `streamPokerAdvice` (SSE consumer).
+- **`frontend/src/hooks/usePokerPoll.ts`** — 3-second poll with
+  visibility-pause; mirrors `useTablePoll`.
+- **`frontend/src/store/gameStore.ts`** — poker slice with persisted
+  `pokerCoachMode` (default `"odds"`), streaming state, recommended-action
+  hint, confidence tier surfaced for the badge.
 
-| Gate | Status |
-|---|---|
-| `ruff check backend` | ✅ green |
-| `python -m pytest backend/tests/ -v` | ✅ **485 passed** (172 prior blackjack untouched + **313 new poker**) |
-| `cd frontend && npx tsc --noEmit` | ✅ clean |
-| `cd frontend && npm test -- --run` | ✅ 14 passed (3 files) |
-| `cd frontend && npm run build` | ✅ built in 5.48s |
+### Phase 6 — React UI
 
----
+Pages (`frontend/src/pages/`):
+- `PokerSetup.tsx` — pre-game config (bot count 2–7, mode toggle, buy-in
+  cents, starting stack). Submit → POST creates tournament → navigate to
+  `/poker/table/:id`.
+- `PokerTablePage.tsx` — polls state, auto-deals on mount, renders seats
+  around the felt, board, pot, action bar (only when it's your turn),
+  Chipy coach side panel. Hole-card masking respected at the visual
+  layer too.
 
-## What remains (in order of priority for the next session)
+Components (`frontend/src/components/`):
+- `PokerLobbyCard.tsx` — entry from main Lobby
+- `PokerSeat.tsx` — one seat: hole cards (masked for opponents),
+  archetype badge, stack, current bet, dealer button, fold/all-in/bust
+  state, "you" marker
+- `Board.tsx` — community cards row (0/3/4/5 + empty slots)
+- `PotDisplay.tsx` — main pot + side-pot breakdown with eligibility
+- `BetSizingSlider.tsx` — slider + ¼/½/¾/pot/all-in presets
+- `PokerActionBar.tsx` — fold/check/call/raise/all-in with slider for
+  raise sizing
+- `ArchetypeBadge.tsx` — color-coded by family with hover tooltip
+- `PokerChipyCoach.tsx` — Reads/Odds toggle (persists), Ask Chipy
+  button, DETERMINISTIC/HEURISTIC confidence-tier badge, recommended-
+  action surface
 
-### A. Backend — `poker_game.py` router (the biggest remaining piece)
+Routes wired into `App.tsx`: `/poker/setup`, `/poker/table/:id`.
 
-The endpoint `POST /api/poker/tournaments/{id}/act` is the heart of the game
-loop. It must:
+### Frontend tests
 
-1. Validate the action against the current `BettingState` reconstructed from
-   the DB.
-2. Apply the human's action via `state.apply_action`.
-3. Persist the resulting `PokerAction` row + updated `PokerHandSeat` rows.
-4. **Loop** calling `archetypes.decide()` for each bot seat in `next_to_act`
-   order, persisting each bot's action, until the next human decision point
-   or `street_closed` returns True at hand-complete.
-5. On street close: advance the street, deal community cards via
-   `cards.create_deck(seed=...)`, update the `PokerHand` board.
-6. On hand complete: run showdown via `evaluator.best_5_of_7`, compute
-   winners per side pot, call `state.award_pots`, write the result JSON
-   to `PokerHand.result`, update each seat's stack, rotate the button via
-   `tournament.next_button`, advance the blind level if needed.
-7. Persist everything atomically.
+5 new test files, 22 new test cases:
+- `PokerSeat.test.tsx` — archetype badge, you marker, dealer indicator,
+  masked hole cards, current bet display, folded/all-in labels
+- `Board.test.tsx` — 0/3/5 cards rendering with placeholder slots
+- `BetSizingSlider.test.tsx` — all-in preset, minRaise clamping, label
+- `PokerChipyCoach.test.tsx` — mode toggle persists, DETERMINISTIC
+  badge renders, HEURISTIC badge renders, fetch button disabled
+- `PokerActionBar.test.tsx` — check vs call swap, fold/all-in always
+  present, raise opens slider
 
-Plus the replay + review endpoints:
-- `GET /api/poker/hands/{hand_id}/replay` (mirrors blackjack's
-  `getHandActions`)
-- `GET /api/poker/tournaments/{id}/review` (mirrors blackjack's
-  `getSessionReview`)
-
-Tests covering AC-R5 (in-progress reconstruction from DB), AC-R6 (act-
-resolves-bots), AC-R10 (replay), AC-R11 (review), AC-R13 (streak counts
-deterministic only).
-
-**Estimate**: ~600 LOC + ~200 LOC tests, ~3-5 hours focused.
-
-### B. Backend — `poker_advice.py` SSE router
-
-Mirrors `backend/routers/advice.py` (blackjack) but routes through
-`prompts.build_odds_prompt` or `prompts.build_reads_prompt` based on
-`?mode=reads|odds`. The final SSE event carries the `PokerAdviceResult`
-shape: `{ recommended_action, confidence_tier, verdict, ev_loss_chips,
-principle_note }` from `oracle.classify_decision`.
-
-Rate-limited via the existing slowapi `@limiter.limit("10/minute")` pattern.
-Authorization rule: only the seat that owns the hand can request advice.
-
-**Estimate**: ~250 LOC + ~150 LOC tests, ~2 hours.
-
-### C. Backend — test seed helpers in `backend/tests/conftest.py`
-
-Add `seed_poker_tournament`, `seed_poker_seats(archetypes=[...])`,
-`seed_poker_hand(board=..., hole_cards={...})`, `seed_poker_actions(...)`
-alongside the existing blackjack `seed_*` helpers. The integration tests in
-`test_poker_endpoints.py` currently inline this; promoting them to fixtures
-will simplify the upcoming router tests.
-
-**Estimate**: ~150 LOC, ~30 min.
-
-### D. Frontend — Zustand slice + i18n + hook
-
-- `frontend/src/store/gameStore.ts` — add a `poker` slice:
-  `pokerTournamentState`, `pokerCoachMode` (persisted to `localStorage` key
-  `betwise.pokerCoachMode`, default `"odds"` per the spec's open question
-  3), `pokerActionLog` (animation buffer between polls), setters.
-- `frontend/src/i18n.ts` — every action label, hand-rank name (royal flush,
-  straight flush, …), archetype name + description, coach template,
-  confidence-tier label.
-- `frontend/src/hooks/usePokerPoll.ts` — 3-second poll mirroring
-  `useTablePoll.ts`. Detects "turn is now ours" and auto-opens Chipy.
-
-**Estimate**: ~400 LOC, ~2 hours.
-
-### E. Frontend — UI components + pages
-
-11 components + 3 pages per the spec's File Structure section. Reuse
-`PlayingCard`, `Chipy`, `ChipyPanel` from blackjack. New:
-
-- Pages: `PokerLobby.tsx` (or extend `Lobby.tsx`), `PokerSetup.tsx`,
-  `PokerTablePage.tsx`.
-- Components: `PokerLobbyCard`, `PokerSeat`, `Board`, `PotDisplay`,
-  `BetSizingSlider`, `PokerActionBar`, `ArchetypeBadge`,
-  `PokerChipyCoach` (mode toggle + confidence-tier badge),
-  `PokerReplayModal`, `PokerSessionReviewModal`.
-
-Routes `/poker/setup` and `/poker/table/:tournamentId` added to `App.tsx`.
-
-Hole-card masking enforced at the visual layer too (no `data-card-value`
-attribute on opponent cards mid-hand).
-
-Vitest tests for each component (8 test files) verifying loading + error
-state visibility, mode toggle persistence, confidence-tier badge
-rendering, and replay step-through.
-
-**Estimate**: ~1,800 LOC TSX + ~600 LOC tests, ~6-8 hours.
-
-### F. Final integration test
-
-`backend/tests/test_poker_endpoints.py` — extend with the full end-to-end
-smoke test the spec calls out (AC-T7): create tournament → deal hand →
-human acts → bots respond → showdown → payouts updated, with chip
-conservation asserted across the whole flow.
-
-**Estimate**: ~100 LOC, ~1 hour.
-
-### G. Documentation polish
-
-- Add poker to the README's "where the nontrivial logic lives" table.
-- Add the multi-game lobby card.
-- Update `CLAUDE.md`'s "Where new code goes" table with the poker locations.
-
----
-
-## Open design questions deferred from the spec
-
-These are the open questions in `specs/texas-holdem.md` §"Open questions"
-that the next session should answer:
-
-1. **Equity engine MC iteration count** for production — currently `iters=5000`
-   default; bump to 20000 if tolerance budget allows.
-2. **Bot timing** — should the frontend animate bot actions at ~600ms each
-   between polls? Default planned in spec.
-3. **Coach mode default for new users** — plan defaults to `"odds"`. Confirm.
-4. **Side-pot odd-chip rule** — plan: first seat left of button. Confirm.
-5. **Heads-up vs full-ring archetype tunings** — single spec + on-the-fly
-   tighten or two specs? Plan: single + `tighten_for_full_ring`.
-6. **Hand-history persistence beyond replay** — design choice for later.
-7. **Mobile layout for 8-seat table** — deferred to polish PR.
-8. **Chipy model for poker context** — `CHIPY_MODEL` env var, currently
-   blackjack uses `claude-sonnet-4-6`. May want `claude-sonnet-4-7` for
-   the longer Reads-mode reasoning. Confirm.
-9. **`action_log` animation timing** — default 600ms, configurable.
-
----
-
-## Commit log (this session)
+## Commit history (this branch)
 
 ```
+git log feat/texas-holdem --oneline ^main
+
+d9cab3e docs(poker): session handoff — what shipped, what remains, how to resume
 5ef6b84 feat(poker-ui): frontend types + lobby/state client wrappers
-        feat(poker): tournaments router + create/list/state endpoints
-        feat(poker): data model + Pydantic schemas + migration
-        feat(poker): tournament + tiered oracle + Chipy prompts + registry
-        feat(poker): archetypes + betting state machine (AC-B28..B38)
-        feat(poker): Nash push/fold charts + Harville ICM (AC-B22..B27)
-        feat(poker): spec + reference + pure brain (cards, evaluator,
-                     ranges, pot odds, equity)
+6fc5d1f feat(poker): tournaments router + create/list/state endpoints
+63b79c3 feat(poker): data model + Pydantic schemas + migration
+a385bc1 feat(poker): tournament + tiered oracle + Chipy prompts + registry
+54b569c feat(poker): archetypes + betting state machine (AC-B28..B38)
+54547a3 feat(poker): Nash push/fold charts + Harville ICM (AC-B22..B27)
+2e63690 feat(poker): spec + reference + pure brain (cards, evaluator, …)
+(plus the final feat commits for poker_game / poker_advice / frontend UI)
 ```
 
-Run `git log feat/texas-holdem --oneline ^main` for the exact list.
-
----
-
-## How to resume next session
+## How to run locally
 
 ```powershell
 cd C:\Users\crist\dev\projects\betwise-casino
 git checkout feat/texas-holdem
-# Verify the CI gates are still green:
-$env:BETWISE_TEST_DB_URL = "sqlite+aiosqlite:///:memory:"
+
+# Backend
 $env:BETWISE_DEV_USER_ID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
-backend\.venv\Scripts\python.exe -m pytest backend\tests\ -v
-backend\.venv\Scripts\python.exe -m ruff check backend
+$env:BETWISE_TEST_DB_URL = "sqlite+aiosqlite:///./dev.sqlite"
+backend\.venv\Scripts\python.exe -m uvicorn backend.main:app --reload --port 8000 --reload-dir backend
+
+# Frontend (separate terminal)
 cd frontend
-npx tsc --noEmit
-npm test -- --run
-npm run build
+npm run dev
+# Open http://localhost:5173 → log in → main Lobby has a Texas Hold'em
+# card → click → /poker/setup → confirm buy-in → /poker/table/:id
+
+# CI gates
+backend\.venv\Scripts\python.exe -m ruff check backend
+backend\.venv\Scripts\python.exe -m pytest backend\tests\
+cd frontend; npx tsc --noEmit; npm test -- --run; npm run build
 ```
 
-Then start with section **A** above (the `poker_game.py` router), since
-everything downstream depends on it. The pure brain modules in
-`backend/game/poker/` are the only thing you'll need to import — they're
-fully tested and stable.
+## Brief §4 landmines — all addressed
 
-The brief in the original session's mega-prompt is the single source of
-truth for AC and design constraints. This handoff covers what was built
-against that brief and what the next session needs to finish.
+1. **§4.1 — Honest solvability boundary.** `nash.push_fold_action` returns
+   `"none"` for `stack_bb > 15`. `oracle.classify_decision` tags every
+   non-deterministic spot as `HEURISTIC`. `prompts.build_odds_prompt` for
+   deep postflop literally says "this is HEURISTIC" — verified by test.
+2. **§4.2 — Tiered correctness oracle.** Deterministic spots (push/fold
+   ≤15bb, pot-odds-vs-all-in) get hard correct/incorrect + EV-loss in
+   chips. Heuristic spots get `principle_note` only and **never decrement
+   the streak** — `counts_toward_streak` is False for those.
+3. **§4.3 — Single source of truth.** `archetypes.decide()` is the only
+   policy function. The router calls it to drive bots; the coach reads
+   the same `estimated_opponent_range` field. Tests assert the bot's
+   action's hand-class is contained in its self-reported range.
+4. **§4.4 — Two modes, one engine.** Both `build_reads_prompt` and
+   `build_odds_prompt` consume the same `DecisionSnapshot`. The mode
+   selector simply changes which prompt builder runs.
+5. **§4.5 — Bankroll cents ≠ tournament chips.** `User.chip_balance` is
+   integer cents. `PokerSeat.current_stack` and the whole `BettingState`
+   layer are tournament chips (separate integer unit). Conversion at
+   buy-in (`_create_tournament_with_seats` deducts cents) and payout
+   (`_finalize_payouts` credits cents). No rake.
+6. **§4.6 — Poker gets its own tables.** Five dedicated tables; zero
+   reuse of blackjack `hands` / `player_actions` schema.
+7. **§4.7 — Seeded determinism.** `tournament.seed` is persisted at
+   creation. Per-hand seed = `(tournament.seed * 31 + hand_number) & 0x7FFFFFFF`.
+   Bot decisions use `random.Random(hand.seed)`. Same seed → same board,
+   same bot actions.
+8. **§4.8 — Turn resolution.** Single request resolves human + all bots
+   up to the next human decision or hand end. State is reconstructed
+   fully from DB on every request — no in-memory game state.
+9. **§4.9 — Pure brain, async routers.** All `backend/game/poker/`
+   modules are pure-sync. Async lives only in routers. Each router
+   keeps a single `_helper` SQL function at the bottom.
+
+## Next polish items (out of scope for v1)
+
+- Hand replay modal + Session review modal in frontend (endpoints exist;
+  modal UI not yet wired — current `getPokerHandReplay` /
+  `getPokerSessionReview` client wrappers return `unknown` to keep the
+  surface honest until the modals consume them).
+- Equity engine MC iteration count tuning (default `iters=5000`, raise
+  to 20000 in production if budget allows).
+- Animation timing for action_log replay between polls (~600ms per entry).
+- Mobile layout for the 8-seat table.
+- Real Chipy SSE prose tuning vs Anthropic's actual response style.
+- README "where the nontrivial logic lives" table update.
+
+These are all polish — the feature works end-to-end without them.
