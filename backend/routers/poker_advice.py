@@ -43,10 +43,15 @@ _POKER_CHIPY_SYSTEM_PROMPT = (
 
 
 async def _stream_anthropic_poker(system: str, user: str) -> AsyncGenerator[str, None]:
-    """Shimmable helper. Tests patch this to avoid hitting the real API."""
+    """Shimmable helper. Tests patch this to avoid hitting the real API.
+    Will raise if ANTHROPIC_API_KEY is unset — the caller handles that by
+    falling back to deterministic local prose so Chipy still teaches."""
     import os as _os  # noqa: PLC0415
 
     import anthropic  # noqa: PLC0415
+
+    if not _os.environ.get("ANTHROPIC_API_KEY"):
+        raise RuntimeError("ANTHROPIC_API_KEY not set")
 
     model = _os.environ.get("CHIPY_MODEL", "claude-sonnet-4-6")
     client = anthropic.AsyncAnthropic()
@@ -63,6 +68,75 @@ async def _stream_anthropic_poker(system: str, user: str) -> AsyncGenerator[str,
                 and event.delta.type == "text_delta"
             ):
                 yield event.delta.text
+
+
+def _build_local_prose(
+    snapshot,
+    mode: str,
+    archetypes_by_seat: dict,
+    classification,
+) -> str:
+    """Generate Chipy prose deterministically from the same DecisionSnapshot
+    the LLM would consume. Used when no ANTHROPIC_API_KEY is available so
+    Chipy still teaches — the educational content comes from the math +
+    archetype reads, not Claude's prose generation.
+    """
+    parts: list[str] = []
+
+    # Hand intro
+    parts.append(f"You have {snapshot.hand_str} in the {snapshot.position} seat.")
+
+    if classification.confidence_tier == "DETERMINISTIC":
+        if snapshot.stack_bb <= 15.0 and snapshot.street == "preflop":
+            rec = classification.recommended_action or "fold"
+            parts.append(
+                f"At {snapshot.stack_bb:.1f}bb, this is a push/fold spot — "
+                f"the Nash chart says {rec.upper()}."
+            )
+        elif snapshot.to_call_bb > 0:
+            from backend.game.poker.pot_odds import required_equity  # noqa: PLC0415
+            req = required_equity(snapshot.pot_bb, snapshot.to_call_bb)
+            parts.append(
+                f"To call {snapshot.to_call_bb:.1f}bb into a {snapshot.pot_bb:.1f}bb pot "
+                f"you need ~{req:.0%} equity (pot odds)."
+            )
+            if snapshot.live_equity is not None:
+                parts.append(
+                    f"Your live equity is ~{snapshot.live_equity:.0%} → "
+                    f"{'CALL' if classification.recommended_action == 'call' else 'FOLD'} is correct."
+                )
+        if classification.ev_loss_chips and classification.ev_loss_chips > 0:
+            parts.append(f"(EV-loss tag: ~{classification.ev_loss_chips} chips.)")
+    else:  # HEURISTIC
+        if snapshot.to_call_bb > 0:
+            from backend.game.poker.pot_odds import required_equity  # noqa: PLC0415
+            req = required_equity(snapshot.pot_bb, snapshot.to_call_bb)
+            parts.append(
+                f"Facing {snapshot.to_call_bb:.1f}bb into {snapshot.pot_bb:.1f}bb: "
+                f"pot odds want ~{req:.0%} equity to call."
+            )
+        else:
+            parts.append("Action checks to you — this is a free decision.")
+        parts.append(
+            "Deep postflop has no single correct action — use principles: "
+            "range advantage, board texture, opponent type."
+        )
+
+    # Mode-specific overlay
+    if mode == "reads" and archetypes_by_seat:
+        # Pick one opponent to highlight (excluding hero)
+        hero_seat = None
+        # We don't have hero seat directly; pick the first archetype
+        for seat_idx, spec in list(archetypes_by_seat.items())[:1]:
+            parts.append(
+                f"Seat {seat_idx} is a {spec.name} ({int(spec.vpip * 100)}/{int(spec.pfr * 100)}). "
+                f"{spec.description}"
+            )
+
+    if snapshot.is_bubble:
+        parts.append("ICM bubble — tighten calls ~4%; lean on fold equity when pressuring.")
+
+    return " ".join(parts)
 
 
 @router.post("/{hand_id}/advice")
@@ -96,14 +170,17 @@ async def stream_poker_advice(
                 payload = json.dumps({"text": chunk})
                 yield f"data: {payload}\n\n".encode("utf-8")
         except Exception as exc:  # noqa: BLE001
-            logger.warning("Anthropic stream error: %s", exc)
-            err_payload = json.dumps({
-                "text": (
-                    "(Coach unavailable right now. Using the deterministic verdict only.)"
-                ),
-                "error": "stream_failure",
-            })
-            yield f"data: {err_payload}\n\n".encode("utf-8")
+            logger.info("Anthropic unavailable (%s) — using deterministic local prose.", exc)
+            prose = _build_local_prose(snapshot, mode, archetypes_by_seat, classification)
+            # Stream the prose in word-chunks so the UI experience matches the
+            # real SSE feel and the typewriter animation still works.
+            words = prose.split(" ")
+            buf = ""
+            for i, w in enumerate(words):
+                buf += w + (" " if i < len(words) - 1 else "")
+                if len(buf) >= 10 or i == len(words) - 1:
+                    yield f"data: {json.dumps({'text': buf})}\n\n".encode("utf-8")
+                    buf = ""
 
         # Final event: the structured PokerAdviceOut shape
         final = {
