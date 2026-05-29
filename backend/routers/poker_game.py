@@ -177,6 +177,7 @@ async def _deal_or_continue_hand(
     db: AsyncSession,
 ) -> PokerTournamentStateOut:
     from sqlalchemy import select  # noqa: PLC0415
+    from sqlalchemy.exc import IntegrityError  # noqa: PLC0415
 
     from backend.game.poker.cards import create_deck  # noqa: PLC0415
     from backend.game.poker.state import create_state, next_to_act  # noqa: PLC0415
@@ -201,7 +202,9 @@ async def _deal_or_continue_hand(
     if user_seat is None:
         raise HTTPException(status_code=403, detail="Not a participant in this tournament")
 
-    # If an active hand exists, return it (idempotent).
+    # If an active hand exists, return it (idempotent). Also covers the
+    # case where a hand exists but isn't "active" status — any extant hand
+    # at the current_hand_number means deal already happened.
     active = (await db.execute(
         select(PokerHand).where(
             PokerHand.tournament_id == tournament_id,
@@ -266,7 +269,24 @@ async def _deal_or_continue_hand(
         created_at=datetime.now(timezone.utc),
     )
     db.add(hand)
-    await db.flush()
+    # Race-safe insert: under React StrictMode the deal endpoint can be
+    # called twice in rapid succession. The first request wins; the second
+    # hits the UNIQUE(tournament_id, hand_number) constraint. Catch it,
+    # rollback our half-built state, and return the active hand the winner
+    # created.
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        # Re-read seats + active hand under a fresh session view
+        tournament = (await db.execute(
+            select(PokerTournament).where(PokerTournament.id == tournament_id)
+        )).scalar_one()
+        seats = (await db.execute(
+            select(PokerSeat).where(PokerSeat.tournament_id == tournament_id).order_by(PokerSeat.seat_number)
+        )).scalars().all()
+        user_seat = next(s for s in seats if s.user_id == current_user)
+        return await _build_state_payload(tournament, seats, user_seat, db)
 
     hand_seat_objs = []
     for st in state.seats:
