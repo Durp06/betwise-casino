@@ -210,9 +210,9 @@ async def _get_tournament_state(
         # current_user and checks ownership).
         raise HTTPException(status_code=403, detail="Not a participant in this tournament")
 
-    return PokerTournamentStateOut(
-        tournament=PokerTournamentOut.model_validate(tournament),
-        seats=[PokerSeatOut.model_validate(s) for s in seats],
-        current_hand=None,  # hand state assembled by poker_game router (Phase 4)
-        your_seat_number=your_seat.seat_number,
-    )
+    # Reuse the rich state payload from poker_game (handles current hand,
+    # action log, hole-card masking). The poker_game module's _build_state_payload
+    # is the single source of truth for what /state returns.
+    from backend.routers.poker_game import _build_state_payload  # noqa: PLC0415
+
+    return await _build_state_payload(tournament, seats, your_seat, db)

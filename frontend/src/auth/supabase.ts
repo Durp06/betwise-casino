@@ -40,6 +40,33 @@ export function useSession(): UseSessionResult {
   const [loading, setLoading] = useState<boolean>(true);
 
   useEffect(() => {
+    // Local-dev bypass: if VITE_DEV_USER_ID is set, fabricate a synthetic
+    // Session so the AuthGate lets us through. Mirrors the backend's
+    // BETWISE_DEV_USER_ID bypass. Never set this in production builds —
+    // import.meta.env.DEV is the second guard.
+    const devUserId = import.meta.env.VITE_DEV_USER_ID as string | undefined;
+    if (import.meta.env.DEV && devUserId) {
+      // Minimal Session shape — only what AuthGate / apiFetch consume.
+      const fakeSession = {
+        access_token: "dev-token",
+        token_type: "bearer",
+        expires_in: 3600,
+        expires_at: Math.floor(Date.now() / 1000) + 3600,
+        refresh_token: "dev-refresh",
+        user: {
+          id: devUserId,
+          aud: "authenticated",
+          email: "dev@local",
+          app_metadata: {},
+          user_metadata: {},
+          created_at: new Date().toISOString(),
+        },
+      } as unknown as Session;
+      setSession(fakeSession);
+      setLoading(false);
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
