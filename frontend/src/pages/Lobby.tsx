@@ -10,6 +10,7 @@ import type { TableListRow } from "../types";
 import { listTables, createTable, joinTable } from "../api/client";
 import { t } from "../i18n";
 import Chipy from "../components/Chipy";
+import PokerLobbyCard from "../components/PokerLobbyCard";
 
 function formatCents(cents: number): string {
   return `$${(cents / 100).toFixed(0)}`;
@@ -135,6 +136,12 @@ export default function Lobby() {
             {actionError}
           </p>
         )}
+
+        {/* Texas Hold'em entry */}
+        <div className="mb-4">
+          <PokerLobbyCard />
+        </div>
+
 
         {/* Loading skeleton */}
         {loading && (

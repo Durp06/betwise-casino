@@ -14,6 +14,8 @@ import Lobby from "./pages/Lobby";
 import Table from "./pages/Table";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
+import PokerSetup from "./pages/PokerSetup";
+import PokerTablePage from "./pages/PokerTablePage";
 
 // ─── QueryClient ─────────────────────────────────────────────────────────────
 
@@ -102,6 +104,24 @@ export default function App() {
             element={
               <AuthGate>
                 <Leaderboard />
+              </AuthGate>
+            }
+          />
+
+          {/* Texas Hold'em */}
+          <Route
+            path="/poker/setup"
+            element={
+              <AuthGate>
+                <PokerSetup />
+              </AuthGate>
+            }
+          />
+          <Route
+            path="/poker/table/:id"
+            element={
+              <AuthGate>
+                <PokerTablePage />
               </AuthGate>
             }
           />

@@ -310,11 +310,102 @@ export async function getPokerTournamentState(
   );
 }
 
-// Note: actPoker and streamPokerAdvice wrappers will land in the next session
-// alongside the poker_game.py + poker_advice.py routers. Keeping the surface
-// minimal here so tsc stays clean without uncalled stubs.
-// Placeholder for type-checking:
-export type _PokerActionTypeMarker = PokerActionType;
+export async function dealPokerHand(
+  tournamentId: string,
+): Promise<ApiResult<PokerTournamentState>> {
+  return apiFetch<PokerTournamentState>(
+    `/api/poker/tournaments/${tournamentId}/deal`,
+    { method: "POST" },
+  );
+}
+
+export async function actPoker(
+  tournamentId: string,
+  action: PokerActionType,
+  amount: number,
+): Promise<ApiResult<PokerTournamentState>> {
+  return apiFetch<PokerTournamentState>(
+    `/api/poker/tournaments/${tournamentId}/act`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action, amount }),
+    },
+  );
+}
+
+export async function getPokerHandReplay(
+  handId: string,
+): Promise<ApiResult<unknown>> {
+  return apiFetch<unknown>(`/api/poker/hands/${handId}/replay`);
+}
+
+export async function getPokerSessionReview(
+  tournamentId: string,
+): Promise<ApiResult<unknown>> {
+  return apiFetch<unknown>(`/api/poker/tournaments/${tournamentId}/review`);
+}
+
+/**
+ * streamPokerAdvice — POSTs to /api/poker/hands/{handId}/advice and
+ * consumes the SSE stream. Mode is set on the tournament; the server picks
+ * Reads vs Odds based on tournament.advice_mode.
+ */
+export async function streamPokerAdvice(
+  handId: string,
+  onChunk: (text: string) => void,
+  onDone: (final: unknown) => void,
+  onError: (message: string) => void,
+): Promise<void> {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`/api/poker/hands/${handId}/advice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+    });
+    if (res.status === 401) {
+      fireSessionExpired();
+      onError(SESSION_EXPIRED_MSG);
+      return;
+    }
+    if (!res.ok || !res.body) {
+      onError(`HTTP ${res.status}`);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalEvent: unknown = null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+      for (const event of events) {
+        if (!event.trim()) continue;
+        const dataLines = event
+          .split("\n")
+          .filter((l) => l.startsWith("data: "))
+          .map((l) => l.slice("data: ".length));
+        for (const payload of dataLines) {
+          try {
+            const parsed = JSON.parse(payload) as Record<string, unknown>;
+            if ("confidence_tier" in parsed) {
+              finalEvent = parsed;
+            } else if (typeof parsed.text === "string") {
+              onChunk(parsed.text);
+            }
+          } catch {
+            onChunk(payload);
+          }
+        }
+      }
+    }
+    onDone(finalEvent);
+  } catch {
+    onError(NETWORK_ERROR_MSG);
+  }
+}
 
 export async function streamAdvice(
   handId: string,
