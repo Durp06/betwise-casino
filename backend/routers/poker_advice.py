@@ -124,9 +124,8 @@ def _build_local_prose(
 
     # Mode-specific overlay
     if mode == "reads" and archetypes_by_seat:
-        # Pick one opponent to highlight (excluding hero)
-        hero_seat = None
-        # We don't have hero seat directly; pick the first archetype
+        # Pick one opponent to highlight (the first archetype seat — hero
+        # isn't in archetypes_by_seat since hero has no archetype_name).
         for seat_idx, spec in list(archetypes_by_seat.items())[:1]:
             parts.append(
                 f"Seat {seat_idx} is a {spec.name} ({int(spec.vpip * 100)}/{int(spec.pfr * 100)}). "

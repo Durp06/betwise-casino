@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.auth import CurrentUser
 from backend.database import get_db
 from backend.schemas import (
-    PokerSeatOut,
     PokerTournamentCreateIn,
     PokerTournamentOut,
     PokerTournamentStateOut,
