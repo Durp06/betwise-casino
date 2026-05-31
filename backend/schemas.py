@@ -531,3 +531,26 @@ class HoldemTableStateOut(BaseModel):
     seats: list[HoldemSeatOut]
     current_hand: Optional[HoldemHandStateOut] = None
     your_seat_number: Optional[int] = None
+
+
+# ─── In-game chat (both multiplayer games) ───────────────────────────────────
+# specs: polymorphic chat across blackjack CasinoTable + multiplayer HoldemTable.
+# Body is stored verbatim (validated raw text) and rendered as an inert React
+# text node client-side — see routers/chat.py for the stored-XSS defense.
+
+ChatTableKind = Literal["blackjack", "holdem"]
+
+
+class ChatMessageOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    table_kind: str
+    table_id: uuid.UUID
+    user_id: uuid.UUID
+    username: str
+    body: str
+    created_at: datetime
+
+
+class ChatPostIn(BaseModel):
+    body: str

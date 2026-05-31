@@ -17,7 +17,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import JSON, Boolean, CheckConstraint, DateTime, Float, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
@@ -499,6 +499,35 @@ class HoldemHandSeat(Base):
 
     __table_args__ = (
         UniqueConstraint("hand_id", "seat_number", name="uq_holdem_hand_seat"),
+    )
+
+
+class ChatMessage(Base):
+    """In-game player chat, polymorphic across both multiplayer games.
+
+    `table_kind` discriminates which game's table `table_id` points at
+    (blackjack → casino_tables, holdem → holdem_tables). `table_id` is NOT a
+    ForeignKey because it can reference either table — the router validates
+    that the caller is seated before accepting a post. `username` is
+    denormalized for cheap display. `body` is stored VERBATIM (validated raw
+    text, never HTML-escaped on store): the client renders it as a React text
+    child so any markup is inert. See routers/chat.py::_sanitize_body."""
+
+    __tablename__ = "chat_messages"
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
+    table_kind: Mapped[str] = mapped_column(String(20), nullable=False)
+    table_id: Mapped[uuid.UUID] = mapped_column(nullable=False)  # polymorphic — not an FK
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    username: Mapped[str] = mapped_column(String(20), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
+
+    __table_args__ = (
+        CheckConstraint("table_kind IN ('blackjack','holdem')", name="chat_table_kind_check"),
+        Index("idx_chat_messages_table", "table_kind", "table_id", "created_at"),
     )
 
 

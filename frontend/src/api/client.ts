@@ -29,6 +29,8 @@ import type {
   HoldemTableState,
   HoldemSeat,
   HoldemCreateTablePayload,
+  ChatMessage,
+  ChatTableKind,
 } from "../types";
 
 // ─── Auth header helper ───────────────────────────────────────────────────────
@@ -405,6 +407,26 @@ export async function actHoldem(
   return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/act`, {
     method: "POST",
     body: JSON.stringify({ action, amount }),
+  });
+}
+
+// ─── In-game chat (both multiplayer games) ───────────────────────────────────
+
+export async function getChatMessages(
+  tableKind: ChatTableKind,
+  tableId: string,
+): Promise<ApiResult<ChatMessage[]>> {
+  return apiFetch<ChatMessage[]>(`/api/chat/${tableKind}/${tableId}/messages`);
+}
+
+export async function postChatMessage(
+  tableKind: ChatTableKind,
+  tableId: string,
+  body: string,
+): Promise<ApiResult<ChatMessage>> {
+  return apiFetch<ChatMessage>(`/api/chat/${tableKind}/${tableId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
   });
 }
 

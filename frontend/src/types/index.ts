@@ -386,3 +386,20 @@ export interface HoldemCreateTablePayload {
   max_buy_in: number;
   max_seats: number;
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// In-game chat (both multiplayer games) — mirrors backend ChatMessageOut.
+// `body` is rendered EXCLUSIVELY as a React text node so pasted markup is inert.
+// ═════════════════════════════════════════════════════════════════════════════
+
+export type ChatTableKind = "blackjack" | "holdem";
+
+export interface ChatMessage {
+  id: string;
+  table_kind: string;
+  table_id: string;
+  user_id: string;
+  username: string;
+  body: string;
+  created_at: string;
+}

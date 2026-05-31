@@ -21,6 +21,7 @@ import Board from "../components/Board";
 import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
+import ChatPanel from "../components/ChatPanel";
 import { t } from "../i18n";
 
 export default function HoldemTablePage() {
@@ -191,6 +192,9 @@ export default function HoldemTablePage() {
             />
           )}
         </div>
+
+        {/* In-game chat — unobtrusive panel below the controls. */}
+        <ChatPanel tableKind="holdem" tableId={tableId} />
       </main>
     </div>
   );
