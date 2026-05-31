@@ -409,3 +409,125 @@ class PokerSessionReviewOut(BaseModel):
     optimal_count: int
     ev_lost_chips: int
     actions: list[PokerReviewActionOut]
+
+
+# ─── Multiplayer Texas Hold'em (cash ring game) ──────────────────────────────
+# specs/holdem-multiplayer.md. Reuses PokerActionType / PokerStreet above.
+
+
+class HoldemTableCreateIn(BaseModel):
+    name: str
+    small_blind: int = 50
+    big_blind: int = 100
+    min_buy_in: int = 2_000
+    max_buy_in: int = 20_000
+    max_seats: int = 6
+
+
+class HoldemJoinIn(BaseModel):
+    buy_in: int
+
+
+class HoldemActIn(BaseModel):
+    action: PokerActionType
+    amount: int = 0  # raise-to chip level for 'raise'; ignored otherwise
+
+
+class HoldemTableOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    small_blind: int
+    big_blind: int
+    min_buy_in: int
+    max_buy_in: int
+    max_seats: int
+    status: str
+    created_at: datetime
+
+
+class HoldemTableListOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    small_blind: int
+    big_blind: int
+    min_buy_in: int
+    max_buy_in: int
+    max_seats: int
+    status: str
+    seats_taken: int
+
+
+class HoldemSeatOut(BaseModel):
+    """A persistent chair at the table (physical seat_number)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    user_id: uuid.UUID
+    seat_number: int
+    stack: int
+    status: str
+    username: Optional[str] = None
+
+
+class HoldemHandSeatStateOut(BaseModel):
+    """Per-seat per-hand state in the polled /state payload. `seat_number` is the
+    engine index; `table_seat_number` places the player at their physical chair.
+    `hole_cards` is [null, null] for opponents until showdown."""
+
+    model_config = ConfigDict(from_attributes=True)
+    seat_number: int
+    table_seat_number: int
+    user_id: uuid.UUID
+    username: Optional[str] = None
+    hole_cards: list                 # [Card, Card] or [None, None]
+    starting_stack: int
+    final_stack: int
+    current_bet: int
+    is_folded: bool
+    is_all_in: bool
+
+
+class HoldemActionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    seat_number: int
+    user_id: Optional[uuid.UUID] = None
+    action_index: int
+    street: str
+    action: str
+    amount: int
+    created_at: datetime
+
+
+class HoldemHandStateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    hand_number: int
+    button_seat: int
+    small_blind: int
+    big_blind: int
+    board: list
+    pot_total: int
+    side_pots: list
+    street: str
+    current_bet_to_match: int
+    current_to_act_seat: Optional[int] = None
+    last_aggressor_seat: Optional[int] = None
+    min_raise_increment: int
+    status: str
+    result: Optional[dict] = None
+    seats: list[HoldemHandSeatStateOut]
+    actions: list[HoldemActionOut]
+
+
+class HoldemTableStateOut(BaseModel):
+    """The polled endpoint payload: table summary + persistent seats + the
+    current hand (board, pot, per-seat state, action log)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    table: HoldemTableOut
+    seats: list[HoldemSeatOut]
+    current_hand: Optional[HoldemHandStateOut] = None
+    your_seat_number: Optional[int] = None

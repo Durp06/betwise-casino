@@ -25,7 +25,7 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from backend.ratelimit import limiter
-from backend.routers import users, tables, game, advice, leaderboard, analytics, sessions, poker_tables, poker_game, poker_advice
+from backend.routers import users, tables, game, advice, leaderboard, analytics, sessions, poker_tables, poker_game, poker_advice, holdem
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +101,7 @@ app.include_router(sessions.router, prefix="/api")
 app.include_router(poker_tables.router, prefix="/api")
 app.include_router(poker_game.router, prefix="/api")
 app.include_router(poker_advice.router, prefix="/api")
+app.include_router(holdem.router, prefix="/api")
 
 
 # ─── Startup event ────────────────────────────────────────────────────────────
