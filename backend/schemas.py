@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 # ─── Card ─────────────────────────────────────────────────────────────────────
 
@@ -577,7 +577,11 @@ class ChatPostIn(BaseModel):
 
 class PracticeGradeIn(BaseModel):
     # CardIn enforces valid suit + value literals → 422 on invalid card (AC-R-PR4).
-    hand: list[CardIn]
+    # max_length=11: a real blackjack hand cannot exceed ~11 cards (4×A + 4×2 + 3×3 = 21),
+    # so we cap here to prevent O(n) DoS amplification on huge input arrays.
+    # min_length is intentionally absent — the handler guards against empty hands
+    # with a 400 (test_practice_grade_empty_hand_is_400 relies on handler, not 422).
+    hand: list[CardIn] = Field(max_length=11)
     dealer_upcard: CardIn
     action: Action
 

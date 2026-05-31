@@ -16,8 +16,10 @@ from __future__ import annotations
 import logging
 
 from fastapi import APIRouter, HTTPException
+from starlette.requests import Request
 
 from backend.auth import CurrentUser
+from backend.ratelimit import PRACTICE_RATE_LIMIT, limiter
 from backend.schemas import PracticeGradeIn, PracticeGradeOut  # CardIn used inside PracticeGradeIn
 
 logger = logging.getLogger(__name__)
@@ -28,7 +30,9 @@ router = APIRouter(prefix="/practice", tags=["practice"])
 # ─── Route handlers ───────────────────────────────────────────────────────────
 
 @router.post("/grade", response_model=PracticeGradeOut)
+@limiter.limit(PRACTICE_RATE_LIMIT)
 async def grade_practice(
+    request: Request,
     body: PracticeGradeIn,
     current_user: CurrentUser,  # noqa: ARG001  — auth guard only; no DB access
 ) -> PracticeGradeOut:
@@ -36,7 +40,10 @@ async def grade_practice(
 
     Stateless: reads no DB tables, writes no player_actions.
     Auth required (CurrentUser) to prevent unauthenticated access.
+    Rate-limited per user (mirrors advice.py CSO hardening; see backend/ratelimit.py).
     """
+    # Stash user_id on request.state so the limiter keys per-user (not per-IP).
+    request.state.user_id = str(current_user)
     return _grade(body)
 
 
