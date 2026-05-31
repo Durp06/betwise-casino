@@ -29,9 +29,11 @@ from typing import cast
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from backend.auth import CurrentUser
 from backend.database import get_db
+from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import (
     PokerActIn,
     PokerActionOut,
@@ -54,18 +56,23 @@ router = APIRouter(prefix="/poker", tags=["poker_game"])
 
 
 @router.post("/tournaments/{tournament_id}/deal", response_model=PokerTournamentStateOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def deal_hand(
+    request: Request,
     tournament_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> PokerTournamentStateOut:
     """Deal the next hand. Idempotent — returns the current hand if one is
     already active."""
+    request.state.user_id = str(current_user)
     return await _deal_or_continue_hand(tournament_id, current_user, db)
 
 
 @router.post("/tournaments/{tournament_id}/act", response_model=PokerTournamentStateOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def act(
+    request: Request,
     tournament_id: uuid.UUID,
     body: PokerActIn,
     current_user: CurrentUser,
@@ -74,6 +81,7 @@ async def act(
     """Submit the human's action; server resolves all bot actions up to the
     next human decision point or hand end. Returns updated state + the new
     action log entries since the last poll."""
+    request.state.user_id = str(current_user)
     return await _apply_human_action_and_resolve_bots(tournament_id, current_user, body, db)
 
 

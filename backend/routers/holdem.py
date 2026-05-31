@@ -30,6 +30,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -39,6 +40,7 @@ if TYPE_CHECKING:
 
 from backend.auth import CurrentUser
 from backend.database import get_db
+from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import (
     HoldemActIn,
     HoldemJoinIn,
@@ -64,67 +66,85 @@ async def list_tables(db: AsyncSession = Depends(get_db)) -> list[HoldemTableLis
 
 
 @router.post("/tables", response_model=HoldemTableOut, status_code=201)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def create_table(
+    request: Request,
     body: HoldemTableCreateIn,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> HoldemTableOut:
     """Create a new Hold'em cash table."""
+    request.state.user_id = str(current_user)
     return await _create_table(body, db)
 
 
 @router.post("/tables/{table_id}/join", response_model=HoldemSeatOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def join_table(
+    request: Request,
     table_id: uuid.UUID,
     body: HoldemJoinIn,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> HoldemSeatOut:
     """Take the lowest open seat and buy in for `buy_in` chips."""
+    request.state.user_id = str(current_user)
     return await _join_seat(table_id, current_user, body.buy_in, db)
 
 
 @router.post("/tables/{table_id}/leave")
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def leave_table(
+    request: Request,
     table_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Leave the table: fold out of any active hand, cash the stack out to the
     bankroll, and free the seat."""
+    request.state.user_id = str(current_user)
     await _leave_seat(table_id, current_user, db)
     return {"status": "ok"}
 
 
 @router.get("/tables/{table_id}/state", response_model=HoldemTableStateOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def get_table_state(
+    request: Request,
     table_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> HoldemTableStateOut:
     """Polled state. Other players' hole cards are masked while a hand is live."""
+    request.state.user_id = str(current_user)
     return await _build_state_payload(table_id, current_user, db)
 
 
 @router.post("/tables/{table_id}/deal", response_model=HoldemTableStateOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def deal_hand(
+    request: Request,
     table_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> HoldemTableStateOut:
     """Start the next hand. Idempotent — returns current state if a hand is
     already active. Any seated player may trigger it."""
+    request.state.user_id = str(current_user)
     return await _deal_hand(table_id, current_user, db)
 
 
 @router.post("/tables/{table_id}/act", response_model=HoldemTableStateOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def act(
+    request: Request,
     table_id: uuid.UUID,
     body: HoldemActIn,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> HoldemTableStateOut:
     """Submit your action (fold/check/call/raise/all_in). Turn-guarded."""
+    request.state.user_id = str(current_user)
     return await _act(table_id, current_user, body, db)
 
 
@@ -282,10 +302,16 @@ async def _join_seat(
     db: AsyncSession,
 ) -> HoldemSeatOut:
     from sqlalchemy import select  # noqa: PLC0415
+    from sqlalchemy.exc import IntegrityError  # noqa: PLC0415
 
     from backend.models import HoldemSeat, HoldemTable, User  # noqa: PLC0415
 
-    table = (await db.execute(select(HoldemTable).where(HoldemTable.id == table_id))).scalar_one_or_none()
+    # Lock the table row FIRST (per-table serializer): serializes seat selection
+    # against concurrent joins (no two callers grab the same open seat) and
+    # against deal/leave.
+    table = (await db.execute(
+        select(HoldemTable).where(HoldemTable.id == table_id).with_for_update()
+    )).scalar_one_or_none()
     if table is None:
         raise HTTPException(status_code=404, detail="Table not found")
 
@@ -337,7 +363,14 @@ async def _join_seat(
         joined_at=datetime.now(timezone.utc),
     )
     db.add(seat)
-    await db.commit()
+    try:
+        await db.commit()
+    except IntegrityError:
+        # Belt-and-suspenders behind the table lock: if a concurrent join still
+        # grabbed this seat (or the user already has one), surface a clean 409
+        # for the client to retry rather than an opaque 500.
+        await db.rollback()
+        raise HTTPException(status_code=409, detail="Seat just taken — please retry") from None
     await db.refresh(seat)
     return HoldemSeatOut.model_validate(seat)
 
@@ -346,6 +379,15 @@ async def _leave_seat(table_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession)
     from sqlalchemy import select  # noqa: PLC0415
 
     from backend.models import HoldemHand, HoldemHandSeat, HoldemSeat, HoldemTable, User  # noqa: PLC0415
+
+    # Lock the table row FIRST (per-table serializer) so leave can't interleave
+    # with a concurrent deal/join on the same table — the deal/leave interleave
+    # is what would otherwise duplicate chips.
+    table = (await db.execute(
+        select(HoldemTable).where(HoldemTable.id == table_id).with_for_update()
+    )).scalar_one_or_none()
+    if table is None:
+        return  # table gone — nothing to leave
 
     seat = (await db.execute(
         select(HoldemSeat)
@@ -394,10 +436,7 @@ async def _leave_seat(table_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession)
             # Folding a live player can close the street or end the hand —
             # advance so the table doesn't stall on the absent player.
             state = _reconstruct_betting_state(hand, hand_seats)
-            table_row = (await db.execute(
-                select(HoldemTable).where(HoldemTable.id == table_id)
-            )).scalar_one()
-            await _advance_until_human_or_complete(state, hand, hand_seats, table_row, db)
+            await _advance_until_human_or_complete(state, hand, hand_seats, table, db)
     else:
         # Not in an active hand — the persistent seat stack is the resolved stack.
         cash_out = seat.stack
@@ -440,7 +479,13 @@ async def _deal_hand(
         HoldemTable,
     )
 
-    table = (await db.execute(select(HoldemTable).where(HoldemTable.id == table_id))).scalar_one_or_none()
+    # Lock the table row FIRST (the per-table serializer). Critically this
+    # serializes deal against a concurrent /leave: without it, leave could cash
+    # a seated player's stack back to their bankroll while this deal has already
+    # snapshotted that same stack into the new hand — duplicating chips.
+    table = (await db.execute(
+        select(HoldemTable).where(HoldemTable.id == table_id).with_for_update()
+    )).scalar_one_or_none()
     if table is None:
         raise HTTPException(status_code=404, detail="Table not found")
 
@@ -552,7 +597,14 @@ async def _act(
     from backend.game.poker.state import apply_action, next_to_act  # noqa: PLC0415
     from backend.models import HoldemHand, HoldemHandSeat, HoldemSeat, HoldemTable  # noqa: PLC0415
 
-    table = (await db.execute(select(HoldemTable).where(HoldemTable.id == table_id))).scalar_one_or_none()
+    # Lock the TABLE row first — it is the per-table serializer. Every mutating
+    # holdem handler (deal/act/join/leave) locks the table row before any other,
+    # so concurrent mutations on one table run strictly one-at-a-time (table →
+    # hand/seat/user lock order, so no deadlock). SQLite ignores FOR UPDATE;
+    # Postgres serializes.
+    table = (await db.execute(
+        select(HoldemTable).where(HoldemTable.id == table_id).with_for_update()
+    )).scalar_one_or_none()
     if table is None:
         raise HTTPException(status_code=404, detail="Table not found")
 

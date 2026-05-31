@@ -15,9 +15,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from backend.auth import CurrentUser
 from backend.database import get_db
+from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import SeatOut, SessionOut, TableCreateIn, TableListOut, TableOut, TableStateOut, HandOut
 
 router = APIRouter(prefix="/tables", tags=["tables"])
@@ -37,43 +39,55 @@ async def list_tables(
 
 
 @router.post("", response_model=TableOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def create_table(
+    request: Request,
     body: TableCreateIn,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> TableOut:
     """Create a new casino table."""
+    request.state.user_id = str(current_user)
     return await _create_table(body, db)
 
 
 @router.post("/{table_id}/join", response_model=SeatOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def join_table(
+    request: Request,
     table_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> SeatOut:
     """Assign the caller to the lowest-numbered open seat."""
+    request.state.user_id = str(current_user)
     return await _join_seat(table_id, current_user, db)
 
 
 @router.post("/{table_id}/leave")
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def leave_table(
+    request: Request,
     table_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Remove caller's seat. If last player, delete the session."""
+    request.state.user_id = str(current_user)
     await _leave_seat(table_id, current_user, db)
     return {"status": "ok"}
 
 
 @router.get("/{table_id}/state", response_model=TableStateOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def get_table_state(
+    request: Request,
     table_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> TableStateOut:
     """Return full table state. Other players' hole cards hidden during play."""
+    request.state.user_id = str(current_user)
     return await _get_table_state(table_id, current_user, db)
 
 
