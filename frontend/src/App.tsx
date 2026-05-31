@@ -16,6 +16,8 @@ import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
 import PokerSetup from "./pages/PokerSetup";
 import PokerTablePage from "./pages/PokerTablePage";
+import HoldemLobby from "./pages/HoldemLobby";
+import HoldemTablePage from "./pages/HoldemTablePage";
 
 // ─── QueryClient ─────────────────────────────────────────────────────────────
 
@@ -122,6 +124,24 @@ export default function App() {
             element={
               <AuthGate>
                 <PokerTablePage />
+              </AuthGate>
+            }
+          />
+
+          {/* Multiplayer Hold'em */}
+          <Route
+            path="/holdem"
+            element={
+              <AuthGate>
+                <HoldemLobby />
+              </AuthGate>
+            }
+          />
+          <Route
+            path="/holdem/table/:id"
+            element={
+              <AuthGate>
+                <HoldemTablePage />
               </AuthGate>
             }
           />

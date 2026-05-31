@@ -297,3 +297,92 @@ export interface PokerCreateTournamentPayload {
   starting_stack_chips: number;
   hands_per_level?: number;
 }
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Multiplayer Texas Hold'em (cash ring game) — mirrors backend Holdem* schemas
+// ═════════════════════════════════════════════════════════════════════════════
+
+export interface HoldemTable {
+  id: string;
+  name: string;
+  small_blind: number;
+  big_blind: number;
+  min_buy_in: number;
+  max_buy_in: number;
+  max_seats: number;
+  status: string;
+  created_at: string;
+}
+
+export interface HoldemTableListRow extends HoldemTable {
+  seats_taken: number;
+}
+
+export interface HoldemSeat {
+  id: string;
+  user_id: string;
+  seat_number: number; // physical chair
+  stack: number;
+  status: string;
+  username: string | null;
+}
+
+export interface HoldemHandSeatState {
+  seat_number: number; // engine index
+  table_seat_number: number; // physical chair
+  user_id: string;
+  username: string | null;
+  hole_cards: (PokerCard | null)[]; // [null, null] for masked opponents
+  starting_stack: number;
+  final_stack: number;
+  current_bet: number;
+  is_folded: boolean;
+  is_all_in: boolean;
+}
+
+export interface HoldemActionLog {
+  id: string;
+  seat_number: number;
+  user_id: string | null;
+  action_index: number;
+  street: string;
+  action: string;
+  amount: number;
+  created_at: string;
+}
+
+export interface HoldemHandState {
+  id: string;
+  hand_number: number;
+  button_seat: number; // engine index
+  small_blind: number;
+  big_blind: number;
+  board: PokerCard[];
+  pot_total: number;
+  side_pots: Array<{ amount: number; eligible: number[] }>;
+  street: string;
+  current_bet_to_match: number;
+  current_to_act_seat: number | null;
+  last_aggressor_seat: number | null;
+  min_raise_increment: number;
+  status: string;
+  result: Record<string, unknown> | null;
+  seats: HoldemHandSeatState[];
+  actions: HoldemActionLog[];
+}
+
+export interface HoldemTableState {
+  table: HoldemTable;
+  seats: HoldemSeat[];
+  current_hand: HoldemHandState | null;
+  your_seat_number: number | null; // engine index in the current hand, or null
+}
+
+export interface HoldemCreateTablePayload {
+  name: string;
+  small_blind: number;
+  big_blind: number;
+  min_buy_in: number;
+  max_buy_in: number;
+  max_seats: number;
+}

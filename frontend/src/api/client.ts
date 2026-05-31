@@ -24,6 +24,11 @@ import type {
   PokerTournament,
   PokerTournamentState,
   PokerActionType,
+  HoldemTableListRow,
+  HoldemTable,
+  HoldemTableState,
+  HoldemSeat,
+  HoldemCreateTablePayload,
 } from "../types";
 
 // ─── Auth header helper ───────────────────────────────────────────────────────
@@ -343,6 +348,64 @@ export async function getPokerSessionReview(
   tournamentId: string,
 ): Promise<ApiResult<unknown>> {
   return apiFetch<unknown>(`/api/poker/tournaments/${tournamentId}/review`);
+}
+
+// ─── Multiplayer Hold'em (cash ring game) ────────────────────────────────────
+
+export async function listHoldemTables(): Promise<ApiResult<HoldemTableListRow[]>> {
+  return apiFetch<HoldemTableListRow[]>("/api/holdem/tables");
+}
+
+export async function createHoldemTable(
+  payload: HoldemCreateTablePayload,
+): Promise<ApiResult<HoldemTable>> {
+  return apiFetch<HoldemTable>("/api/holdem/tables", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function joinHoldemTable(
+  tableId: string,
+  buyIn: number,
+): Promise<ApiResult<HoldemSeat>> {
+  return apiFetch<HoldemSeat>(`/api/holdem/tables/${tableId}/join`, {
+    method: "POST",
+    body: JSON.stringify({ buy_in: buyIn }),
+  });
+}
+
+export async function leaveHoldemTable(
+  tableId: string,
+): Promise<ApiResult<{ status: string }>> {
+  return apiFetch<{ status: string }>(`/api/holdem/tables/${tableId}/leave`, {
+    method: "POST",
+  });
+}
+
+export async function getHoldemTableState(
+  tableId: string,
+): Promise<ApiResult<HoldemTableState>> {
+  return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/state`);
+}
+
+export async function dealHoldemHand(
+  tableId: string,
+): Promise<ApiResult<HoldemTableState>> {
+  return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/deal`, {
+    method: "POST",
+  });
+}
+
+export async function actHoldem(
+  tableId: string,
+  action: PokerActionType,
+  amount: number,
+): Promise<ApiResult<HoldemTableState>> {
+  return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/act`, {
+    method: "POST",
+    body: JSON.stringify({ action, amount }),
+  });
 }
 
 /**

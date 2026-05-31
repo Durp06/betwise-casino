@@ -6,7 +6,7 @@
  *               an optimistic update that's already been sent to the server.
  */
 import { create } from "zustand";
-import type { Card, Hand, TableState, PokerTournamentState } from "../types";
+import type { Card, Hand, TableState, PokerTournamentState, HoldemTableState } from "../types";
 
 const COACH_MODE_STORAGE_KEY = "betwise.coachMode";
 const POKER_COACH_MODE_STORAGE_KEY = "betwise.pokerCoachMode";
@@ -88,6 +88,10 @@ interface GameState {
   /** Last final SSE event from poker advice — drives the confidence badge. */
   pokerCoachConfidenceTier: "DETERMINISTIC" | "HEURISTIC" | null;
   pokerCoachRecommendedAction: string | null;
+
+  // ─── Multiplayer Hold'em (cash ring game) ─────────────────────────────────
+  /** Last polled state from /api/holdem/tables/{id}/state. */
+  holdemTableState: HoldemTableState | null;
 }
 
 // ─── Actions shape ────────────────────────────────────────────────────────────
@@ -143,6 +147,9 @@ interface GameActions {
     recommendedAction: string | null,
   ) => void;
   resetPokerCoach: () => void;
+
+  // ─── Multiplayer Hold'em actions ──────────────────────────────────────────
+  setHoldemTableState: (state: HoldemTableState | null) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -170,6 +177,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   pokerCoachStreaming: false,
   pokerCoachConfidenceTier: null,
   pokerCoachRecommendedAction: null,
+  holdemTableState: null,
 
   setTableState: (newState: TableState) => {
     set({ tableState: newState });
@@ -341,5 +349,9 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       pokerCoachConfidenceTier: null,
       pokerCoachRecommendedAction: null,
     });
+  },
+
+  setHoldemTableState: (state: HoldemTableState | null) => {
+    set({ holdemTableState: state });
   },
 }));
