@@ -177,12 +177,11 @@ def optimal_action(
 
     # Step 4: Downgrade "double" when can_double=False
     if action == "double" and not can_double:
-        # For soft 18+ stands are preferred when cannot double; otherwise hit
-        if soft and total >= 19:
+        # Soft 18+ (A+7 vs 2-6) double falls back to stand: standing on soft 18 is
+        # correct when doubling is unavailable.  Soft 17 and below have no stand
+        # fallback — their no-double downgrade is hit.
+        if soft and total >= 18:
             return "stand"
-        # Soft 18 vs 7/8 would have been stand — but double->stand for soft 18
-        # when can't double we hit (the table shows double for soft 18 vs 2-6;
-        # downgrade to hit for those)
         return "hit"
 
     return action
