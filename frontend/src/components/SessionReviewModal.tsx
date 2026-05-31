@@ -5,13 +5,19 @@
  *   - Loading state (aria-busy="true") while fetching
  *   - Error state (role="alert") on failure
  *   - Accuracy header, worst-mistake callout, scrollable action list on success
+ *   - EvalBar per action when action_evs is present
+ *   - What-if line for non-best/non-sharp actions
+ *   - Sharp chip (gold) visually distinct from Best chip (green)
+ *   - "Retry this spot" button for non-best/non-sharp decisions
  *
- * Classification chips are color-coded per AC-F8.
+ * Classification chips are color-coded per AC-F-REV1/2.
  */
 import { useState, useEffect } from "react";
 import type { SessionReview, ReviewAction, Classification, Card } from "../types";
 import { getSessionReview } from "../api/client";
 import PlayingCard from "./PlayingCard";
+import EvalBar from "./EvalBar";
+import RetrySpot from "./RetrySpot";
 import { t } from "../i18n";
 
 interface SessionReviewModalProps {
@@ -20,13 +26,15 @@ interface SessionReviewModalProps {
   onClose: () => void;
 }
 
-// AC-F8 — classification → Tailwind chip classes
+// AC-F-REV2 — classification → Tailwind chip classes
+// "sharp" gets a gold/amber treatment, visually distinct from "best" (green)
 const CLASSIFICATION_CLASS: Record<Classification, string> = {
   best:       "bg-green-500/20 text-green-300",
   good:       "bg-blue-500/20 text-blue-300",
   inaccuracy: "bg-yellow-500/20 text-yellow-300",
   mistake:    "bg-orange-500/20 text-orange-300",
   blunder:    "bg-red-500/20 text-red-300",
+  sharp:      "bg-chip-gold/20 text-chip-gold",
 };
 
 function ClassificationChip({ cls }: { cls: Classification }) {
@@ -40,6 +48,21 @@ function ClassificationChip({ cls }: { cls: Classification }) {
 }
 
 function ActionRow({ action }: { action: ReviewAction }) {
+  const [retryOpen, setRetryOpen] = useState(false);
+
+  // Non-best/non-sharp: show what-if line and retry spot
+  const isOptimal = action.classification === "best" || action.classification === "sharp";
+  const showWhatIf =
+    !isOptimal &&
+    action.best_action != null &&
+    action.best_action !== action.action &&
+    action.dealer_bust_pct != null;
+
+  // Filter out null cards from hand_snapshot for RetrySpot
+  const nonNullHand = (action.hand_snapshot as (Card | null)[]).filter(
+    (c): c is Card => c !== null,
+  );
+
   return (
     <li className="flex flex-col gap-2 py-3 border-b border-white/10 last:border-none">
       <div className="flex items-center gap-2 flex-wrap">
@@ -68,10 +91,41 @@ function ActionRow({ action }: { action: ReviewAction }) {
           <PlayingCard card={action.dealer_upcard as Card} noAnimate />
         </div>
       </div>
+
+      {/* EvalBar — when enriched action_evs data is present */}
+      {action.action_evs && (
+        <EvalBar actionEvs={action.action_evs} bestAction={action.best_action} />
+      )}
+
+      {/* What-if line for non-best decisions */}
+      {showWhatIf && (
+        <p className="text-xs text-white/50 italic bg-white/5 px-2 py-1 rounded">
+          {`${t("You")} ${action.action}. ${t("Best was")} ${action.best_action!} — ${t("dealer's")} ${action.dealer_upcard.value} ${t("busts ~")}${Math.round(action.dealer_bust_pct! * 100)}%.`}
+        </p>
+      )}
+
       {action.chipy_explanation && (
         <p className="text-white/60 text-xs italic bg-white/5 p-2 rounded-lg leading-relaxed">
           {action.chipy_explanation}
         </p>
+      )}
+
+      {/* Retry this spot — for non-best/non-sharp decisions */}
+      {!isOptimal && !retryOpen && (
+        <button
+          onClick={() => setRetryOpen(true)}
+          className="self-start text-xs font-ui text-chip-gold underline hover:text-gold-bright"
+        >
+          {t("Retry this spot")}
+        </button>
+      )}
+
+      {!isOptimal && retryOpen && (
+        <RetrySpot
+          hand={nonNullHand}
+          dealerUpcard={action.dealer_upcard as Card}
+          onClose={() => setRetryOpen(false)}
+        />
       )}
     </li>
   );
@@ -165,6 +219,12 @@ export default function SessionReviewModal({
                 <span className="text-xl font-bold text-white">{review.total_actions}</span>
                 <span className="text-white/50 text-xs uppercase tracking-wide">{t("Decisions")}</span>
               </div>
+              {review.sharp_count != null && review.sharp_count > 0 && (
+                <div className="flex flex-col items-center">
+                  <span className="text-xl font-bold text-chip-gold">{review.sharp_count}</span>
+                  <span className="text-chip-gold text-xs uppercase tracking-wide">{t("Sharp plays")}</span>
+                </div>
+              )}
             </div>
 
             {/* Worst-mistake callout */}

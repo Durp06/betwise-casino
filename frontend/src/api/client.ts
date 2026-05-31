@@ -31,6 +31,8 @@ import type {
   HoldemCreateTablePayload,
   ChatMessage,
   ChatTableKind,
+  PracticeGrade,
+  PracticeGradeRequest,
 } from "../types";
 
 // ─── Auth header helper ───────────────────────────────────────────────────────
@@ -490,6 +492,15 @@ export async function streamPokerAdvice(
   } catch {
     onError(NETWORK_ERROR_MSG);
   }
+}
+
+// ─── Practice grading (Pillar 4/6) ───────────────────────────────────────────
+
+export async function gradePractice(req: PracticeGradeRequest): Promise<ApiResult<PracticeGrade>> {
+  return apiFetch<PracticeGrade>("/api/practice/grade", {
+    method: "POST",
+    body: JSON.stringify(req),
+  });
 }
 
 export async function streamAdvice(

@@ -464,10 +464,11 @@ export default function Table() {
                   handId: myHand!.id,
                 })
               }
+              title={t("Review this hand — see your accuracy and EV lost")}
               className="ink-outline ink-shadow py-3 rounded-md font-ui text-cream uppercase
                 tracking-wider text-xs sm:text-sm bg-action-double min-h-[48px]"
             >
-              {t("Review session")}
+              {t("Review this hand")}
             </button>
             <button
               onClick={() => void handleLeave()}
