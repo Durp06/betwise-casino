@@ -20,6 +20,17 @@ import type {
   UserStats,
   WeakSpot,
   Hand,
+  PokerCreateTournamentPayload,
+  PokerTournament,
+  PokerTournamentState,
+  PokerActionType,
+  HoldemTableListRow,
+  HoldemTable,
+  HoldemTableState,
+  HoldemSeat,
+  HoldemCreateTablePayload,
+  ChatMessage,
+  ChatTableKind,
 } from "../types";
 
 // ─── Auth header helper ───────────────────────────────────────────────────────
@@ -278,6 +289,204 @@ export async function streamPreAdvice(
       }
     }
     onDone();
+  } catch {
+    onError(NETWORK_ERROR_MSG);
+  }
+}
+
+// ─── Texas Hold'em ───────────────────────────────────────────────────────────
+
+export async function createPokerTournament(
+  payload: PokerCreateTournamentPayload,
+): Promise<ApiResult<PokerTournament>> {
+  return apiFetch<PokerTournament>("/api/poker/tournaments", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function listPokerTournaments(): Promise<ApiResult<PokerTournament[]>> {
+  return apiFetch<PokerTournament[]>("/api/poker/tournaments");
+}
+
+export async function getPokerTournamentState(
+  tournamentId: string,
+): Promise<ApiResult<PokerTournamentState>> {
+  return apiFetch<PokerTournamentState>(
+    `/api/poker/tournaments/${tournamentId}/state`,
+  );
+}
+
+export async function dealPokerHand(
+  tournamentId: string,
+): Promise<ApiResult<PokerTournamentState>> {
+  return apiFetch<PokerTournamentState>(
+    `/api/poker/tournaments/${tournamentId}/deal`,
+    { method: "POST" },
+  );
+}
+
+export async function actPoker(
+  tournamentId: string,
+  action: PokerActionType,
+  amount: number,
+): Promise<ApiResult<PokerTournamentState>> {
+  return apiFetch<PokerTournamentState>(
+    `/api/poker/tournaments/${tournamentId}/act`,
+    {
+      method: "POST",
+      body: JSON.stringify({ action, amount }),
+    },
+  );
+}
+
+export async function getPokerHandReplay(
+  handId: string,
+): Promise<ApiResult<unknown>> {
+  return apiFetch<unknown>(`/api/poker/hands/${handId}/replay`);
+}
+
+export async function getPokerSessionReview(
+  tournamentId: string,
+): Promise<ApiResult<unknown>> {
+  return apiFetch<unknown>(`/api/poker/tournaments/${tournamentId}/review`);
+}
+
+// ─── Multiplayer Hold'em (cash ring game) ────────────────────────────────────
+
+export async function listHoldemTables(): Promise<ApiResult<HoldemTableListRow[]>> {
+  return apiFetch<HoldemTableListRow[]>("/api/holdem/tables");
+}
+
+export async function createHoldemTable(
+  payload: HoldemCreateTablePayload,
+): Promise<ApiResult<HoldemTable>> {
+  return apiFetch<HoldemTable>("/api/holdem/tables", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function joinHoldemTable(
+  tableId: string,
+  buyIn: number,
+): Promise<ApiResult<HoldemSeat>> {
+  return apiFetch<HoldemSeat>(`/api/holdem/tables/${tableId}/join`, {
+    method: "POST",
+    body: JSON.stringify({ buy_in: buyIn }),
+  });
+}
+
+export async function leaveHoldemTable(
+  tableId: string,
+): Promise<ApiResult<{ status: string }>> {
+  return apiFetch<{ status: string }>(`/api/holdem/tables/${tableId}/leave`, {
+    method: "POST",
+  });
+}
+
+export async function getHoldemTableState(
+  tableId: string,
+): Promise<ApiResult<HoldemTableState>> {
+  return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/state`);
+}
+
+export async function dealHoldemHand(
+  tableId: string,
+): Promise<ApiResult<HoldemTableState>> {
+  return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/deal`, {
+    method: "POST",
+  });
+}
+
+export async function actHoldem(
+  tableId: string,
+  action: PokerActionType,
+  amount: number,
+): Promise<ApiResult<HoldemTableState>> {
+  return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/act`, {
+    method: "POST",
+    body: JSON.stringify({ action, amount }),
+  });
+}
+
+// ─── In-game chat (both multiplayer games) ───────────────────────────────────
+
+export async function getChatMessages(
+  tableKind: ChatTableKind,
+  tableId: string,
+): Promise<ApiResult<ChatMessage[]>> {
+  return apiFetch<ChatMessage[]>(`/api/chat/${tableKind}/${tableId}/messages`);
+}
+
+export async function postChatMessage(
+  tableKind: ChatTableKind,
+  tableId: string,
+  body: string,
+): Promise<ApiResult<ChatMessage>> {
+  return apiFetch<ChatMessage>(`/api/chat/${tableKind}/${tableId}/messages`, {
+    method: "POST",
+    body: JSON.stringify({ body }),
+  });
+}
+
+/**
+ * streamPokerAdvice — POSTs to /api/poker/hands/{handId}/advice and
+ * consumes the SSE stream. Mode is set on the tournament; the server picks
+ * Reads vs Odds based on tournament.advice_mode.
+ */
+export async function streamPokerAdvice(
+  handId: string,
+  onChunk: (text: string) => void,
+  onDone: (final: unknown) => void,
+  onError: (message: string) => void,
+): Promise<void> {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(`/api/poker/hands/${handId}/advice`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+    });
+    if (res.status === 401) {
+      fireSessionExpired();
+      onError(SESSION_EXPIRED_MSG);
+      return;
+    }
+    if (!res.ok || !res.body) {
+      onError(`HTTP ${res.status}`);
+      return;
+    }
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let finalEvent: unknown = null;
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+      for (const event of events) {
+        if (!event.trim()) continue;
+        const dataLines = event
+          .split("\n")
+          .filter((l) => l.startsWith("data: "))
+          .map((l) => l.slice("data: ".length));
+        for (const payload of dataLines) {
+          try {
+            const parsed = JSON.parse(payload) as Record<string, unknown>;
+            if ("confidence_tier" in parsed) {
+              finalEvent = parsed;
+            } else if (typeof parsed.text === "string") {
+              onChunk(parsed.text);
+            }
+          } catch {
+            onChunk(payload);
+          }
+        }
+      }
+    }
+    onDone(finalEvent);
   } catch {
     onError(NETWORK_ERROR_MSG);
   }

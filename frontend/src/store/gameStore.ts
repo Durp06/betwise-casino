@@ -6,9 +6,10 @@
  *               an optimistic update that's already been sent to the server.
  */
 import { create } from "zustand";
-import type { Card, Hand, TableState } from "../types";
+import type { Card, Hand, TableState, PokerTournamentState, HoldemTableState } from "../types";
 
 const COACH_MODE_STORAGE_KEY = "betwise.coachMode";
+const POKER_COACH_MODE_STORAGE_KEY = "betwise.pokerCoachMode";
 
 function loadCoachMode(): "quick" | "drill" {
   if (typeof window === "undefined") return "quick";
@@ -19,6 +20,17 @@ function loadCoachMode(): "quick" | "drill" {
     // localStorage may throw in sandboxed iframes; fall through.
   }
   return "quick";
+}
+
+function loadPokerCoachMode(): "reads" | "odds" {
+  if (typeof window === "undefined") return "odds";
+  try {
+    const raw = window.localStorage.getItem(POKER_COACH_MODE_STORAGE_KEY);
+    if (raw === "reads" || raw === "odds") return raw;
+  } catch {
+    // ignore
+  }
+  return "odds";
 }
 
 // ─── State shape ──────────────────────────────────────────────────────────────
@@ -62,6 +74,24 @@ interface GameState {
    *  by Table.tsx's pre-stream effect; ChipyCoach reads it. Null in quick
    *  mode or after Chipy starts narrating. */
   chipyDrillPrompt: string | null;
+
+  // ─── Texas Hold'em poker ──────────────────────────────────────────────────
+  /** Last polled tournament state from /api/poker/tournaments/{id}/state. */
+  pokerTournamentState: PokerTournamentState | null;
+  /** UI-only coach mode for poker — persisted to localStorage. Default "odds"
+   *  per the spec's open-question 3 (safer default for an educational tool). */
+  pokerCoachMode: "reads" | "odds";
+  /** Active Chipy text for poker (mirrors chipyText but for poker SSE). */
+  pokerCoachText: string;
+  /** True while a poker SSE is in flight. */
+  pokerCoachStreaming: boolean;
+  /** Last final SSE event from poker advice — drives the confidence badge. */
+  pokerCoachConfidenceTier: "DETERMINISTIC" | "HEURISTIC" | null;
+  pokerCoachRecommendedAction: string | null;
+
+  // ─── Multiplayer Hold'em (cash ring game) ─────────────────────────────────
+  /** Last polled state from /api/holdem/tables/{id}/state. */
+  holdemTableState: HoldemTableState | null;
 }
 
 // ─── Actions shape ────────────────────────────────────────────────────────────
@@ -106,6 +136,20 @@ interface GameActions {
   setCoachMode: (mode: "quick" | "drill") => void;
   /** Set or clear the static drill prompt shown by ChipyCoach. */
   setChipyDrillPrompt: (prompt: string | null) => void;
+
+  // ─── Texas Hold'em actions ────────────────────────────────────────────────
+  setPokerTournamentState: (state: PokerTournamentState | null) => void;
+  setPokerCoachMode: (mode: "reads" | "odds") => void;
+  appendPokerCoachChunk: (text: string) => void;
+  beginPokerCoachStream: () => void;
+  endPokerCoachStream: (
+    confidenceTier: "DETERMINISTIC" | "HEURISTIC" | null,
+    recommendedAction: string | null,
+  ) => void;
+  resetPokerCoach: () => void;
+
+  // ─── Multiplayer Hold'em actions ──────────────────────────────────────────
+  setHoldemTableState: (state: HoldemTableState | null) => void;
 }
 
 // ─── Store ────────────────────────────────────────────────────────────────────
@@ -127,6 +171,13 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   lastFinishedHandId: null,
   coachMode: loadCoachMode(),
   chipyDrillPrompt: null,
+  pokerTournamentState: null,
+  pokerCoachMode: loadPokerCoachMode(),
+  pokerCoachText: "",
+  pokerCoachStreaming: false,
+  pokerCoachConfidenceTier: null,
+  pokerCoachRecommendedAction: null,
+  holdemTableState: null,
 
   setTableState: (newState: TableState) => {
     set({ tableState: newState });
@@ -254,5 +305,53 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
 
   setChipyDrillPrompt: (prompt: string | null) => {
     set({ chipyDrillPrompt: prompt });
+  },
+
+  // ─── Texas Hold'em actions ────────────────────────────────────────────────
+  setPokerTournamentState: (state: PokerTournamentState | null) => {
+    set({ pokerTournamentState: state });
+  },
+  setPokerCoachMode: (mode: "reads" | "odds") => {
+    if (typeof window !== "undefined") {
+      try {
+        window.localStorage.setItem(POKER_COACH_MODE_STORAGE_KEY, mode);
+      } catch {
+        // ignore
+      }
+    }
+    set({ pokerCoachMode: mode });
+  },
+  appendPokerCoachChunk: (text: string) => {
+    set((s) => ({ pokerCoachText: s.pokerCoachText + text }));
+  },
+  beginPokerCoachStream: () => {
+    set({
+      pokerCoachText: "",
+      pokerCoachStreaming: true,
+      pokerCoachConfidenceTier: null,
+      pokerCoachRecommendedAction: null,
+    });
+  },
+  endPokerCoachStream: (
+    confidenceTier: "DETERMINISTIC" | "HEURISTIC" | null,
+    recommendedAction: string | null,
+  ) => {
+    set({
+      pokerCoachStreaming: false,
+      pokerCoachConfidenceTier: confidenceTier,
+      pokerCoachRecommendedAction: recommendedAction,
+    });
+  },
+  resetPokerCoach: () => {
+    set({
+      pokerCoachText: "",
+      pokerCoachStreaming: false,
+      pokerCoachConfidenceTier: null,
+      pokerCoachRecommendedAction: null,
+    });
+  },
+
+  setHoldemTableState: (state: HoldemTableState | null) => {
+    set({ holdemTableState: state });
   },
 }));

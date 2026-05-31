@@ -13,4 +13,4 @@ from __future__ import annotations
 from typing import Literal
 
 # Update this Literal when a new game is added to the registry.
-GameType = Literal["blackjack"]
+GameType = Literal["blackjack", "poker"]

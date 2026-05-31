@@ -35,6 +35,10 @@ OTHER_USER_ID = uuid.UUID("bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb")
 os.environ.setdefault("BETWISE_DEV_USER_ID", str(TEST_USER_ID))
 # Point the engine at an in-memory SQLite database for all tests
 os.environ.setdefault("BETWISE_TEST_DB_URL", "sqlite+aiosqlite:///:memory:")
+# Effectively disable the per-user mutation rate limit during tests — the
+# endpoint suites fire deal/act/state in tight loops as a single user, which
+# would otherwise trip the production "120/minute" guard.
+os.environ.setdefault("BETWISE_MUTATION_RATE_LIMIT", "1000000/minute")
 
 
 # ─── async engine + session ───────────────────────────────────────────────────

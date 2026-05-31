@@ -16,9 +16,11 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from backend.auth import CurrentUser
 from backend.database import get_db
+from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import ActionIn, DealIn, HandOut, HandReplayActionOut
 
 router = APIRouter(tags=["game"])
@@ -27,24 +29,30 @@ router = APIRouter(tags=["game"])
 # ─── Route handlers ───────────────────────────────────────────────────────────
 
 @router.post("/tables/{table_id}/deal", response_model=HandOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def deal(
+    request: Request,
     table_id: uuid.UUID,
     body: DealIn,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> HandOut:
     """Create/join a betting session and deal initial cards."""
+    request.state.user_id = str(current_user)
     return await _deal_hand(table_id, current_user, body.bet, db)
 
 
 @router.post("/tables/{table_id}/action", response_model=HandOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def take_action(
+    request: Request,
     table_id: uuid.UUID,
     body: ActionIn,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> HandOut:
     """Take a game action (hit/stand/double/split)."""
+    request.state.user_id = str(current_user)
     return await _take_action(table_id, current_user, body.action, db)
 
 
@@ -90,8 +98,11 @@ async def _deal_hand(
     if result.scalar_one_or_none() is None:
         raise HTTPException(status_code=403, detail="You are not seated at this table")
 
-    # Fetch user for chip balance check
-    result = await db.execute(select(User).where(User.id == user_id))
+    # Fetch user for chip balance check — row-locked so two concurrent deals
+    # by the same user (e.g. seated at two tables) can't both pass the balance
+    # check and double-debit. Mirrors the double-down path and the holdem
+    # buy-in; SQLite ignores FOR UPDATE, Postgres serializes.
+    result = await db.execute(select(User).where(User.id == user_id).with_for_update())
     user = result.scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")

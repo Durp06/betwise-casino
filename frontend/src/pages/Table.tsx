@@ -18,6 +18,7 @@ import ActionBar from "../components/ActionBar";
 import ChipyCoach from "../components/ChipyCoach";
 import ReplayModal from "../components/ReplayModal";
 import SessionReviewModal from "../components/SessionReviewModal";
+import ChatPanel from "../components/ChatPanel";
 import Chipy from "../components/Chipy";
 import type { ChipyExpression, ChipyAnimation, ChipyPose } from "../components/Chipy";
 import { t } from "../i18n";
@@ -481,10 +482,13 @@ export default function Table() {
         )}
         </div>
 
-        {/* Always-on Chipy side rail. Pinned to the top on desktop so it
-            doesn't shift as the felt grows; full-width above the felt on
-            mobile (lg breakpoint flips the flex direction). */}
-        <ChipyCoach />
+        {/* Always-on Chipy side rail + in-game chat. Pinned to the top on
+            desktop so they don't shift as the felt grows; full-width above the
+            felt on mobile (lg breakpoint flips the flex direction). */}
+        <div className="flex flex-col gap-4 w-full lg:w-auto">
+          <ChipyCoach />
+          <ChatPanel tableKind="blackjack" tableId={tableId} />
+        </div>
       </main>
 
       {replayHandId && (
