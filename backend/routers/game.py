@@ -192,7 +192,8 @@ async def _deal_hand(
     user.chip_balance -= bet
     await db.flush()
 
-    # Create hand
+    # Create hand — set created_at explicitly so _get_user_hands can order
+    # newest-first by this column (AC-R-HIST2).
     hand = Hand(
         id=uuid.uuid4(),
         session_id=session.id,
@@ -202,6 +203,7 @@ async def _deal_hand(
         status="active",
         outcome=None,
         payout=None,
+        created_at=datetime.now(timezone.utc),
     )
     db.add(hand)
 
@@ -321,6 +323,22 @@ async def _take_action(
             doubling_user.chip_balance -= hand.bet
         hand.bet *= 2
 
+    # Decision #3: increment accuracy counters inside the locked transaction.
+    # total_decisions increments once per recorded action (every non-split action).
+    # correct_decisions increments only when was_correct is True.
+    # total_hands increments once when the hand reaches a terminal status (not on active hits).
+    #
+    # For non-double actions (hit, stand), fetch the User row for counter updates.
+    # For double, doubling_user is already locked above — reuse it.
+    if action != "double":
+        from backend.models import User  # noqa: PLC0415
+        result = await db.execute(
+            select(User).where(User.id == user_id).with_for_update()
+        )
+        acting_user = result.scalar_one_or_none()
+    else:
+        acting_user = doubling_user  # already fetched above
+
     # Record to player_actions
     pa = PlayerAction(
         id=uuid.uuid4(),
@@ -349,6 +367,19 @@ async def _take_action(
     elif action == "double":
         # After double: one card dealt then must stand
         hand.status = "standing"
+
+    # Decision #3: increment accuracy counters after hand status is resolved.
+    # total_decisions: +1 for every recorded action.
+    # correct_decisions: +1 only when was_correct.
+    # total_hands: +1 only when the hand reaches a terminal status this action.
+    if acting_user is not None:
+        acting_user.total_decisions += 1
+        if was_correct:
+            acting_user.correct_decisions += 1
+        # Terminal statuses: bust, blackjack, standing, finished.
+        # "active" means the player can still hit — do NOT increment total_hands.
+        if hand.status != "active":
+            acting_user.total_hands += 1
 
     await db.flush()
     await db.refresh(hand)

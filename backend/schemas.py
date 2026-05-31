@@ -28,6 +28,12 @@ class CardOut(BaseModel):
     value: str
 
 
+class CardIn(BaseModel):
+    """Strictly validated card for input endpoints (enforces valid suit + value literals)."""
+    suit: CardSuit
+    value: CardValue
+
+
 # ─── Users ────────────────────────────────────────────────────────────────────
 
 class UserOut(BaseModel):
@@ -45,6 +51,9 @@ class UserStatsOut(BaseModel):
     chip_balance: int
     total_hands: int
     correct_decisions: int
+    # total_decisions: per-decision accuracy denominator (AC-R-ACC5, Decision #3).
+    # accuracy = correct_decisions / total_decisions (zero-guarded → 0.0).
+    total_decisions: int
     accuracy: float
     current_streak: int
     best_streak: int
@@ -171,6 +180,7 @@ class LeaderboardRowOut(BaseModel):
     username: str
     chip_balance: int
     total_hands: int
+    total_decisions: int
     accuracy_pct: float
     best_streak: int
 
@@ -194,7 +204,7 @@ class HandReplayActionOut(BaseModel):
 
 # ─── Session review (Hand Review modal) ──────────────────────────────────────
 
-Classification = Literal["best", "good", "inaccuracy", "mistake", "blunder"]
+Classification = Literal["best", "good", "inaccuracy", "mistake", "blunder", "sharp"]
 
 
 class ReviewActionOut(BaseModel):
@@ -212,6 +222,12 @@ class ReviewActionOut(BaseModel):
     created_at: datetime
     classification: Classification
     ev_loss_chips: int
+    # EV enrichment fields (AC-S-REV1, Task 6) — optional with defaults.
+    action_evs: dict[str, float] = {}
+    best_action: str = ""
+    best_ev: float = 0.0
+    ev_delta: float = 0.0
+    dealer_bust_pct: float = 0.0
 
 
 class SessionReviewOut(BaseModel):
@@ -224,6 +240,9 @@ class SessionReviewOut(BaseModel):
     ev_lost_chips: int
     worst_action_id: Optional[uuid.UUID] = None
     actions: list[ReviewActionOut]
+    # Aggregate fields (AC-S-REV2, Task 6) — optional with defaults.
+    sharp_count: int = 0
+    blunder_count: int = 0
 
 
 # ═════════════════════════════════════════════════════════════════════════════
@@ -552,3 +571,23 @@ class ChatMessageOut(BaseModel):
 
 class ChatPostIn(BaseModel):
     body: str
+
+
+# ─── Practice grading (Task 7) ────────────────────────────────────────────────
+
+class PracticeGradeIn(BaseModel):
+    # CardIn enforces valid suit + value literals → 422 on invalid card (AC-R-PR4).
+    hand: list[CardIn]
+    dealer_upcard: CardIn
+    action: Action
+
+
+class PracticeGradeOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    optimal_action: str
+    action_evs: dict[str, float]
+    best_ev: float
+    ev_delta: float
+    classification: Classification
+    dealer_bust_pct: float
+    explanation: str
