@@ -79,7 +79,6 @@ async def leave_table(
 
 
 @router.get("/{table_id}/state", response_model=TableStateOut)
-@limiter.limit(MUTATION_RATE_LIMIT)
 async def get_table_state(
     request: Request,
     table_id: uuid.UUID,

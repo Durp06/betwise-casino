@@ -108,7 +108,6 @@ async def leave_table(
 
 
 @router.get("/tables/{table_id}/state", response_model=HoldemTableStateOut)
-@limiter.limit(MUTATION_RATE_LIMIT)
 async def get_table_state(
     request: Request,
     table_id: uuid.UUID,
@@ -425,8 +424,8 @@ async def _leave_seat(table_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession)
         # stack lives on the hand-seat (the persistent seat still holds last
         # hand's total, updated only at showdown). Cash that out; chips already
         # committed to the pot stay there. Zero the hand-seat stack so the
-        # engine doesn't double-count.
-        cash_out = my_hs.final_stack
+        # engine doesn't double-count the uncommitted chips during the runout.
+        uncommitted = my_hs.final_stack
         was_live = not my_hs.is_folded
         my_hs.is_folded = True
         my_hs.has_acted_this_street = True
@@ -437,6 +436,14 @@ async def _leave_seat(table_id: uuid.UUID, user_id: uuid.UUID, db: AsyncSession)
             # advance so the table doesn't stall on the absent player.
             state = _reconstruct_betting_state(hand, hand_seats)
             await _advance_until_human_or_complete(state, hand, hand_seats, table, db)
+        # The engine may refund this seat's UNCALLED bet during the runout
+        # (advance_street returns the excess of a lone top bettor to its
+        # bettor — even a folded one — before raking the pot). That refund
+        # lands back on the hand-seat's final_stack via _persist_state_to_hand.
+        # Cash out the uncommitted stack PLUS any such refund so the leaver
+        # keeps chips that were never matched (chip conservation), instead of
+        # the refund being stranded on a seat we are about to delete.
+        cash_out = uncommitted + my_hs.final_stack
     else:
         # Not in an active hand — the persistent seat stack is the resolved stack.
         cash_out = seat.stack
