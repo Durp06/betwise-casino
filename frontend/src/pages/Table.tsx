@@ -159,22 +159,24 @@ export default function Table() {
     };
   }, [resetChipy]);
 
-  // Auto-leave when the user navigates away from the table page — covers
-  // clicking the Lobby/Profile/Leaderboard buttons, the browser Back button,
-  // and most refresh paths. Without this the user accumulated a stale seat
-  // at every table they ever visited (caught when a smoke test found one
-  // user seated at 7 different tables simultaneously). Fire-and-forget so
-  // it doesn't block navigation.
+  // Tab-close / hard-refresh: use a pagehide listener so leaveTable fires on
+  // the actual unload event, NOT in the effect cleanup. The cleanup only
+  // removes the listener — this way StrictMode's throwaway unmount does NOT
+  // call leaveTable and un-seat the user on every mount.
   //
-  // Tab close / hard refresh aren't reliably covered by useEffect cleanup
-  // because the browser may cut the fetch off; for those cases the next
-  // sign-in could clean up stale seats server-side, but that's a follow-up.
+  // In-app navigation (Leave button, Lobby button) is handled explicitly in
+  // handleLeave() and goToLobby() below, so the user's seat is always cleared
+  // on genuine navigation without relying on cleanup semantics.
   useEffect(() => {
     if (!tableId) return;
-    return () => {
-      void leaveTable(tableId).catch(() => {
-        /* fire-and-forget; user is already navigating away */
+    function onPageHide(): void {
+      void leaveTable(tableId as string).catch(() => {
+        /* fire-and-forget; browser may cut the request short on unload */
       });
+    }
+    window.addEventListener("pagehide", onPageHide);
+    return () => {
+      window.removeEventListener("pagehide", onPageHide);
     };
   }, [tableId]);
 
@@ -206,6 +208,7 @@ export default function Table() {
       return;
     }
     setLeaveLoading(true);
+    void leaveTable(tableId).catch(() => {});
     void navigate("/lobby");
   }
 
@@ -214,8 +217,15 @@ export default function Table() {
     if (reviewIsLeaveFlow) {
       setReviewIsLeaveFlow(false);
       setLeaveLoading(true);
+      if (tableId) void leaveTable(tableId).catch(() => {});
       void navigate("/lobby");
     }
+  }
+
+  // Header "Lobby" button — leaves the table then navigates.
+  function goToLobby(): void {
+    if (tableId) void leaveTable(tableId).catch(() => {});
+    void navigate("/lobby");
   }
 
   if (!tableId) {
@@ -265,7 +275,7 @@ export default function Table() {
         </h1>
         <div className="flex gap-3 font-ui uppercase tracking-wider text-xs text-cream">
           <button
-            onClick={() => void navigate("/lobby")}
+            onClick={goToLobby}
             className="hover:text-gold-bright"
           >
             {t("Lobby")}
