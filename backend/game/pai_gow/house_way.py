@@ -61,8 +61,15 @@ def foxwoods(cards: list[Card]) -> tuple[list[Card], list[Card]]:
     if len(cards) != 7:
         raise ValueError(f"house_way expects 7 cards, got {len(cards)}")
 
-    # v1 joker handling: substitute Ace of an unused suit (module docstring).
+    # v1 joker handling: substitute Ace of an unused suit for DISPATCH purposes,
+    # then swap the joker BACK INTO the output split before returning. The
+    # player has the joker physically in their hand; emitting a substituted-Ace
+    # in the split would fail card-membership validation when they try to
+    # submit it (the Ace-of-X isn't in their dealt cards, only the joker is).
+    joker_idx = next((i for i, c in enumerate(cards) if is_joker(c)), -1)
     resolved = _resolve_joker_as_ace(cards)
+    substituted_card = resolved[joker_idx] if joker_idx >= 0 else None
+    original_joker = cards[joker_idx] if joker_idx >= 0 else None
 
     # Canonical ordering: rank descending, suit ascending (per cards.py).
     sorted_cards = sorted(resolved, key=card_sort_key)
@@ -71,47 +78,69 @@ def foxwoods(cards: list[Card]) -> tuple[list[Card], list[Card]]:
     # Rule 1: Straight flush.
     sf = _find_straight_flush(sorted_cards)
     if sf is not None:
-        return _split_with_back_5(sf, sorted_cards)
+        return _swap_substituted_joker_back(*_split_with_back_5(sf, sorted_cards), substituted_card, original_joker)
 
     groups = _rank_groups(sorted_cards)
     pair_count = _count_pairs(groups)
 
     # Rule 2: Four of a kind.
     if _has_four_of_a_kind(groups):
-        return _split_four_of_a_kind(sorted_cards, groups)
+        return _swap_substituted_joker_back(*_split_four_of_a_kind(sorted_cards, groups), substituted_card, original_joker)
 
     # Rule 3: Full house (includes two-trips edge case).
     if _has_full_house(groups):
-        return _split_full_house(sorted_cards, groups)
+        return _swap_substituted_joker_back(*_split_full_house(sorted_cards, groups), substituted_card, original_joker)
 
     # Rule 4: Three pairs.
     if pair_count >= 3:
-        return _split_three_pairs(sorted_cards, groups)
+        return _swap_substituted_joker_back(*_split_three_pairs(sorted_cards, groups), substituted_card, original_joker)
 
     # Rule 5: Flush.
     flush = _find_flush(sorted_cards)
     if flush is not None:
-        return _split_with_back_5(flush, sorted_cards)
+        return _swap_substituted_joker_back(*_split_with_back_5(flush, sorted_cards), substituted_card, original_joker)
 
     # Rule 6: Straight (uses the §7.2 broadway > wheel > K-high … ordering).
     straight = _find_straight(sorted_cards)
     if straight is not None:
-        return _split_with_back_5(straight, sorted_cards)
+        return _swap_substituted_joker_back(*_split_with_back_5(straight, sorted_cards), substituted_card, original_joker)
 
     # Rule 7: Three of a kind (always keep — Foxwoods).
     if _has_three_of_a_kind(groups):
-        return _split_three_of_a_kind(sorted_cards, groups)
+        return _swap_substituted_joker_back(*_split_three_of_a_kind(sorted_cards, groups), substituted_card, original_joker)
 
     # Rule 8: Two pair.
     if pair_count == 2:
-        return _split_two_pair(sorted_cards, groups)
+        return _swap_substituted_joker_back(*_split_two_pair(sorted_cards, groups), substituted_card, original_joker)
 
     # Rule 9: One pair.
     if pair_count == 1:
-        return _split_one_pair(sorted_cards, groups)
+        return _swap_substituted_joker_back(*_split_one_pair(sorted_cards, groups), substituted_card, original_joker)
 
     # Rule 10: No pair (high card).
-    return _split_no_pair(sorted_cards)
+    front, back = _split_no_pair(sorted_cards)
+    return _swap_substituted_joker_back(front, back, substituted_card, original_joker)
+
+
+def _swap_substituted_joker_back(
+    front: list[Card],
+    back: list[Card],
+    substituted_card: Optional[Card],
+    original_joker: Optional[Card],
+) -> tuple[list[Card], list[Card]]:
+    """Replace the substituted-Ace card object with the original joker in
+    front/back so the returned split contains the joker that's physically in
+    the player's hand (not the v1-substituted Ace).
+
+    Uses `is` identity — the substituted_card is the specific object created
+    by _resolve_joker_as_ace; if it ended up in front/back, we know it's the
+    joker stand-in (not a coincidental real Ace).
+    """
+    if substituted_card is None or original_joker is None:
+        return front, back
+    front = [original_joker if c is substituted_card else c for c in front]
+    back = [original_joker if c is substituted_card else c for c in back]
+    return front, back
 
 
 # ─── Joker resolution (v1 simplification) ────────────────────────────────────

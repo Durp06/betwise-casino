@@ -474,13 +474,14 @@ def test_house_way_fuzz_300_random_seeds():
             f"seed={seed}: back size={len(back)}, expected 5; input={cards}"
         )
 
-        # (c) Multiset preservation (after joker resolution)
-        resolved_input = _resolve_joker_as_ace(cards)
-        input_keys = sorted(_card_key(c) for c in resolved_input)
+        # (c) Multiset preservation — output preserves the ORIGINAL cards
+        # exactly, including the joker (joker is preserved in front+back per
+        # the joker-swap-back fix; players physically hold the joker token,
+        # not the v1-substituted Ace).
+        input_keys = sorted(_card_key(c) for c in cards)
         output_keys = sorted(_card_key(c) for c in (front + back))
         assert input_keys == output_keys, (
             f"seed={seed}: multiset mismatch.\n"
-            f"  input (post-joker resolution): {input_keys}\n"
-            f"  output (front + back):         {output_keys}\n"
-            f"  raw input:                     {cards}"
+            f"  input:                 {input_keys}\n"
+            f"  output (front + back): {output_keys}"
         )
