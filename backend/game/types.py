@@ -13,4 +13,9 @@ from __future__ import annotations
 from typing import Literal
 
 # Update this Literal when a new game is added to the registry.
-GameType = Literal["blackjack"]
+#
+# MERGE-CONFLICT NOTE: this file is an expected conflict point when the hold'em
+# branches merge in. Their PR adds "poker" to this Literal; ours adds "pai_gow".
+# The merger should union them: Literal["blackjack", "poker", "pai_gow"].
+# Same pattern in registry.py — additive on both sides.
+GameType = Literal["blackjack", "pai_gow"]

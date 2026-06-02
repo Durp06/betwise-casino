@@ -15,7 +15,13 @@ from types import ModuleType
 from typing import Mapping
 
 from backend.game import blackjack
+from backend.game import pai_gow
 from backend.game import GameModule  # noqa: F401  # re-exported for type-check sites
+
+# MERGE-CONFLICT NOTE: expected conflict point with hold'em branches. Their PR
+# adds `from backend.game import poker` and the corresponding `GAME_REGISTRY`
+# entry; ours adds `pai_gow`. Merge should keep both — additive on both sides,
+# no semantic conflict.
 
 # Mapping is intentionally typed as ModuleType (concrete) rather than GameModule
 # (Protocol) because today's only entry is a package, and runtime isinstance
@@ -23,4 +29,5 @@ from backend.game import GameModule  # noqa: F401  # re-exported for type-check 
 # in GameModule's docstring; trust the convention.
 GAME_REGISTRY: Mapping[str, ModuleType] = {
     blackjack.GAME_TYPE: blackjack,
+    pai_gow.GAME_TYPE: pai_gow,
 }

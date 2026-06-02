@@ -41,8 +41,18 @@ os.environ.setdefault("BETWISE_TEST_DB_URL", "sqlite+aiosqlite:///:memory:")
 
 @pytest_asyncio.fixture(scope="session")
 async def engine():
-    """Session-scoped async engine backed by in-memory SQLite."""
-    from backend.models import Base  # noqa: PLC0415  (import after env is set)
+    """Session-scoped async engine backed by in-memory SQLite.
+
+    After create_all builds the schema, seed the fortune_pool singleton row.
+    The Postgres migration `005_pai_gow.sql` handles this via INSERT … ON
+    CONFLICT for prod/CI, but Base.metadata.create_all only creates tables —
+    not rows. Without this seed, every UPDATE/SELECT on the singleton id
+    (`FORTUNE_POOL_SINGLETON_ID`) finds zero rows and the Fortune contribution
+    + payout paths silently no-op, breaking every concurrency test and every
+    deal-with-fortune-bet test (round-6 Phase 2 review catch).
+    """
+    from sqlalchemy import insert  # noqa: PLC0415
+    from backend.models import Base, FortunePool, FORTUNE_POOL_SINGLETON_ID  # noqa: PLC0415
 
     test_url = os.environ["BETWISE_TEST_DB_URL"]
     _engine = create_async_engine(
@@ -52,6 +62,17 @@ async def engine():
     )
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Seed the fortune_pool singleton once per session. Per-test rollback
+        # cannot undo this because it's outside any per-test transaction —
+        # the row persists for the entire pytest run, which is what we want.
+        await conn.execute(
+            insert(FortunePool).values(
+                id=FORTUNE_POOL_SINGLETON_ID,
+                amount_cents=100_000,
+                seed_cents=100_000,
+                last_updated_at=datetime.now(timezone.utc),
+            )
+        )
     yield _engine
     await _engine.dispose()
 
@@ -242,6 +263,148 @@ async def seed_actions(
         actions.append(action)
     await db.commit()
     return actions
+
+
+# ─── Pai Gow seed helpers (round-6 architectural shift — own container) ──────
+
+async def seed_pai_gow_table(
+    db: AsyncSession,
+    name: str = "Test PG Table",
+    min_bet_cents: int = 500,
+    max_bet_cents: int = 50_000,
+    min_fortune_bet_cents: int = 100,
+    max_fortune_bet_cents: int = 10_000,
+    max_seats: int = 3,
+) -> "backend.models.PaiGowTable":  # type: ignore[name-defined]
+    import uuid as _uuid  # noqa: PLC0415
+    from backend.models import PaiGowTable  # noqa: PLC0415
+
+    table = PaiGowTable(
+        id=_uuid.uuid4(),
+        name=name,
+        min_bet_cents=min_bet_cents,
+        max_bet_cents=max_bet_cents,
+        min_fortune_bet_cents=min_fortune_bet_cents,
+        max_fortune_bet_cents=max_fortune_bet_cents,
+        max_seats=max_seats,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(table)
+    await db.commit()
+    await db.refresh(table)
+    return table
+
+
+async def seed_pai_gow_seat(
+    db: AsyncSession,
+    table_id: uuid.UUID,
+    user_id: uuid.UUID,
+    seat_number: int = 1,
+) -> "backend.models.PaiGowSeat":  # type: ignore[name-defined]
+    import uuid as _uuid  # noqa: PLC0415
+    from backend.models import PaiGowSeat  # noqa: PLC0415
+
+    seat = PaiGowSeat(
+        id=_uuid.uuid4(),
+        table_id=table_id,
+        user_id=user_id,
+        seat_number=seat_number,
+        joined_at=datetime.now(timezone.utc),
+    )
+    db.add(seat)
+    await db.commit()
+    await db.refresh(seat)
+    return seat
+
+
+async def seed_pai_gow_round(
+    db: AsyncSession,
+    table_id: uuid.UUID,
+    round_number: int = 1,
+    status: str = "betting",
+    dealer_dealt_cards: list | None = None,
+    deck_state: list | None = None,
+    playing_started_at=None,
+) -> "backend.models.PaiGowRound":  # type: ignore[name-defined]
+    import uuid as _uuid  # noqa: PLC0415
+    from backend.models import PaiGowRound  # noqa: PLC0415
+
+    rnd = PaiGowRound(
+        id=_uuid.uuid4(),
+        table_id=table_id,
+        round_number=round_number,
+        dealer_dealt_cards=dealer_dealt_cards if dealer_dealt_cards is not None else [],
+        deck_state=deck_state if deck_state is not None else [],
+        status=status,
+        playing_started_at=playing_started_at,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(rnd)
+    await db.commit()
+    await db.refresh(rnd)
+    return rnd
+
+
+async def seed_pai_gow_player_hand(
+    db: AsyncSession,
+    round_id: uuid.UUID,
+    user_id: uuid.UUID,
+    dealt_cards: list | None = None,
+    bet_cents: int = 1_000,
+    fortune_bet_cents: int = 0,
+    action_status: str = "dealt",
+) -> "backend.models.PaiGowPlayerHand":  # type: ignore[name-defined]
+    import uuid as _uuid  # noqa: PLC0415
+    from backend.models import PaiGowPlayerHand  # noqa: PLC0415
+
+    if dealt_cards is None:
+        dealt_cards = [
+            {"suit": "hearts", "value": "A"},
+            {"suit": "hearts", "value": "K"},
+            {"suit": "hearts", "value": "Q"},
+            {"suit": "spades", "value": "J"},
+            {"suit": "diamonds", "value": "10"},
+            {"suit": "clubs", "value": "9"},
+            {"suit": "clubs", "value": "2"},
+        ]
+    hand = PaiGowPlayerHand(
+        id=_uuid.uuid4(),
+        round_id=round_id,
+        user_id=user_id,
+        dealt_cards=dealt_cards,
+        bet_cents=bet_cents,
+        fortune_bet_cents=fortune_bet_cents,
+        action_status=action_status,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(hand)
+    await db.commit()
+    await db.refresh(hand)
+    return hand
+
+
+async def seed_pai_gow_streak(
+    db: AsyncSession,
+    user_id: uuid.UUID,
+    current_streak: int = 0,
+    longest_streak: int = 0,
+    total_optimal: int = 0,
+    total_played: int = 0,
+) -> "backend.models.PaiGowStrategyStreak":  # type: ignore[name-defined]
+    from backend.models import PaiGowStrategyStreak  # noqa: PLC0415
+
+    streak = PaiGowStrategyStreak(
+        user_id=user_id,
+        current_streak=current_streak,
+        longest_streak=longest_streak,
+        total_optimal=total_optimal,
+        total_played=total_played,
+        last_played_at=None,
+    )
+    db.add(streak)
+    await db.commit()
+    await db.refresh(streak)
+    return streak
 
 
 # ─── Anthropic mock ───────────────────────────────────────────────────────────
