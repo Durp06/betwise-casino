@@ -36,7 +36,7 @@ Spec refs: §12.2 (Chipy tool calls), §12.5 (was_optimal canonical sort),
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from backend.game.pai_gow.cards import Card
 from backend.game.pai_gow.evaluator import score_hand

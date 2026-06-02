@@ -54,6 +54,12 @@ async def engine():
 
     Cost: each test re-runs `create_all` + the seed INSERT. On in-memory
     SQLite this is fast (~milliseconds) and the determinism is worth it.
+
+    NOTE: this seed is the test-only equivalent of the `INSERT ... ON CONFLICT`
+    in `migrations/005_pai_gow.sql`. The SQL migration is NOT run by CI or
+    any automated process — it's applied manually to prod Supabase. Tests
+    use `Base.metadata.create_all` for the schema and this fixture's INSERT
+    for the singleton row.
     """
     from sqlalchemy import insert  # noqa: PLC0415
     from backend.models import Base, FortunePool, FORTUNE_POOL_SINGLETON_ID  # noqa: PLC0415

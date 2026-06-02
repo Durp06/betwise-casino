@@ -27,7 +27,6 @@ from backend.auth import CurrentUser
 from backend.database import get_db
 from backend.game.pai_gow import state as pg_state
 from backend.schemas import (
-    FortunePoolOut,
     PaiGowPlayerHandOut,
     PaiGowRoundOut,
     PaiGowSeatOut,
