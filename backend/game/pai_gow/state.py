@@ -201,7 +201,14 @@ async def _find_or_create_active_round(
         if rnd is not None:
             return rnd
 
-        # 4b: No active round — try to INSERT a new one.
+        # 4b: No active round — try to INSERT a new one inside a SAVEPOINT so
+        # an IntegrityError rolls back only the speculative INSERT, NOT the
+        # outer transaction. Without the savepoint, asyncpg leaves the outer
+        # txn in "aborted" state after IntegrityError and the retry's SELECT
+        # fails with "current transaction is aborted, commands ignored until
+        # end of transaction block". SQLite is more permissive — it lets you
+        # continue after IntegrityError — which is why this bug only surfaces
+        # under Postgres / the round-6 fix B regression specifically.
         next_number = await _next_round_number(db, table_id)
         new_round = PaiGowRound(
             id=uuid.uuid4(),
@@ -212,24 +219,18 @@ async def _find_or_create_active_round(
             status="betting",
             created_at=datetime.now(timezone.utc),
         )
-        db.add(new_round)
         try:
-            await db.flush()
-        except IntegrityError as exc:
-            # 4c: Lost the race — UNIQUE(table_id, round_number) hit. Rollback
-            # the speculative INSERT and re-run the SELECT next iteration.
+            async with db.begin_nested():
+                db.add(new_round)
+                await db.flush()
+        except IntegrityError:
+            # 4c: Lost the race — UNIQUE(table_id, round_number) hit. The
+            # savepoint's __aexit__ already rolled back the speculative INSERT
+            # and the outer transaction is still alive. Re-run the SELECT.
             logger.info(
                 "round-creation race at table %s round_number=%d, retrying",
                 table_id, next_number,
             )
-            db.expunge(new_round)
-            # On SQLite + the conftest commit→flush patch, the flush failure
-            # leaves the session in a working state. On Postgres, we need an
-            # explicit rollback of the failed statement — but since flush()
-            # raises before commit, the session-level state is recoverable
-            # without rolling back the whole transaction in the test harness.
-            # The retry's SELECT will see the winning INSERT.
-            _ = exc
             continue
         await db.refresh(new_round)
         return new_round
