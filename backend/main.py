@@ -25,7 +25,18 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from backend.ratelimit import limiter
-from backend.routers import users, tables, game, advice, leaderboard, analytics, sessions
+from backend.routers import (
+    advice,
+    analytics,
+    game,
+    leaderboard,
+    pai_gow_advice,
+    pai_gow_game,
+    pai_gow_tables,
+    sessions,
+    tables,
+    users,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +109,10 @@ app.include_router(advice.router, prefix="/api")
 app.include_router(leaderboard.router, prefix="/api")
 app.include_router(analytics.router, prefix="/api")
 app.include_router(sessions.router, prefix="/api")
+# Pai Gow Poker — parallel router set (round-6 architectural shift; spec §13)
+app.include_router(pai_gow_tables.router, prefix="/api")
+app.include_router(pai_gow_game.router, prefix="/api")
+app.include_router(pai_gow_advice.router, prefix="/api")
 
 
 # ─── Startup event ────────────────────────────────────────────────────────────
