@@ -21,6 +21,7 @@ from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.auth import CurrentUser
@@ -184,32 +185,59 @@ async def _join_seat(
     if existing is not None:
         return PaiGowSeatOut.model_validate(existing)
 
-    # Find lowest open seat number.
-    occupied = {
-        n for (n,) in (
-            await db.execute(
-                select(PaiGowSeat.seat_number).where(PaiGowSeat.table_id == table_id)
-            )
-        ).fetchall()
-    }
-    open_seat: Optional[int] = next(
-        (n for n in range(1, table_row.max_seats + 1) if n not in occupied),
-        None,
-    )
-    if open_seat is None:
-        raise HTTPException(status_code=409, detail="Table is full")
+    # Race-safe seat claim. UNIQUE(table_id, seat_number) means two concurrent
+    # joins that both pick seat N collide; the loser would 500 without a
+    # savepoint. Same pattern as state._find_or_create_active_round (fix B):
+    # wrap the speculative INSERT in db.begin_nested() so the savepoint rolls
+    # back on IntegrityError but the outer txn lives. On the next iteration we
+    # recompute the occupied set (which now includes the winning concurrent
+    # claim) and pick the next open seat.
+    #
+    # Bounded by max_seats — worst case every seat is contested. Adequate for
+    # the max_seats=3 v1 cap; v2 with larger tables can revisit if needed.
+    for _attempt in range(table_row.max_seats):
+        occupied = {
+            n for (n,) in (
+                await db.execute(
+                    select(PaiGowSeat.seat_number).where(PaiGowSeat.table_id == table_id)
+                )
+            ).fetchall()
+        }
+        open_seat: Optional[int] = next(
+            (n for n in range(1, table_row.max_seats + 1) if n not in occupied),
+            None,
+        )
+        if open_seat is None:
+            raise HTTPException(status_code=409, detail="Table is full")
 
-    seat = PaiGowSeat(
-        id=uuid.uuid4(),
-        table_id=table_id,
-        user_id=user_id,
-        seat_number=open_seat,
-        joined_at=datetime.now(timezone.utc),
+        new_seat = PaiGowSeat(
+            id=uuid.uuid4(),
+            table_id=table_id,
+            user_id=user_id,
+            seat_number=open_seat,
+            joined_at=datetime.now(timezone.utc),
+        )
+        try:
+            async with db.begin_nested():
+                db.add(new_seat)
+                await db.flush()
+        except IntegrityError:
+            # Savepoint rolled back the failed INSERT AND detached the
+            # instance from session tracking — no explicit expunge needed.
+            # Recompute occupied + retry with the next seat.
+            continue
+        # Refresh intentionally skipped — all PaiGowSeatOut fields are set
+        # Python-side (no server defaults to read back) and the savepoint +
+        # async-session refresh combination misbehaves under concurrency.
+        return PaiGowSeatOut.model_validate(new_seat)
+
+    # Exhausted retries — only reachable under pathological concurrency
+    # where every seat got claimed between our SELECT and INSERT on each
+    # iteration. Surface as 500 so it's visible if it ever fires.
+    raise HTTPException(
+        status_code=500,
+        detail="Failed to claim a seat after retries",
     )
-    db.add(seat)
-    await db.flush()
-    await db.refresh(seat)
-    return PaiGowSeatOut.model_validate(seat)
 
 
 async def _get_table_state(
