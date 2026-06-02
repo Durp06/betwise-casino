@@ -152,7 +152,11 @@ def _persist_state_to_hand(state, hand, hand_seats) -> None:
     hand.current_bet_to_match = state.current_bet_to_match
     hand.min_raise_increment = state.min_raise_increment
     hand.last_aggressor_seat = state.last_aggressor_seat
-    hand.pot_total = state.pot_committed + sum(s.current_bet for s in state.seats)
+    # Persist the committed pot ONLY (match holdem router convention). The
+    # per-seat current_bet is restored separately on reconstruct, so storing
+    # the live bets here too would double-count. The DISPLAY pot is derived in
+    # _build_state_payload as pot_total + sum(current_bet).
+    hand.pot_total = state.pot_committed
     seats_by_num = {hs.seat_number: hs for hs in hand_seats}
     for s in state.seats:
         hs = seats_by_num.get(s.seat_number)
@@ -265,7 +269,9 @@ async def _deal_or_continue_hand(
         big_blind=bb,
         ante=ante,
         board=[],
-        pot_total=state.pot_committed + sum(s.current_bet for s in state.seats),
+        # Committed pot ONLY — per-seat blinds/antes live in current_bet and are
+        # added back for display in _build_state_payload (avoids double-count).
+        pot_total=state.pot_committed,
         side_pots=[],
         street=state.street,
         current_bet_to_match=state.current_bet_to_match,
@@ -729,15 +735,22 @@ async def _complete_hand(state, hand, hand_seats, seats, tournament, db) -> None
 
 
 async def _finalize_payouts(tournament, seats, db) -> None:
-    """Credit prize-pool back to bankrolls per finish order."""
+    """Credit the real prize pool to the 1st-place finisher.
+
+    Only the human ever paid a buy-in (poker_tables.py debits just the human;
+    bots have user_id=None), so the only real chips collected are
+    ``tournament.buy_in_cents``. We pay that pool WINNER-TAKE-ALL to the
+    1st-place finisher and nothing to lower positions: a win is break-even
+    (refund of own buy-in), a loss forfeits the buy-in (a sink, not a mint).
+    This guarantees no real user is ever credited more than buy_in_cents.
+    Winner-take-all of the real stake is a product choice tunable later.
+    """
     from sqlalchemy import select  # noqa: PLC0415
 
-    from backend.game.poker.tournament import payout_chips  # noqa: PLC0415
     from backend.models import User  # noqa: PLC0415
 
     tournament.status = "complete"
-    prize_pool = tournament.buy_in_cents * (1 + tournament.bot_count)
-    payouts = payout_chips(prize_pool, len(seats))
+    prize_pool = tournament.buy_in_cents  # only real chips collected
 
     # Determine finish order: highest bust_position is 1st (or non-bust if any).
     sorted_seats = sorted(
@@ -747,10 +760,11 @@ async def _finalize_payouts(tournament, seats, db) -> None:
     for idx, seat in enumerate(sorted_seats):
         if seat.user_id is None:
             continue
-        if idx < len(payouts) and payouts[idx] > 0:
+        # Winner-take-all: only the 1st-place human-owned seat is credited.
+        if idx == 0 and prize_pool > 0:
             user = (await db.execute(select(User).where(User.id == seat.user_id))).scalar_one_or_none()
             if user is not None:
-                user.chip_balance += payouts[idx]
+                user.chip_balance += prize_pool
 
 
 async def _build_state_payload(
@@ -795,6 +809,11 @@ async def _build_state_payload(
                 is_all_in=hs.is_all_in,
             ))
 
+        # DISPLAY pot = committed pot (persisted) + live un-collected bets.
+        # hand.pot_total stores pot_committed ONLY (P7); add the per-seat
+        # current_bet back for the displayed/advice pot total.
+        display_pot = active.pot_total + sum(hs.current_bet for hs in hand_seats)
+
         current_hand_payload = PokerHandStateOut(
             id=active.id,
             hand_number=active.hand_number,
@@ -803,7 +822,7 @@ async def _build_state_payload(
             big_blind=active.big_blind,
             ante=active.ante,
             board=list(active.board),
-            pot_total=active.pot_total,
+            pot_total=display_pot,
             side_pots=list(active.side_pots or []),
             street=active.street,
             current_bet_to_match=active.current_bet_to_match,
@@ -839,6 +858,9 @@ async def _get_hand_replay(
         raise HTTPException(status_code=404, detail="Hand not found")
 
     # Authorization: owner during play, public after.
+    # Capture the requester's own seat numbers so we can mask other seats'
+    # hole cards while the hand is still in progress (P6 — no mid-hand leak).
+    own_seat_numbers: set[int] = set()
     if hand.status != "complete":
         user_seats = (await db.execute(
             select(PokerSeat).where(
@@ -848,6 +870,7 @@ async def _get_hand_replay(
         )).scalars().all()
         if not user_seats:
             raise HTTPException(status_code=403, detail="Not a participant; replay available after showdown")
+        own_seat_numbers = {s.seat_number for s in user_seats}
 
     hand_seats = (await db.execute(
         select(PokerHandSeat).where(PokerHandSeat.hand_id == hand.id).order_by(PokerHandSeat.seat_number)
@@ -856,15 +879,21 @@ async def _get_hand_replay(
         select(PokerAction).where(PokerAction.hand_id == hand.id).order_by(PokerAction.action_index)
     )).scalars().all()
 
+    def _replay_hole(hs) -> list:
+        # Finished hands are public; while still in progress, mask every seat
+        # that the requester does not own (mirror _build_state_payload).
+        if hand.status != "complete" and hs.seat_number not in own_seat_numbers:
+            return [None, None]
+        return hs.hole_cards
+
     return PokerHandReplayOut(
         hand_id=hand.id,
         hand_number=hand.hand_number,
-        seed=hand.seed,
         button_seat=hand.button_seat,
         board=list(hand.board),
         seats=[PokerHandSeatStateOut(
             seat_number=hs.seat_number,
-            hole_cards=hs.hole_cards,
+            hole_cards=_replay_hole(hs),
             starting_stack=hs.starting_stack,
             final_stack=hs.final_stack,
             current_bet=hs.current_bet,

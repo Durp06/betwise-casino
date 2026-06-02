@@ -16,8 +16,20 @@ import uuid
 import pytest
 from fastapi import HTTPException
 from jose import jwt as jose_jwt
+from starlette.requests import Request
 
 from backend.auth import get_current_user
+
+
+def _make_request() -> Request:
+    """Minimal ASGI Request so get_current_user can set request.state.user_id.
+
+    get_current_user gained a ``request: Request`` parameter (P5 rate-limit
+    keying fix): it sets request.state.user_id before returning so slowapi's
+    key_func keys per-user instead of per-IP. These unit tests call the
+    dependency directly, so they supply a bare Request here.
+    """
+    return Request({"type": "http", "headers": []})
 
 
 # ─── Finding #7: dev bypass prod guard ──────────────────────────────────────
@@ -30,7 +42,7 @@ async def test_dev_bypass_rejected_in_production(monkeypatch):
     monkeypatch.setenv("ENVIRONMENT", "production")
 
     with pytest.raises(HTTPException) as exc:
-        await get_current_user(authorization=None)
+        await get_current_user(_make_request(), authorization=None)
     assert exc.value.status_code == 503
     assert "misconfigured" in exc.value.detail.lower()
 
@@ -41,7 +53,7 @@ async def test_dev_bypass_still_works_without_environment(monkeypatch):
     monkeypatch.setenv("BETWISE_DEV_USER_ID", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
     monkeypatch.delenv("ENVIRONMENT", raising=False)
 
-    result = await get_current_user(authorization=None)
+    result = await get_current_user(_make_request(), authorization=None)
     assert result == uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
 
@@ -51,7 +63,7 @@ async def test_dev_bypass_works_in_staging(monkeypatch):
     monkeypatch.setenv("BETWISE_DEV_USER_ID", "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
     monkeypatch.setenv("ENVIRONMENT", "staging")
 
-    result = await get_current_user(authorization=None)
+    result = await get_current_user(_make_request(), authorization=None)
     assert result == uuid.UUID("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa")
 
 
@@ -76,7 +88,7 @@ async def test_jwt_wrong_audience_rejected(monkeypatch):
     })
 
     with pytest.raises(HTTPException) as exc:
-        await get_current_user(authorization=f"Bearer {token}")
+        await get_current_user(_make_request(), authorization=f"Bearer {token}")
     assert exc.value.status_code == 401
 
 
@@ -94,7 +106,7 @@ async def test_jwt_wrong_issuer_rejected(monkeypatch):
     })
 
     with pytest.raises(HTTPException) as exc:
-        await get_current_user(authorization=f"Bearer {token}")
+        await get_current_user(_make_request(), authorization=f"Bearer {token}")
     assert exc.value.status_code == 401
 
 
@@ -112,7 +124,7 @@ async def test_jwt_correct_claims_accepted(monkeypatch):
         "iss": "https://right.supabase.co/auth/v1",
     })
 
-    result = await get_current_user(authorization=f"Bearer {token}")
+    result = await get_current_user(_make_request(), authorization=f"Bearer {token}")
     assert result == uuid.UUID(expected_sub)
 
 
@@ -130,5 +142,5 @@ async def test_jwt_no_supabase_url_skips_issuer_check(monkeypatch):
         # no iss claim at all
     })
 
-    result = await get_current_user(authorization=f"Bearer {token}")
+    result = await get_current_user(_make_request(), authorization=f"Bearer {token}")
     assert result == uuid.UUID(expected_sub)

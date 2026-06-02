@@ -262,7 +262,6 @@ class PokerTournamentOut(BaseModel):
     buy_in_cents: int
     starting_stack_chips: int
     hands_per_level: int
-    seed: int
     status: str
     button_seat: int
     current_hand_number: int
@@ -377,7 +376,6 @@ class PokerHandReplayOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     hand_id: uuid.UUID
     hand_number: int
-    seed: int
     button_seat: int
     board: list
     seats: list[PokerHandSeatStateOut]

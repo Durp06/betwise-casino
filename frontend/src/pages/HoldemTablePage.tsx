@@ -7,7 +7,7 @@
  * loading + error states. Reuses Board / PotDisplay; renders one HoldemSeat per
  * physical chair around the felt.
  */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { useSession } from "../auth/supabase";
 import { useGameStore } from "../store/gameStore";
@@ -49,10 +49,26 @@ export default function HoldemTablePage() {
   }, [tableId, setHoldemTableState]);
 
   // Leave (cash out / fold) on unmount so an absent player can't stall the table.
+  // Guard against React StrictMode's dev-only mount→cleanup→mount double-invoke:
+  // the cleanup schedules the leave on a macrotask tagged with the table id, and
+  // a synchronous remount for the SAME table cancels it — so a just-seated player
+  // isn't cashed out on the synthetic unmount. On a genuine unmount nothing
+  // remounts to cancel, so the leave fires; and switching to a different table id
+  // leaves the old one correctly (the pending leave is not cancelled).
+  const pendingLeaveRef = useRef<string | null>(null);
   useEffect(() => {
+    if (pendingLeaveRef.current === tableId) pendingLeaveRef.current = null;
+    const leavingTableId = tableId;
     return () => {
-      if (tableId) void leaveHoldemTable(tableId);
       setHoldemTableState(null);
+      if (!leavingTableId) return;
+      pendingLeaveRef.current = leavingTableId;
+      setTimeout(() => {
+        if (pendingLeaveRef.current === leavingTableId) {
+          pendingLeaveRef.current = null;
+          void leaveHoldemTable(leavingTableId);
+        }
+      }, 0);
     };
   }, [tableId, setHoldemTableState]);
 

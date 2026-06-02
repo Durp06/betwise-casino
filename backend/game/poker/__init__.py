@@ -6,9 +6,7 @@ Public surface (re-exported for `from backend.game.poker import ...`):
 - evaluator: Category, RankedHand, rank_hand, best_5_of_7, compare
 - ranges: chen_score, SKLANSKY_GROUPS, HAND_GRID, hand_str, combos_for, SC_RANK_ORDER
 - pot_odds: required_equity, bluff_breakeven, mdf, equity_from_outs
-- equity: equity, EquityResult
 - nash: push_fold_action, PUSH_FOLD_CHART
-- icm: harville_finish_distribution, icm_equity, icm_breakeven_call_equity
 - archetypes: ARCHETYPE_REGISTRY, decide, ArchetypeSpec, ArchetypeDecision
 - state: BettingState, apply_action, next_to_act, compute_side_pots, award_pots
 - tournament: BLIND_SCHEDULE_DEFAULT, PAYOUT_STRUCTURE_BY_SEATS, current_level
@@ -28,9 +26,7 @@ GAME_TYPE = "poker"
 from . import (  # noqa: F401,E402
     archetypes,
     cards,
-    equity,
     evaluator,
-    icm,
     nash,
     oracle,
     pot_odds,

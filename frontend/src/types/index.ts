@@ -210,7 +210,6 @@ export interface PokerTournament {
   buy_in_cents: number;
   starting_stack_chips: number;
   hands_per_level: number;
-  seed: number;
   status: string;
   button_seat: number;
   current_hand_number: number;

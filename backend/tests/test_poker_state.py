@@ -144,6 +144,40 @@ def test_all_in_for_less_does_not_reopen() -> None:
     assert nta != 0 or street_closed(s2)
 
 
+def test_short_all_in_does_not_let_prior_actor_reraise() -> None:
+    """A short all-in (increment < min-raise) raises the amount-to-call but does
+    NOT reopen betting. A player who already acted this street may only CALL the
+    extra — never re-raise. (Reviewer finding #4.)"""
+    s = create_state([200, 200, 60], button_seat=0, small_blind=5, big_blind=10)
+    # 3-handed preflop order: UTG (seat 0 = button) first, then SB (1), then BB (2).
+    s = apply_action(s, 0, "raise", amount=50)   # seat 0 full raise to 50 (incr 40)
+    s = apply_action(s, 1, "call")               # SB calls to 50
+    s = apply_action(s, 2, "all_in")             # BB all-in to 60: incr 10 < 40 → short, no reopen
+    assert s.current_bet_to_match == 60
+    assert s.min_raise_increment == 40           # unchanged by the short all-in
+    assert next_to_act(s) == 1                   # SB owes the extra 10
+    s = apply_action(s, 1, "call")               # SB calls to 60
+    # The prior aggressor (seat 0) is asked to act only to CALL the extra 10.
+    assert next_to_act(s) == 0
+    # It must NOT be allowed to re-raise — action was not reopened for it.
+    with pytest.raises(ValueError):
+        apply_action(s, 0, "raise", amount=120)
+
+
+def test_short_all_in_does_not_let_prior_actor_shove_over() -> None:
+    """A prior actor facing only a short all-in cannot shove all-in for a raise
+    either — going all-in for MORE than the call is still an illegal re-raise."""
+    s = create_state([200, 200, 60], button_seat=0, small_blind=5, big_blind=10)
+    s = apply_action(s, 0, "raise", amount=50)
+    s = apply_action(s, 1, "call")
+    s = apply_action(s, 2, "all_in")             # short all-in to 60
+    s = apply_action(s, 1, "call")               # SB calls to 60
+    assert next_to_act(s) == 0
+    # seat 0 has 150 behind; shoving to 200 would be a raise — illegal.
+    with pytest.raises(ValueError):
+        apply_action(s, 0, "all_in")
+
+
 # ─── Street closing (AC-B33) ──────────────────────────────────────────────────
 
 
@@ -252,24 +286,35 @@ def test_chip_conservation_fuzz_random_actions() -> None:
 
 
 def test_side_pots_three_all_ins_different_stacks() -> None:
-    """Three players all-in at different stack sizes (30, 60, 100):
-    main pot 30×3 = 90 eligible to all 3.
-    side pot 1: (60-30) × 2 = 60 eligible to back two.
-    side pot 2: (100-60) × 1 = 40 eligible to deepest only."""
+    """Three players all-in at different stack sizes (30, 60, 100).
+
+    Seat 2 puts in 100 but only seat 1 can match up to 60 — the top 40 is
+    UNCALLED. Per the uncalled-bet rule, advance_street refunds that 40 back to
+    seat 2 BEFORE collecting bets into the pot, so the deepest tier is never an
+    empty-/single-eligible side pot. Post-refund commitments are [30, 60, 60]:
+      main pot 30×3 = 90 eligible to all 3.
+      side pot  (60-30)×2 = 60 eligible to back two (seats 1, 2).
+    No third tier exists — seat 2's uncalled 40 returned to its stack.
+    """
     s = create_state([30, 60, 100], button_seat=0, small_blind=1, big_blind=2)
+    initial_total = total_chips_in_play(s)
     s = apply_action(s, 0, "all_in")  # seat 0: 30 total
     s = apply_action(s, 1, "all_in")  # seat 1: 60 total
-    s = apply_action(s, 2, "all_in")  # seat 2: 100 total
+    s = apply_action(s, 2, "all_in")  # seat 2: 100 total — top 40 uncalled
     # Move to "complete" by advancing all streets (allow runout)
     while s.street != "complete":
         s = advance_street(s)
+    # The uncalled 40 was refunded to seat 2's stack — chips conserved, not
+    # stranded in a single-eligible side pot.
+    assert s.seats[2].stack == 40
+    assert s.seats[2].is_all_in is False  # stack > 0 after refund
+    assert total_chips_in_play(s) == initial_total
     pots = compute_side_pots(s)
     # main pot: 30 * 3 = 90, eligible 0,1,2
     assert pots[0] == (90, [0, 1, 2])
-    # side pot 1: (60-30) * 2 = 60, eligible 1,2
+    # side pot: (60-30) * 2 = 60, eligible 1,2 — refund removed the 3rd tier
     assert pots[1] == (60, [1, 2])
-    # side pot 2: (100-60) * 1 = 40, eligible 2
-    assert pots[2] == (40, [2])
+    assert len(pots) == 2
 
 
 def test_side_pot_excludes_folded_players() -> None:

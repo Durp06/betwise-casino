@@ -261,6 +261,16 @@ def _apply_call(state: BettingState, seat_idx: int, to_call: int) -> BettingStat
 def _apply_raise(state: BettingState, seat_idx: int, raise_to: int, to_call: int) -> BettingState:
     """raise_to is the new current_bet level the raiser is moving to."""
     seat = state.seats[seat_idx]
+    if seat.has_acted_this_street:
+        # Action was not reopened for this seat. A full raise resets
+        # has_acted_this_street for every other live seat (see _apply_raise /
+        # _apply_all_in reopen branches), so a seat still flagged as having acted
+        # is only being asked back to call a short all-in (increment < min-raise).
+        # Per the rules it may call the extra or fold — never re-raise.
+        raise ValueError(
+            "Action not reopened: a player who has already acted may not raise "
+            "after an all-in for less than a full raise — call or fold"
+        )
     if raise_to <= state.current_bet_to_match:
         raise ValueError(f"Raise must be > current bet {state.current_bet_to_match}")
     raise_increment = raise_to - state.current_bet_to_match
@@ -307,6 +317,15 @@ def _apply_all_in(state: BettingState, seat_idx: int) -> BettingState:
     if seat.stack <= 0:
         raise ValueError("Seat has no chips to go all-in")
     new_bet_level = seat.current_bet + seat.stack
+    if seat.has_acted_this_street and new_bet_level > state.current_bet_to_match:
+        # Already acted and action not reopened (see _apply_raise's guard): an
+        # all-in for MORE than the call is a re-raise, which a short all-in does
+        # not entitle this seat to make. An all-in that only covers (or falls
+        # short of) the call is a legal all-in call and is allowed below.
+        raise ValueError(
+            "Action not reopened: cannot shove all-in for a raise after already "
+            "acting — call (all-in for the amount due) or fold"
+        )
     delta = seat.stack
     raise_increment = new_bet_level - state.current_bet_to_match
 
@@ -409,6 +428,43 @@ def next_to_act(state: BettingState) -> Optional[int]:
     return None
 
 
+def _return_uncalled_bet(state: BettingState) -> BettingState:
+    """Refund the uncalled portion of a lone top bet back to its bettor.
+
+    If exactly one seat sits at the highest current_bet level (m1 > 0) and no
+    other seat matched it, the excess over the second-highest level (m2) was
+    never called and must return to that seat — not be raked into the pot where
+    a sole survivor would steal it or an empty-eligible side pot would destroy
+    it. A tie at m1 (≥2 seats) means the bet was matched; no refund.
+
+    Chip-conserving: stack += refund, current_bet -= refund,
+    total_committed -= refund. total_chips_in_play is unchanged.
+    """
+    bets = [s.current_bet for s in state.seats]
+    m1 = max(bets)
+    if m1 <= 0:
+        return state
+    toppers = [i for i, b in enumerate(bets) if b == m1]
+    if len(toppers) != 1:
+        return state  # ≥2 seats tied at the top → fully called, no refund
+    top_idx = toppers[0]
+    m2 = max((b for i, b in enumerate(bets) if i != top_idx), default=0)
+    refund = m1 - m2
+    if refund <= 0:
+        return state
+    top = state.seats[top_idx]
+    new_stack = top.stack + refund
+    new_seats = list(state.seats)
+    new_seats[top_idx] = replace(
+        top,
+        stack=new_stack,
+        current_bet=top.current_bet - refund,
+        total_committed=top.total_committed - refund,
+        is_all_in=top.is_all_in and new_stack <= 0,
+    )
+    return replace(state, seats=tuple(new_seats))
+
+
 def advance_street(state: BettingState) -> BettingState:
     """Move to the next street: collect current_bets into pot_committed,
     reset has_acted_this_street, current_bet, last_aggressor."""
@@ -419,6 +475,12 @@ def advance_street(state: BettingState) -> BettingState:
         "river": "complete",
         "complete": "complete",
     }
+    # Return the uncalled bet BEFORE collecting current_bets into the pot. If a
+    # single seat over-committed beyond what anyone could match, refund the
+    # excess to that seat. This keeps every side-pot tier eligible to ≥1
+    # non-folded seat and preserves chip conservation (chips move from
+    # current_bet back to stack, never destroyed nor handed to others).
+    state = _return_uncalled_bet(state)
     pot_delta = sum(s.current_bet for s in state.seats)
     new_seats = tuple(
         replace(s, current_bet=0, has_acted_this_street=False)
@@ -507,18 +569,44 @@ def award_pots(
         )
 
     new_stacks = [s.stack for s in state.seats]
-    for (pot_amount, _eligible), winners in zip(pots, winners_per_pot, strict=False):
-        if not winners:
+    for (pot_amount, eligible), winners in zip(pots, winners_per_pot, strict=False):
+        # Defense-in-depth: a winner may only be credited from a pot it is
+        # eligible for. Intersect the named winners with this pot's eligible set
+        # so a caller passing an ineligible winner (e.g. the uncontested branch)
+        # cannot over-award. If that leaves no eligible winner, fall back to the
+        # pot's own eligible contenders so the chips are RETURNED to their
+        # rightful owners rather than silently destroyed. After the uncalled-bet
+        # return in advance_street an empty-eligible pot does not arise in real
+        # play; this fails CLOSED to conservation, never open to over-award/loss.
+        eligible_set = set(eligible)
+        eff = [w for w in winners if w in eligible_set] or list(eligible)
+        if not eff:
+            # Truly orphan pot (no eligible seat at all) — unreachable once
+            # uncalled bets are returned. Fail loud rather than destroy money.
+            if pot_amount > 0:
+                raise ValueError(
+                    f"award_pots: orphan pot of {pot_amount} with no eligible seat "
+                    "(uncalled-bet-return invariant violated)"
+                )
             continue
-        per_winner = pot_amount // len(winners)
-        remainder = pot_amount - per_winner * len(winners)
-        for w in winners:
+        per_winner = pot_amount // len(eff)
+        remainder = pot_amount - per_winner * len(eff)
+        for w in eff:
             new_stacks[w] += per_winner
         # Odd chip: first winner clockwise from button
         if remainder > 0:
-            ordered = sorted(winners, key=lambda i: (i - state.button_seat - 1) % state.n_seats)
+            ordered = sorted(eff, key=lambda i: (i - state.button_seat - 1) % state.n_seats)
             for j in range(remainder):
                 new_stacks[ordered[j % len(ordered)]] += 1
+
+    # Chip conservation: every pot chip must land in a stack — never minted nor
+    # destroyed. Fail loud on violation (catches any future side-pot/winners bug).
+    expected_total = sum(s.stack for s in state.seats) + sum(amt for amt, _ in pots)
+    if sum(new_stacks) != expected_total:
+        raise ValueError(
+            f"award_pots chip non-conservation: awarded {sum(new_stacks)}, "
+            f"expected {expected_total}"
+        )
 
     new_seats = tuple(
         replace(s, stack=new_stacks[i]) for i, s in enumerate(state.seats)
