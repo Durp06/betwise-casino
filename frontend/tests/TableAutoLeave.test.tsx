@@ -52,6 +52,10 @@ vi.mock("../src/api/client", () => ({
   getHandActions: vi.fn().mockResolvedValue({ data: [], error: null }),
   getSessionReview: vi.fn().mockResolvedValue({ data: null, error: null }),
   gradePractice: vi.fn().mockResolvedValue({ data: null, error: null }),
+  // ChatPanel (added to Table.tsx by the poker merge) polls these — stub so the
+  // panel mounts without an unhandled rejection during this Table render test.
+  getChatMessages: vi.fn().mockResolvedValue({ data: [], error: null }),
+  postChatMessage: vi.fn().mockResolvedValue({ data: null, error: null }),
 }));
 
 // ── Mock supabase / useSession ────────────────────────────────────────────────
