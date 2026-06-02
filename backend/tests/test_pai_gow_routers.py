@@ -94,6 +94,72 @@ async def test_join_idempotent_returns_existing_seat(client, db):
 
 
 @pytest.mark.asyncio
+async def test_join_two_users_get_distinct_seats(db):
+    """Two users joining sequentially get distinct seats (1, 2). Verifies the
+    basic correctness of seat assignment.
+
+    The race-retry path itself (savepoint + IntegrityError recompute) cannot
+    be triggered under aiosqlite + StaticPool because the shared connection
+    serializes transactions; both sessions either see committed data or none.
+    On real Postgres, the savepoint pattern is what prevents the 500 — that
+    behavior is verified by code review against state._find_or_create_active_round's
+    fix B (identical pattern, same exception type, same retry shape).
+    """
+    await seed_user(db, TEST_USER_ID, "alice")
+    await seed_user(db, OTHER_USER_ID, "bob")
+    table = await seed_pai_gow_table(db)
+
+    from backend.routers.pai_gow_tables import _join_seat  # noqa: PLC0415
+    a = await _join_seat(table.id, TEST_USER_ID, db)
+    b = await _join_seat(table.id, OTHER_USER_ID, db)
+    assert a.seat_number != b.seat_number
+    assert {a.seat_number, b.seat_number} == {1, 2}
+
+
+@pytest.mark.asyncio
+async def test_join_picks_next_open_seat_when_lower_seats_taken(db):
+    """If seat 1 is already occupied, _join_seat assigns seat 2. Exercises
+    the recompute-occupied + pick-next path that the savepoint retry also
+    relies on after an IntegrityError.
+    """
+    await seed_user(db, TEST_USER_ID, "alice")
+    await seed_user(db, OTHER_USER_ID, "bob")
+    table = await seed_pai_gow_table(db)
+    # Pre-claim seat 1 for alice.
+    await seed_pai_gow_seat(db, table.id, TEST_USER_ID, seat_number=1)
+
+    from backend.routers.pai_gow_tables import _join_seat  # noqa: PLC0415
+    bob_seat = await _join_seat(table.id, OTHER_USER_ID, db)
+    assert bob_seat.seat_number == 2
+
+
+@pytest.mark.asyncio
+async def test_join_returns_409_when_table_is_full(db):
+    """When all max_seats are taken, _join_seat returns HTTP 409."""
+    from fastapi import HTTPException  # noqa: PLC0415
+
+    await seed_user(db, TEST_USER_ID, "alice", chip_balance=100_000)
+    table = await seed_pai_gow_table(db)
+    # Fill every seat with placeholder users.
+    for i in range(table.max_seats):
+        from backend.models import User  # noqa: PLC0415
+        import uuid as _u  # noqa: PLC0415
+        placeholder_id = _u.uuid4()
+        db.add(User(
+            id=placeholder_id,
+            username=f"placeholder_{i}",
+            chip_balance=1_000,
+        ))
+        await db.flush()
+        await seed_pai_gow_seat(db, table.id, placeholder_id, seat_number=i + 1)
+
+    from backend.routers.pai_gow_tables import _join_seat  # noqa: PLC0415
+    with pytest.raises(HTTPException) as exc:
+        await _join_seat(table.id, TEST_USER_ID, db)
+    assert exc.value.status_code == 409
+
+
+@pytest.mark.asyncio
 async def test_get_state_404_for_unknown_table(client, db):
     await seed_user(db, TEST_USER_ID, "alice")
     resp = await client.get("/api/pai-gow/tables/00000000-0000-0000-0000-000000000099/state")
