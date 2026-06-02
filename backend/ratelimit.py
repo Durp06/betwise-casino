@@ -32,8 +32,22 @@ def _rate_limit_key(request: Request) -> str:
     return get_remote_address(request)
 
 
-limiter = Limiter(key_func=_rate_limit_key)
+# `storage_uri` defaults to in-memory (fine for the single-worker Railway
+# container). Point BETWISE_RATELIMIT_STORAGE at a Redis URL when running
+# multiple workers/replicas so the per-user counters are shared rather than
+# per-process (otherwise the effective limit is N× the configured value).
+limiter = Limiter(
+    key_func=_rate_limit_key,
+    storage_uri=os.environ.get("BETWISE_RATELIMIT_STORAGE", "memory://"),
+)
 
-# Tunable per environment. Tests set this to a high number to avoid
+# Tunable per environment. Tests set these to a high number to avoid
 # tripping the limit during normal test runs.
 ADVICE_RATE_LIMIT = os.environ.get("BETWISE_ADVICE_RATE_LIMIT", "10/minute")
+
+# Per-user throttle for state-mutating / compute-heavy game endpoints
+# (deal/act/join/leave/state across holdem + poker + blackjack). A DB-connection
+# / DoS guard, not a billing cap. Generous enough for the 3-second client poll
+# (~20/min) plus normal play; env-tunable so the test suite (which hammers these
+# in tight loops) can disable it and ops can tighten in production.
+MUTATION_RATE_LIMIT = os.environ.get("BETWISE_MUTATION_RATE_LIMIT", "120/minute")

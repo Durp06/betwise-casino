@@ -16,7 +16,7 @@ import uuid
 from typing import Annotated, Any
 
 import httpx
-from fastapi import Depends, Header, HTTPException
+from fastapi import Depends, Header, HTTPException, Request
 from jose import jwt
 
 # ─── Module-level JWKS cache ─────────────────────────────────────────────────
@@ -54,12 +54,18 @@ async def _fetch_jwks() -> dict:
 
 
 async def get_current_user(
+    request: Request,
     authorization: str | None = Header(default=None, alias="Authorization"),
 ) -> uuid.UUID:
     """FastAPI dependency: verify JWT and return the user UUID.
 
     Test bypass: if BETWISE_DEV_USER_ID env var is set, skip verification
     and return that UUID directly. Documented in CLAUDE.md.
+
+    Sets request.state.user_id (str) before returning on both the dev-bypass
+    and JWT-success paths. Because this dependency resolves BEFORE slowapi's
+    wrapper body runs, the per-user rate-limit key_func sees the user id and
+    keys per-user instead of falling back to the proxy IP.
 
     Raises HTTPException(401) on any auth failure with a clean message.
     """
@@ -79,9 +85,12 @@ async def get_current_user(
 
     if dev_user_id:
         try:
-            return uuid.UUID(dev_user_id)
+            user_uuid = uuid.UUID(dev_user_id)
         except ValueError:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
+        # Set BEFORE returning so slowapi's key_func keys per-user, not per-IP.
+        request.state.user_id = str(user_uuid)
+        return user_uuid
 
     # ── Production JWT verification ──────────────────────────────────────────
     if not authorization or not authorization.startswith("Bearer "):
@@ -135,7 +144,10 @@ async def get_current_user(
         sub = payload.get("sub")
         if not sub:
             raise HTTPException(status_code=401, detail="Invalid or expired token")
-        return uuid.UUID(str(sub))
+        user_uuid = uuid.UUID(str(sub))
+        # Set BEFORE returning so slowapi's key_func keys per-user, not per-IP.
+        request.state.user_id = str(user_uuid)
+        return user_uuid
 
     except HTTPException:
         raise
