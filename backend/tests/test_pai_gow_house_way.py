@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import pytest
 
-from backend.game.pai_gow.cards import JOKER, card_rank
+import random
+
+from backend.game.pai_gow.cards import JOKER, card_rank, create_deck
 from backend.game.pai_gow.evaluator import score_hand
-from backend.game.pai_gow.house_way import foxwoods
+from backend.game.pai_gow.house_way import _resolve_joker_as_ace, foxwoods
 
 
 _SUIT_SHORT = {"h": "hearts", "d": "diamonds", "c": "clubs", "s": "spades"}
@@ -425,3 +427,60 @@ def test_house_way_rejects_non_7_cards():
         foxwoods([C("h", "A")])
     with pytest.raises(ValueError):
         foxwoods([C("h", str(i)) if i < 10 else C("h", "K") for i in range(2, 10)])  # 8 cards
+
+
+# ─── Randomized fuzz sweep (300 seeded deals) ────────────────────────────────
+
+
+def _card_key(c):
+    return (c["suit"], c["value"])
+
+
+def test_house_way_fuzz_300_random_seeds():
+    """Fuzz over 300 seeded random 7-card deals from the 53-card deck.
+
+    For every hand, foxwoods() must satisfy three invariants:
+      (a) No foul:    score_hand(back) >= score_hand(front) under §7.3.
+      (b) Exact size: len(front) == 2 and len(back) == 5.
+      (c) Multiset preservation: the 7 cards in (front + back), compared by
+          (suit, value), exactly match the input AFTER joker resolution.
+          (Joker is substituted to Ace-of-an-unused-suit before dispatch —
+          see _resolve_joker_as_ace docstring.)
+
+    Seeded `random.Random(seed)` means deterministic — same 300 hands on
+    every run. Any future house-way change that fouls or loses a card on
+    ANY of the 300 hands surfaces immediately.
+    """
+    for seed in range(300):
+        rng = random.Random(seed)
+        deck = create_deck()  # 53 cards (52 + joker)
+        rng.shuffle(deck)
+        cards = deck[:7]
+
+        front, back = foxwoods(cards)
+
+        # (a) No foul
+        assert score_hand(back) >= score_hand(front), (
+            f"FOUL on seed={seed}: front={front} back={back} "
+            f"score_front={score_hand(front)} score_back={score_hand(back)} "
+            f"input={cards}"
+        )
+
+        # (b) Exact card counts
+        assert len(front) == 2, (
+            f"seed={seed}: front size={len(front)}, expected 2; input={cards}"
+        )
+        assert len(back) == 5, (
+            f"seed={seed}: back size={len(back)}, expected 5; input={cards}"
+        )
+
+        # (c) Multiset preservation (after joker resolution)
+        resolved_input = _resolve_joker_as_ace(cards)
+        input_keys = sorted(_card_key(c) for c in resolved_input)
+        output_keys = sorted(_card_key(c) for c in (front + back))
+        assert input_keys == output_keys, (
+            f"seed={seed}: multiset mismatch.\n"
+            f"  input (post-joker resolution): {input_keys}\n"
+            f"  output (front + back):         {output_keys}\n"
+            f"  raw input:                     {cards}"
+        )
