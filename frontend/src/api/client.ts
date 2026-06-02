@@ -11,8 +11,21 @@ import type {
   Action,
   AdviceResult,
   ApiResult,
+  FortunePool,
   HandReplayAction,
   LeaderboardRow,
+  PaiGowAdvicePostSummary,
+  PaiGowAdvicePreSummary,
+  PaiGowCard,
+  PaiGowDealIn,
+  PaiGowPlayerHand,
+  PaiGowReplayAction,
+  PaiGowSeat,
+  PaiGowSetIn,
+  PaiGowTableCreateIn,
+  PaiGowTableListItem,
+  PaiGowTableOut,
+  PaiGowTableState,
   SessionReview,
   TableListRow,
   TableOut,
@@ -282,6 +295,187 @@ export async function streamPreAdvice(
     onError(NETWORK_ERROR_MSG);
   }
 }
+
+// ─── Pai Gow Poker (additive — separate endpoint surface at /api/pai-gow) ──
+
+export async function listPaiGowTables(): Promise<ApiResult<PaiGowTableListItem[]>> {
+  return apiFetch<PaiGowTableListItem[]>("/api/pai-gow/tables");
+}
+
+export async function createPaiGowTable(
+  body: PaiGowTableCreateIn,
+): Promise<ApiResult<PaiGowTableOut>> {
+  return apiFetch<PaiGowTableOut>("/api/pai-gow/tables", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function joinPaiGowTable(tableId: string): Promise<ApiResult<PaiGowSeat>> {
+  return apiFetch<PaiGowSeat>(`/api/pai-gow/tables/${tableId}/join`, {
+    method: "POST",
+  });
+}
+
+export async function leavePaiGowTable(
+  tableId: string,
+): Promise<ApiResult<{ status: string }>> {
+  return apiFetch<{ status: string }>(`/api/pai-gow/tables/${tableId}/leave`, {
+    method: "POST",
+  });
+}
+
+export async function getPaiGowTableState(
+  tableId: string,
+): Promise<ApiResult<PaiGowTableState>> {
+  return apiFetch<PaiGowTableState>(`/api/pai-gow/tables/${tableId}/state`);
+}
+
+export async function dealPaiGowHand(
+  tableId: string,
+  body: PaiGowDealIn,
+): Promise<ApiResult<PaiGowPlayerHand>> {
+  return apiFetch<PaiGowPlayerHand>(`/api/pai-gow/tables/${tableId}/deal`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function setPaiGowHand(
+  handId: string,
+  body: PaiGowSetIn,
+): Promise<ApiResult<PaiGowPlayerHand>> {
+  return apiFetch<PaiGowPlayerHand>(`/api/pai-gow/hands/${handId}/set`, {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getPaiGowReplay(
+  handId: string,
+): Promise<ApiResult<PaiGowReplayAction[]>> {
+  return apiFetch<PaiGowReplayAction[]>(`/api/pai-gow/hands/${handId}/replay`);
+}
+
+export async function getFortunePool(): Promise<ApiResult<FortunePool>> {
+  return apiFetch<FortunePool>("/api/pai-gow/fortune-pool");
+}
+
+/** Stream Chipy's pre-set advice for a Pai Gow hand. Final SSE event has
+ *  `optimal_front`/`optimal_back` + `phase: "pre"`; we surface that summary
+ *  via `onDone` so HandSetter can highlight the recommended split. */
+export async function streamPaiGowPreAdvice(
+  handId: string,
+  onChunk: (text: string) => void,
+  onDone: (summary: PaiGowAdvicePreSummary | null) => void,
+  onError: (message: string) => void,
+): Promise<void> {
+  await _streamPaiGowSse<PaiGowAdvicePreSummary>(
+    `/api/pai-gow/advice/${handId}/pre`,
+    null,
+    (parsed) => "phase" in parsed && parsed.phase === "pre",
+    onChunk,
+    onDone,
+    onError,
+  );
+}
+
+/** Stream Chipy's post-set advice. Body carries the player's submitted split
+ *  so Chipy can compare against the optimal. */
+export async function streamPaiGowPostAdvice(
+  handId: string,
+  body: { front: PaiGowCard[]; back: PaiGowCard[] },
+  onChunk: (text: string) => void,
+  onDone: (summary: PaiGowAdvicePostSummary | null) => void,
+  onError: (message: string) => void,
+): Promise<void> {
+  await _streamPaiGowSse<PaiGowAdvicePostSummary>(
+    `/api/pai-gow/advice/${handId}`,
+    body,
+    (parsed) => "phase" in parsed && parsed.phase === "post",
+    onChunk,
+    onDone,
+    onError,
+  );
+}
+
+async function _streamPaiGowSse<TSummary>(
+  url: string,
+  jsonBody: unknown,
+  isFinal: (parsed: Record<string, unknown>) => boolean,
+  onChunk: (text: string) => void,
+  onDone: (summary: TSummary | null) => void,
+  onError: (message: string) => void,
+): Promise<void> {
+  try {
+    const authHeaders = await getAuthHeaders();
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", ...authHeaders },
+      body: jsonBody === null ? undefined : JSON.stringify(jsonBody),
+    });
+
+    if (res.status === 401) {
+      fireSessionExpired();
+      onError(SESSION_EXPIRED_MSG);
+      return;
+    }
+    if (!res.ok) {
+      let message = `HTTP ${res.status}`;
+      try {
+        const body = (await res.json()) as { detail?: string };
+        if (body.detail) message = body.detail;
+      } catch {
+        // ignore
+      }
+      onError(message);
+      return;
+    }
+    if (!res.body) {
+      onError("No response body from Pai Gow advice endpoint");
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let summary: TSummary | null = null;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const events = buffer.split("\n\n");
+      buffer = events.pop() ?? "";
+      for (const event of events) {
+        if (!event.trim()) continue;
+        const dataLines = event
+          .split("\n")
+          .filter((line) => line.startsWith("data: "))
+          .map((line) => line.slice("data: ".length));
+        for (const dataPayload of dataLines) {
+          if (!dataPayload.trim()) continue;
+          try {
+            const parsed = JSON.parse(dataPayload) as Record<string, unknown>;
+            if (isFinal(parsed)) {
+              summary = parsed as unknown as TSummary;
+            } else if (typeof parsed.text === "string") {
+              onChunk(parsed.text);
+            } else {
+              onChunk(dataPayload);
+            }
+          } catch {
+            onChunk(dataPayload);
+          }
+        }
+      }
+    }
+    onDone(summary);
+  } catch {
+    onError(NETWORK_ERROR_MSG);
+  }
+}
+
 
 export async function streamAdvice(
   handId: string,
