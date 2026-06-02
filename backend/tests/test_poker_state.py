@@ -144,6 +144,40 @@ def test_all_in_for_less_does_not_reopen() -> None:
     assert nta != 0 or street_closed(s2)
 
 
+def test_short_all_in_does_not_let_prior_actor_reraise() -> None:
+    """A short all-in (increment < min-raise) raises the amount-to-call but does
+    NOT reopen betting. A player who already acted this street may only CALL the
+    extra — never re-raise. (Reviewer finding #4.)"""
+    s = create_state([200, 200, 60], button_seat=0, small_blind=5, big_blind=10)
+    # 3-handed preflop order: UTG (seat 0 = button) first, then SB (1), then BB (2).
+    s = apply_action(s, 0, "raise", amount=50)   # seat 0 full raise to 50 (incr 40)
+    s = apply_action(s, 1, "call")               # SB calls to 50
+    s = apply_action(s, 2, "all_in")             # BB all-in to 60: incr 10 < 40 → short, no reopen
+    assert s.current_bet_to_match == 60
+    assert s.min_raise_increment == 40           # unchanged by the short all-in
+    assert next_to_act(s) == 1                   # SB owes the extra 10
+    s = apply_action(s, 1, "call")               # SB calls to 60
+    # The prior aggressor (seat 0) is asked to act only to CALL the extra 10.
+    assert next_to_act(s) == 0
+    # It must NOT be allowed to re-raise — action was not reopened for it.
+    with pytest.raises(ValueError):
+        apply_action(s, 0, "raise", amount=120)
+
+
+def test_short_all_in_does_not_let_prior_actor_shove_over() -> None:
+    """A prior actor facing only a short all-in cannot shove all-in for a raise
+    either — going all-in for MORE than the call is still an illegal re-raise."""
+    s = create_state([200, 200, 60], button_seat=0, small_blind=5, big_blind=10)
+    s = apply_action(s, 0, "raise", amount=50)
+    s = apply_action(s, 1, "call")
+    s = apply_action(s, 2, "all_in")             # short all-in to 60
+    s = apply_action(s, 1, "call")               # SB calls to 60
+    assert next_to_act(s) == 0
+    # seat 0 has 150 behind; shoving to 200 would be a raise — illegal.
+    with pytest.raises(ValueError):
+        apply_action(s, 0, "all_in")
+
+
 # ─── Street closing (AC-B33) ──────────────────────────────────────────────────
 
 

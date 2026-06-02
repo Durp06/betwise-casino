@@ -261,6 +261,16 @@ def _apply_call(state: BettingState, seat_idx: int, to_call: int) -> BettingStat
 def _apply_raise(state: BettingState, seat_idx: int, raise_to: int, to_call: int) -> BettingState:
     """raise_to is the new current_bet level the raiser is moving to."""
     seat = state.seats[seat_idx]
+    if seat.has_acted_this_street:
+        # Action was not reopened for this seat. A full raise resets
+        # has_acted_this_street for every other live seat (see _apply_raise /
+        # _apply_all_in reopen branches), so a seat still flagged as having acted
+        # is only being asked back to call a short all-in (increment < min-raise).
+        # Per the rules it may call the extra or fold — never re-raise.
+        raise ValueError(
+            "Action not reopened: a player who has already acted may not raise "
+            "after an all-in for less than a full raise — call or fold"
+        )
     if raise_to <= state.current_bet_to_match:
         raise ValueError(f"Raise must be > current bet {state.current_bet_to_match}")
     raise_increment = raise_to - state.current_bet_to_match
@@ -307,6 +317,15 @@ def _apply_all_in(state: BettingState, seat_idx: int) -> BettingState:
     if seat.stack <= 0:
         raise ValueError("Seat has no chips to go all-in")
     new_bet_level = seat.current_bet + seat.stack
+    if seat.has_acted_this_street and new_bet_level > state.current_bet_to_match:
+        # Already acted and action not reopened (see _apply_raise's guard): an
+        # all-in for MORE than the call is a re-raise, which a short all-in does
+        # not entitle this seat to make. An all-in that only covers (or falls
+        # short of) the call is a legal all-in call and is allowed below.
+        raise ValueError(
+            "Action not reopened: cannot shove all-in for a raise after already "
+            "acting — call (all-in for the amount due) or fold"
+        )
     delta = seat.stack
     raise_increment = new_bet_level - state.current_bet_to_match
 
