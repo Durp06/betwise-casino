@@ -38,7 +38,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from backend.game.pai_gow.cards import Card, card_sort_key
+from backend.game.pai_gow.cards import Card
+from backend.game.pai_gow.evaluator import score_hand
 from backend.game.pai_gow.house_way import foxwoods
 
 
@@ -136,10 +137,23 @@ def evaluate_split(
 ) -> SplitEvaluation:
     """Compare the player's chosen split against `find_optimal`'s output.
 
-    Uses canonical-sort equality per spec §12.5 — the player's input order
-    doesn't affect the comparison, so `[K♥, K♠]` and `[K♠, K♥]` are treated
-    as identical. This is the round-6 #5 fix that prevented the streak
-    from being falsely reset on order-permuted but otherwise-correct plays.
+    Uses **hand-strength equality** (`score_hand`) instead of card-identity
+    equality. This is the round-7 catch over and above round-6 #5: comparing
+    the actual cards (even after canonical sort) falsely flags EV-equivalent
+    swaps as suboptimal. Examples:
+
+    - Quad K split (`KK | KK + kickers`): all 4 K's are interchangeable for
+      front; picking K♣K♦ vs K♥K♠ for front are EV-identical pair-of-K hands,
+      but card-identity comparison would say "wrong cards" and reset the
+      streak.
+    - Straight using one of two same-rank cards (e.g., 9-8-7-6-5 with two 9's
+      in hand): either 9 can fill the straight slot, same EV.
+    - Flush using any 5 of N+ suited cards.
+
+    Hand-strength equality correctly identifies all these as optimal because
+    `score_hand` returns identical tuples for EV-identical hands. Order
+    independence (round-6 #5) is free because `score_hand` sorts ranks
+    internally — no need for explicit canonical sort of the lists.
 
     Phase 4 calls this from the post-set advice endpoint and the
     strategy-streak update path. It is the AUTHORITATIVE oracle for
@@ -152,15 +166,15 @@ def evaluate_split(
 
     optimal = find_optimal(cards)
 
-    # Canonical-sort both halves before equality (§12.5).
-    player_front_sorted = sorted(player_front, key=card_sort_key)
-    player_back_sorted = sorted(player_back, key=card_sort_key)
-    optimal_front_sorted = sorted(optimal.front, key=card_sort_key)
-    optimal_back_sorted = sorted(optimal.back, key=card_sort_key)
-
+    # Hand-strength equality (round-7 fix): score_hand handles both order
+    # independence (internal sort) AND EV-equivalent card swaps in a single
+    # comparison. Two splits with identical strength tuples ARE EV-identical
+    # by definition — the player's "win-on-side" probability against any
+    # dealer hand depends only on the strength tuple, not on which specific
+    # cards built it.
     is_optimal = (
-        player_front_sorted == optimal_front_sorted
-        and player_back_sorted == optimal_back_sorted
+        score_hand(player_front) == score_hand(optimal.front)
+        and score_hand(player_back) == score_hand(optimal.back)
     )
 
     if is_optimal:

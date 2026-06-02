@@ -101,22 +101,95 @@ def test_evaluate_split_matching_optimal_returns_is_optimal_true():
     assert result.ev_loss_unit_cents == 0
 
 
-def test_evaluate_split_order_independent_via_canonical_sort_round6_fix():
-    """The round-6 #5 catch: comparing `[K♥, K♠]` to `[K♠, K♥]` as raw lists
-    would falsely flag the player as suboptimal and reset the streak. The
-    canonical-sort comparison must treat them as equivalent.
+def test_evaluate_split_order_independent_via_score_hand_round6_fix():
+    """Round-6 #5: comparing `[K♥, K♠]` to `[K♠, K♥]` as raw lists would
+    falsely flag the player as suboptimal and reset the streak. With the
+    round-7 score-based comparison, order independence is free because
+    `score_hand` sorts ranks internally.
     """
     cards = [
         C("h", "K"), C("s", "K"), C("d", "Q"), C("c", "9"),
         C("h", "5"), C("s", "3"), C("c", "2"),
     ]
     optimal = find_optimal(cards)
-    # Reverse the order of each half — equivalent hand under §12.5
+    # Reverse the order of each half — same EV.
     player_front = list(reversed(optimal.front))
     player_back = list(reversed(optimal.back))
     result = evaluate_split(cards, player_front, player_back)
     assert result.is_optimal is True
     assert result.ev_loss_unit_cents == 0
+
+
+def test_evaluate_split_quad_K_different_K_choice_is_EV_equivalent_round7_catch():
+    """**Round-7 catch**: with 4 K's in hand, ALL 4 are interchangeable for
+    the front pair. House way picks (say) K♣K♦ for the front; player picks
+    K♥K♠ instead. Both are "pair of K" — score (ONE_PAIR, 13) — same EV,
+    same win probability against any dealer hand.
+
+    The previous card-identity comparison would have said "wrong cards" and
+    reset the player's streak. This breaks the 'measurably better player'
+    gold-feature thesis because the player IS playing optimally and the
+    streak counter should reflect that.
+    """
+    cards = [
+        C("h", "K"), C("s", "K"), C("d", "K"), C("c", "K"),
+        C("h", "J"), C("s", "5"), C("c", "3"),
+    ]
+    optimal = find_optimal(cards)
+    # Sanity: house_way picked the lowest-sorted 2 K's for front.
+    assert len(optimal.front) == 2 and len(optimal.back) == 5
+
+    # Player picks the OTHER 2 K's for front (the ones house_way put in back).
+    optimal_front_cards = {(c["suit"], c["value"]) for c in optimal.front}
+    all_K = [c for c in cards if c["value"] == "K"]
+    player_front = [c for c in all_K if (c["suit"], c["value"]) not in optimal_front_cards]
+    # Player's back: the other 2 K's + the 3 non-K kickers.
+    non_K = [c for c in cards if c["value"] != "K"]
+    player_back = list(optimal.front) + non_K
+    # Defensive: sizes should match.
+    assert len(player_front) == 2
+    assert len(player_back) == 5
+
+    result = evaluate_split(cards, player_front, player_back)
+    assert result.is_optimal is True, (
+        f"EV-equivalent K-swap should match. "
+        f"player_front_score={result}; optimal_front={optimal.front}"
+    )
+    assert result.ev_loss_unit_cents == 0
+
+
+def test_evaluate_split_straight_using_either_of_two_same_rank_cards_is_EV_equivalent():
+    """When a hand has two cards of the same rank and one fills a straight,
+    swapping which one goes into the straight (vs leftover) is EV-equivalent.
+
+    Hand: 9♥ 9♦ 8♣ 7♣ 6♣ 5♣ K♠ — straight 9-5; one 9 in straight, one in
+    front. Whether the 9♥ or 9♦ fills the straight, the split scores
+    identically: back = (STRAIGHT, 4), front depends but same in both cases.
+    """
+    cards = [
+        C("h", "9"), C("d", "9"), C("c", "8"), C("c", "7"),
+        C("c", "6"), C("c", "5"), C("s", "K"),
+    ]
+    optimal = find_optimal(cards)
+
+    # Identify the 9 in the optimal back (used in the straight) and the 9 in
+    # front/elsewhere. Player swaps which 9 goes where.
+    nines_in_back = [c for c in optimal.back if c["value"] == "9"]
+    nines_in_front_or_back = [c for c in cards if c["value"] == "9"]
+
+    # Skip the swap test if both 9's ended up in the same half (no swap possible).
+    if len(nines_in_back) != 1:
+        pytest.skip("Both 9's in same half; no meaningful swap test")
+
+    in_back_9 = nines_in_back[0]
+    out_back_9 = next(c for c in nines_in_front_or_back if c is not in_back_9)
+
+    # Build player split by swapping the two 9's.
+    player_back = [out_back_9 if c is in_back_9 else c for c in optimal.back]
+    player_front = [in_back_9 if c is out_back_9 else c for c in optimal.front]
+
+    result = evaluate_split(cards, player_front, player_back)
+    assert result.is_optimal is True
 
 
 def test_evaluate_split_deviating_returns_is_optimal_false():
