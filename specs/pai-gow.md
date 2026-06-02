@@ -495,11 +495,16 @@ In a single DB transaction:
 2. For each hand:
    a. If fouled (shouldn't happen — fouls are rejected at set-time): `front_compare=back_compare=None`, `hand_result='lose'`, `ante_payout_cents = -bet_cents`. Refund: no chip_balance change (already escrowed).
    b. Else: compute `front_compare = compare_side(player_front, dealer_front)`, `back_compare = compare_side(player_back, dealer_back)`. Resolve via §10 truth table.
-3. Apply payouts:
-   - WIN: `chip_balance += 2 * bet_cents` (return original + win).
-   - PUSH: `chip_balance += bet_cents` (refund).
-   - LOSE: nothing (already escrowed).
-4. For each hand with `fortune_bet_cents > 0`, evaluate Fortune (§11) and apply payout. Pool-tier payouts use `SELECT ... FOR UPDATE` on `fortune_pool`.
+3. Apply ante payouts:
+   - WIN: `chip_balance += 2 * bet_cents` (escrow refund + win).
+   - PUSH: `chip_balance += bet_cents` (escrow refund only).
+   - LOSE: nothing (escrow stays with the house).
+4. For each hand with `fortune_bet_cents > 0`, evaluate Fortune via `fortune.classify_fortune(seven_cards, fortune_bet_cents)` (§11.1).
+   - **No qualification**: nothing happens. The fortune_bet escrow stays with the house (this is the "lose" case for the side bet).
+   - **FIXED tier**: `chip_balance += fortune_bet_cents + fortune_payout_cents` where `fortune_payout_cents = fortune.fixed_payout_cents(category, fortune_bet_cents)`. The `fortune_bet_cents` term is the **escrow refund** (the bet was deducted at deal); the `fortune_payout_cents` term is the multiplier × bet winnings. Net delta over deal→resolve cycle: **+fortune_payout_cents** ("X to 1" odds).
+   - **GRAND / MAJOR (pool tier)**: inside the `SELECT ... FOR UPDATE` row lock on `fortune_pool` (§11.4), compute `(payout, new_amount) = fortune.pool_payout_cents(tier, current_amount, seed_cents)`. Then `chip_balance += fortune_bet_cents + payout` (same escrow-refund + payout pattern). `UPDATE fortune_pool SET amount_cents = :new_amount`. INSERT `fortune_pool_events` row recording the payout.
+
+   **Critical**: Skipping the `fortune_bet_cents` refund term underpays the player by exactly one bet (`fortune_payout` alone is the winnings, not the gross return). The pattern mirrors the ante's "WIN = +2*bet" structure: escrow comes back AND winnings are added. Same discipline.
 5. Update `pai_gow_strategy_streaks` for each player based on `was_optimal` from their player_action row.
 6. Mark each hand `action_status='resolved'`, `resolved_at=now()`.
 7. CAS `dealer_turn → finished` on the round, stamp `resolved_at`.
