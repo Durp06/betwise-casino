@@ -85,6 +85,35 @@ BETWISE_TEST_DB_URL=sqlite+aiosqlite:///:memory:
 
 The frontend additionally reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from a `frontend/.env.local` file (Vite picks these up automatically).
 
+## Pai Gow Poker — deploy checklist
+
+`backend/migrations/005_pai_gow.sql` is NOT run by CI or any automated process — same pattern as the earlier migrations (`001_initial.sql` through `004_chat.sql`). Before the deploy that ships PG code reaches production, **the migration must be applied manually to the prod Supabase database**.
+
+1. **Apply the migration** — Supabase dashboard → SQL Editor → paste the contents of `backend/migrations/005_pai_gow.sql` → Run. (Or `psql $DATABASE_URL -f backend/migrations/005_pai_gow.sql`.) The file is idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`); safe to run twice.
+2. **Verify the schema** — run these checks in the same SQL editor:
+   ```sql
+   -- 8 PG tables present
+   SELECT table_name FROM information_schema.tables
+   WHERE table_schema = 'public' AND table_name LIKE 'pai_gow_%' OR table_name LIKE 'fortune_pool%'
+   ORDER BY table_name;
+   -- expect: fortune_pool, fortune_pool_events, pai_gow_player_actions,
+   --        pai_gow_player_hands, pai_gow_rounds, pai_gow_seats,
+   --        pai_gow_strategy_streaks, pai_gow_tables  (8 rows)
+
+   -- fortune_pool singleton row seeded
+   SELECT id, amount_cents, seed_cents FROM fortune_pool
+   WHERE id = '00000000-0000-0000-0000-000000000001'::uuid;
+   -- expect: 1 row, amount_cents=100000, seed_cents=100000
+
+   -- seed event recorded
+   SELECT event_type, post_balance_cents FROM fortune_pool_events
+   WHERE event_type = 'seed';
+   -- expect: 1 row, post_balance_cents=100000
+   ```
+3. **Deploy the code** (push to main → Railway auto-deploys). If the migration was NOT applied first, the PG endpoints will 500 on every Fortune-bet deal and every `/api/pai-gow/fortune-pool` request.
+
+If you need to roll back: the migration is additive, so a safe rollback is to disable the PG router includes in `backend/main.py` and redeploy. The data tables stay in the DB harmlessly.
+
 ## Pai Gow Poker v1 limitations (documented, not bugs)
 
 - **5% commission dropped** for v1 simplicity (spec §7.6). Chipy's EV figures are computed for the no-commission ruleset; a future v2 with commission active would also bump `COMMISSION_RULESET_VERSION` in `canonical.py` to invalidate cached entries.

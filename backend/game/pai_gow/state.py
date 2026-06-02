@@ -105,7 +105,7 @@ async def deal_to_player(
     """
     # Step 1: Verify caller is seated at this table.
     table = await _get_table_or_404(db, table_id)
-    seat = await _get_seat_or_403(db, table_id, user_id)
+    await _get_seat_or_403(db, table_id, user_id)
 
     # Step 5 (run early for idempotency): if an active round already exists AND
     # the caller already has a hand on it, return that hand without re-validating.
@@ -195,7 +195,7 @@ async def _find_or_create_active_round(
     the other catches `IntegrityError`, re-runs the SELECT, and joins the
     just-created round. Retried `ROUND_CREATE_MAX_RETRIES` times (default 1).
     """
-    for attempt in range(ROUND_CREATE_MAX_RETRIES + 1):
+    for _attempt in range(ROUND_CREATE_MAX_RETRIES + 1):
         # 4a: SELECT for an existing active round.
         rnd = await _select_active_round(db, table_id)
         if rnd is not None:

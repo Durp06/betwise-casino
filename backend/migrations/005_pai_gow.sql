@@ -3,14 +3,26 @@
 --
 -- Owner: halynk21
 --
+-- DEPLOY: This file is NOT applied by CI or any automated process. It must
+-- be applied MANUALLY to the prod Supabase database BEFORE the deploy that
+-- includes the PG router code reaches production. Apply the same way the
+-- earlier migrations (001-004) were applied — Supabase SQL editor or
+-- `psql $DATABASE_URL -f 005_pai_gow.sql`. See README "How to run locally"
+-- section for the verification queries.
+--
 -- This migration is ADDITIVE ONLY. Zero ALTER on existing tables. PG owns its
 -- full container schema (mirrors poker_tournaments / poker_seats / poker_hands
 -- from 002_poker.sql). The only existing table referenced is `users` (FK only,
 -- chip_balance read/write happens via app code, not in this migration).
 --
--- Idempotent: uses CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT EXISTS.
--- Tests use Base.metadata.create_all (in-memory SQLite) — this file is only
--- exercised by the CI Postgres job.
+-- Idempotent: uses CREATE TABLE IF NOT EXISTS + CREATE INDEX IF NOT EXISTS,
+-- and the fortune_pool seed INSERT uses ON CONFLICT (id) DO NOTHING. Safe to
+-- run multiple times.
+--
+-- Tests do NOT exercise this SQL file — they use Base.metadata.create_all
+-- against in-memory SQLite (see backend/tests/conftest.py). This means
+-- Postgres-specific syntax (JSONB, BIGINT, gen_random_uuid, ON CONFLICT) is
+-- first exercised when this file is manually applied to prod.
 --
 -- See specs/pai-gow.md §8 (data model), §9 (state machine), §11 (Fortune pool).
 
@@ -154,8 +166,10 @@ CREATE TABLE IF NOT EXISTS fortune_pool (
 );
 
 -- Seed the singleton row. Idempotent via ON CONFLICT.
+-- Explicit ::uuid cast on the literal — safer than relying on Postgres
+-- implicit coercion in the INSERT's VALUES list.
 INSERT INTO fortune_pool (id, amount_cents, seed_cents, last_updated_at)
-VALUES ('00000000-0000-0000-0000-000000000001', 100000, 100000, NOW())
+VALUES ('00000000-0000-0000-0000-000000000001'::uuid, 100000, 100000, NOW())
 ON CONFLICT (id) DO NOTHING;
 
 
