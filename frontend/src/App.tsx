@@ -19,6 +19,8 @@ import PokerTablePage from "./pages/PokerTablePage";
 import HoldemLobby from "./pages/HoldemLobby";
 import HoldemTablePage from "./pages/HoldemTablePage";
 import HandHistory from "./pages/HandHistory";
+import PaiGowLobby from "./pages/PaiGowLobby";
+import PaiGowTablePage from "./pages/PaiGowTablePage";
 
 // ─── QueryClient ─────────────────────────────────────────────────────────────
 
@@ -152,6 +154,24 @@ export default function App() {
             element={
               <AuthGate>
                 <HandHistory />
+              </AuthGate>
+            }
+          />
+
+          {/* Pai Gow Poker (additive — separate route surface) */}
+          <Route
+            path="/pai-gow/lobby"
+            element={
+              <AuthGate>
+                <PaiGowLobby />
+              </AuthGate>
+            }
+          />
+          <Route
+            path="/pai-gow/table/:id"
+            element={
+              <AuthGate>
+                <PaiGowTablePage />
               </AuthGate>
             }
           />
