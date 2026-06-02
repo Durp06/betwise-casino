@@ -14,6 +14,8 @@ import Lobby from "./pages/Lobby";
 import Table from "./pages/Table";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
+import PaiGowLobby from "./pages/PaiGowLobby";
+import PaiGowTablePage from "./pages/PaiGowTablePage";
 
 // ─── QueryClient ─────────────────────────────────────────────────────────────
 
@@ -102,6 +104,24 @@ export default function App() {
             element={
               <AuthGate>
                 <Leaderboard />
+              </AuthGate>
+            }
+          />
+
+          {/* Pai Gow Poker (additive — separate route surface) */}
+          <Route
+            path="/pai-gow/lobby"
+            element={
+              <AuthGate>
+                <PaiGowLobby />
+              </AuthGate>
+            }
+          />
+          <Route
+            path="/pai-gow/table/:id"
+            element={
+              <AuthGate>
+                <PaiGowTablePage />
               </AuthGate>
             }
           />
