@@ -43,17 +43,21 @@ os.environ.setdefault("BETWISE_MUTATION_RATE_LIMIT", "1000000/minute")
 
 # ─── async engine + session ───────────────────────────────────────────────────
 
-@pytest_asyncio.fixture(scope="session")
+@pytest_asyncio.fixture(scope="function")
 async def engine():
-    """Session-scoped async engine backed by in-memory SQLite.
+    """**Function-scoped** async engine — fresh in-memory DB per test.
 
-    After create_all builds the schema, seed the fortune_pool singleton row.
-    The Postgres migration `005_pai_gow.sql` handles this via INSERT … ON
-    CONFLICT for prod/CI, but Base.metadata.create_all only creates tables —
-    not rows. Without this seed, every UPDATE/SELECT on the singleton id
-    (`FORTUNE_POOL_SINGLETON_ID`) finds zero rows and the Fortune contribution
-    + payout paths silently no-op, breaking every concurrency test and every
-    deal-with-fortune-bet test (round-6 Phase 2 review catch).
+    Round-7 isolation fix: session-scoped engine + StaticPool shared the
+    same in-memory DB across all tests, which leaked across the boundary in
+    spite of the `db` fixture's rollback (router tests that drive the FastAPI
+    app commit through `get_db`'s session-level commit, and the persistent
+    fortune_pool singleton row meant tests that mutated the pool could leave
+    observable state for the next test). Going function-scoped eliminates
+    the entire class — each test gets a clean schema + a freshly-seeded
+    fortune_pool row.
+
+    Cost: each test re-runs `create_all` + the seed INSERT. On in-memory
+    SQLite this is fast (~milliseconds) and the determinism is worth it.
     """
     from sqlalchemy import insert  # noqa: PLC0415
     from backend.models import Base, FortunePool, FORTUNE_POOL_SINGLETON_ID  # noqa: PLC0415
@@ -66,9 +70,7 @@ async def engine():
     )
     async with _engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        # Seed the fortune_pool singleton once per session. Per-test rollback
-        # cannot undo this because it's outside any per-test transaction —
-        # the row persists for the entire pytest run, which is what we want.
+        # Seed the fortune_pool singleton.
         await conn.execute(
             insert(FortunePool).values(
                 id=FORTUNE_POOL_SINGLETON_ID,
