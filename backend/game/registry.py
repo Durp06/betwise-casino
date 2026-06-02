@@ -14,7 +14,7 @@ from __future__ import annotations
 from types import ModuleType
 from typing import Mapping
 
-from backend.game import blackjack, poker
+from backend.game import blackjack, poker, pai_gow
 from backend.game import GameModule  # noqa: F401  # re-exported for type-check sites
 
 # Mapping is intentionally typed as ModuleType (concrete) rather than GameModule
@@ -23,4 +23,5 @@ from backend.game import GameModule  # noqa: F401  # re-exported for type-check 
 GAME_REGISTRY: Mapping[str, ModuleType] = {
     blackjack.GAME_TYPE: blackjack,
     poker.GAME_TYPE: poker,
+    pai_gow.GAME_TYPE: pai_gow,
 }
