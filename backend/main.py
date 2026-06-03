@@ -29,6 +29,7 @@ from backend.routers import (
     users, tables, game, advice, leaderboard, analytics, sessions,
     poker_tables, poker_game, poker_advice, holdem, chat,
     practice,
+    pai_gow_tables, pai_gow_game, pai_gow_advice,
 )
 
 logger = logging.getLogger(__name__)
@@ -108,6 +109,10 @@ app.include_router(poker_advice.router, prefix="/api")
 app.include_router(holdem.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(practice.router, prefix="/api")
+# Pai Gow Poker — parallel router set (round-6 architectural shift; spec §13)
+app.include_router(pai_gow_tables.router, prefix="/api")
+app.include_router(pai_gow_game.router, prefix="/api")
+app.include_router(pai_gow_advice.router, prefix="/api")
 
 
 # ─── Startup event ────────────────────────────────────────────────────────────

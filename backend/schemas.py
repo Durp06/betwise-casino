@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ─── Card ─────────────────────────────────────────────────────────────────────
 
@@ -595,3 +595,198 @@ class PracticeGradeOut(BaseModel):
     classification: Classification
     dealer_bust_pct: float
     explanation: str
+
+
+# ─── Pai Gow Poker (round-6 architectural shift — see specs/pai-gow.md §13) ──
+
+PaiGowRoundStatus = Literal["betting", "playing", "dealer_turn", "finished"]
+PaiGowActionStatus = Literal["dealt", "set", "auto_set", "resolved"]
+PaiGowSideCompare = Literal["player", "banker", "copy"]
+PaiGowHandResult = Literal["win", "push", "lose"]
+
+
+# ── Tables ───────────────────────────────────────────────────────────────────
+
+class PaiGowTableCreateIn(BaseModel):
+    """Field bounds give clean 422 on obvious bad input; cross-field validation
+    (max >= min) is enforced at the handler layer per spec §9.2.
+    """
+    name: str = Field(min_length=1, max_length=100)
+    min_bet_cents: int = Field(default=500, ge=1)
+    max_bet_cents: int = Field(default=50_000, ge=1)
+    min_fortune_bet_cents: int = Field(default=100, ge=0)
+    max_fortune_bet_cents: int = Field(default=10_000, ge=0)
+    max_seats: int = Field(default=3, ge=1, le=3)
+
+
+class PaiGowTableOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    min_bet_cents: int
+    max_bet_cents: int
+    min_fortune_bet_cents: int
+    max_fortune_bet_cents: int
+    max_seats: int
+    created_at: datetime
+
+
+class PaiGowTableListItemOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    min_bet_cents: int
+    max_bet_cents: int
+    max_seats: int
+    seats_taken: int
+    active_round_status: Optional[PaiGowRoundStatus] = None
+
+
+class PaiGowSeatOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    user_id: uuid.UUID
+    seat_number: int
+    username: Optional[str] = None
+    chip_balance: Optional[int] = None
+
+
+# ── Deal / Set / Hand ────────────────────────────────────────────────────────
+
+class PaiGowDealIn(BaseModel):
+    bet_cents: int = Field(ge=1)
+    fortune_bet_cents: int = Field(default=0, ge=0)
+
+
+class PaiGowSetIn(BaseModel):
+    """Player's chosen split. front must be exactly 2 cards; back exactly 5."""
+    front: list[dict]
+    back: list[dict]
+
+
+class PaiGowPlayerHandOut(BaseModel):
+    """Hand state. Card visibility is masked at the router layer based on
+    round.status and viewer identity (see spec §13).
+    """
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    round_id: uuid.UUID
+    user_id: uuid.UUID
+    dealt_cards: Optional[list] = None  # masked for non-owner during 'playing'
+    front_cards: Optional[list] = None  # masked until 'dealer_turn'
+    back_cards: Optional[list] = None
+    bet_cents: int
+    fortune_bet_cents: int
+    front_compare: Optional[PaiGowSideCompare] = None
+    back_compare: Optional[PaiGowSideCompare] = None
+    hand_result: Optional[PaiGowHandResult] = None
+    ante_payout_cents: Optional[int] = None
+    fortune_payout_cents: Optional[int] = None
+    action_status: PaiGowActionStatus
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+
+
+class PaiGowRoundOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    table_id: uuid.UUID
+    round_number: int
+    dealer_dealt_cards: Optional[list] = None  # masked until 'dealer_turn'
+    dealer_front: Optional[list] = None
+    dealer_back: Optional[list] = None
+    status: PaiGowRoundStatus
+    playing_started_at: Optional[datetime] = None
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+
+
+class PaiGowTableStateOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    name: str
+    min_bet_cents: int
+    max_bet_cents: int
+    min_fortune_bet_cents: int
+    max_fortune_bet_cents: int
+    max_seats: int
+    seats: list[PaiGowSeatOut]
+    round: Optional[PaiGowRoundOut] = None
+    hands: list[PaiGowPlayerHandOut]
+    fortune_pool_amount_cents: int  # current pool snapshot inline for one round-trip
+
+
+# ── Streak ───────────────────────────────────────────────────────────────────
+
+class PaiGowStrategyStreakOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    user_id: uuid.UUID
+    current_streak: int
+    longest_streak: int
+    total_optimal: int
+    total_played: int
+    last_played_at: Optional[datetime] = None
+
+
+# ── Fortune Pool ─────────────────────────────────────────────────────────────
+
+class FortunePoolOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    amount_cents: int
+    seed_cents: int
+    last_updated_at: datetime
+
+
+# ── Replay ───────────────────────────────────────────────────────────────────
+
+class PaiGowReplayActionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: uuid.UUID
+    hand_id: uuid.UUID
+    user_id: uuid.UUID
+    action_type: Literal["set", "auto_set"]
+    player_front: Optional[list] = None
+    player_back: Optional[list] = None
+    optimal_front: list
+    optimal_back: list
+    was_optimal: bool
+    chipy_explanation: Optional[str] = None
+    created_at: datetime
+
+
+# ── Chipy advice ─────────────────────────────────────────────────────────────
+
+def _validate_pai_gow_split(front: list[dict], back: list[dict]) -> None:
+    """Shared shape check for a Pai Gow split: front=2 cards, back=5, each a
+    {suit, value} dict. Raises ValueError (→ Pydantic 422) on any violation, so
+    malformed input is rejected at the request boundary instead of blowing up
+    deep inside an SSE generator after the 200 headers have been sent.
+    Not typed as CardIn because Pai Gow includes the joker sentinel
+    ({"suit":"joker","value":"JK"}), which is outside the blackjack CardValue
+    literal set.
+    """
+    if len(front) != 2:
+        raise ValueError(f"front must be exactly 2 cards, got {len(front)}")
+    if len(back) != 5:
+        raise ValueError(f"back must be exactly 5 cards, got {len(back)}")
+    for label, cards in (("front", front), ("back", back)):
+        for c in cards:
+            if not isinstance(c, dict) or "suit" not in c or "value" not in c:
+                raise ValueError(f"{label} cards must be {{'suit','value'}} objects")
+
+
+class PaiGowAdviceIn(BaseModel):
+    """Player's submitted split for post-hand evaluation. Sent with POST
+    /api/pai-gow/advice/{hand_id} so Chipy can compare against optimal_set.
+    """
+    front: list[dict]
+    back: list[dict]
+
+    @field_validator("back")
+    @classmethod
+    def _check_split(cls, back: list[dict], info) -> list[dict]:  # noqa: ANN001
+        # Validate the whole split once `back` is bound (front is already parsed).
+        front = info.data.get("front")
+        if front is not None:
+            _validate_pai_gow_split(front, back)
+        return back
