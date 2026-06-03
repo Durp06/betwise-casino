@@ -15,6 +15,8 @@ import PotDisplay from "../components/PotDisplay";
 import PokerSeat from "../components/PokerSeat";
 import PokerActionBar from "../components/PokerActionBar";
 import PokerChipyCoach from "../components/PokerChipyCoach";
+import { DeckProvider } from "../motion/DeckProvider";
+import DeckStack from "../components/DeckStack";
 import { t } from "../i18n";
 
 /** Beat between a hand finishing (showdown visible) and auto-dealing the next
@@ -167,6 +169,7 @@ export default function PokerTablePage() {
   const isYourTurn = hand?.current_to_act_seat === yourSeatNumber;
 
   return (
+    <DeckProvider>
     <main className="min-h-screen bg-felt-green text-cream p-4 flex flex-col gap-4 lg:flex-row" data-testid="poker-table-page">
       <section className="flex-1 flex flex-col gap-4">
         <header className="flex items-center justify-between">
@@ -184,7 +187,8 @@ export default function PokerTablePage() {
         </header>
 
         {/* Felt — seats around the board */}
-        <div className="bg-felt-green/80 ink-outline-thick rounded-3xl p-6 flex flex-col items-center gap-4">
+        <div className="bg-felt-green/80 ink-outline-thick rounded-3xl p-6 flex flex-col items-center gap-4 relative">
+          <DeckStack className="absolute top-4 right-4 scale-[0.7] origin-top-right opacity-90 pointer-events-none" />
           {hand && (
             <>
               <PotDisplay
@@ -269,6 +273,7 @@ export default function PokerTablePage() {
         <PokerChipyCoach handId={hand?.id ?? null} />
       </section>
     </main>
+    </DeckProvider>
   );
 }
 

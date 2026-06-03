@@ -16,6 +16,7 @@ interface AnimatedCardRowProps {
   /** Resolve face-up per slot. Default: face up when a card is present. */
   faceUp?: (card: Card | null, index: number) => boolean;
   dealFromDeck?: boolean;
+  size?: "sm" | "md";
   className?: string;
 }
 
@@ -23,6 +24,7 @@ export default function AnimatedCardRow({
   cards,
   faceUp,
   dealFromDeck = true,
+  size = "md",
   className = "",
 }: AnimatedCardRowProps) {
   return (
@@ -38,6 +40,7 @@ export default function AnimatedCardRow({
               index={i}
               faceUp={isUp}
               dealFromDeck={dealFromDeck}
+              size={size}
             />
           );
         })}

@@ -6,8 +6,8 @@
  * (null entries → card backs) for opponents until showdown. Highlights the
  * chair whose turn it is; dims folded players.
  */
-import type { HoldemHandSeatState, HoldemSeat as HoldemSeatType, PokerCard } from "../types";
-import PlayingCard from "./PlayingCard";
+import type { HoldemHandSeatState, HoldemSeat as HoldemSeatType, Card } from "../types";
+import AnimatedCardRow from "./AnimatedCardRow";
 import { t } from "../i18n";
 
 interface HoldemSeatProps {
@@ -56,24 +56,12 @@ export default function HoldemSeat({
       className={`flex flex-col items-center gap-1 p-2 rounded-xl border-[3px] ${borderClass} bg-cream ${opacity}`}
       data-testid={`holdem-seat-${chairNumber}`}
     >
-      {/* Hole cards */}
-      <div className="flex gap-1">
-        {hole.length === 0 ? (
-          <span className="text-ink/30 text-xs italic">{t("—")}</span>
-        ) : (
-          hole.map((card: PokerCard | null, idx: number) =>
-            card === null ? (
-              <div
-                key={idx}
-                className="w-8 h-12 rounded border-2 border-ink bg-blue-900"
-                data-testid="hole-card-back"
-              />
-            ) : (
-              <PlayingCard key={idx} card={card} index={idx} noAnimate />
-            ),
-          )
-        )}
-      </div>
+      {/* Hole cards — dealt from the deck (compact) */}
+      {hole.length === 0 ? (
+        <span className="text-ink/30 text-xs italic">{t("—")}</span>
+      ) : (
+        <AnimatedCardRow cards={hole as (Card | null)[]} size="sm" className="gap-1" />
+      )}
 
       {/* Name + dealer button */}
       <div className="flex items-center gap-1">

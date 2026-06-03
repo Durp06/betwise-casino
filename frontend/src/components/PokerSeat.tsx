@@ -5,8 +5,8 @@
  * fold/all-in state, action highlight when it's their turn. Hole cards are
  * rendered above the seat — masked (null entries) for opponents during play.
  */
-import type { PokerCard, PokerHandSeatState, PokerSeat as PokerSeatType } from "../types";
-import PlayingCard from "./PlayingCard";
+import type { Card, PokerHandSeatState, PokerSeat as PokerSeatType } from "../types";
+import AnimatedCardRow from "./AnimatedCardRow";
 import ArchetypeBadge from "./ArchetypeBadge";
 import { t } from "../i18n";
 
@@ -43,24 +43,12 @@ export default function PokerSeat({
       className={`flex flex-col items-center gap-1 p-2 rounded-xl border-[3px] ${borderClass} bg-cream ${opacity}`}
       data-testid={`poker-seat-${seat.seat_number}`}
     >
-      {/* Hole cards */}
-      <div className="flex gap-1">
-        {hole.length === 0 ? (
-          <span className="text-ink/30 text-xs italic">{t("(no cards)")}</span>
-        ) : (
-          hole.map((card: PokerCard | null, idx: number) =>
-            card === null ? (
-              <div
-                key={idx}
-                className="w-8 h-12 rounded border-2 border-ink bg-blue-900"
-                data-testid="hole-card-back"
-              />
-            ) : (
-              <PlayingCard key={idx} card={card} index={idx} noAnimate />
-            ),
-          )
-        )}
-      </div>
+      {/* Hole cards — dealt from the deck (compact) */}
+      {hole.length === 0 ? (
+        <span className="text-ink/30 text-xs italic">{t("(no cards)")}</span>
+      ) : (
+        <AnimatedCardRow cards={hole as (Card | null)[]} size="sm" className="gap-1" />
+      )}
 
       {/* Name + archetype */}
       <div className="flex items-center gap-1">

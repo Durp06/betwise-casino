@@ -1,11 +1,11 @@
 /**
  * DealtCard — the single animated card.
  *
- * Flies in from the shared deck origin (DeckProvider) with a rubber-hose bounce,
- * and 3D-flips when revealed (drives the dormant .card-3d CSS via framer). Used
- * everywhere cards appear in play; PlayingCard keeps a static path for thumbnails.
+ * Flies in from the shared deck origin (DeckProvider) with a rubber-hose bounce.
+ * `faceUp=false` renders the card back (opponent / masked cards). Used everywhere
+ * cards appear in play; PlayingCard keeps a static path for thumbnails.
  *
- * Reduced motion: skips the fly + flip; cards fade in (opacity), order preserved.
+ * Reduced motion: skips the fly; cards fade in (opacity), order preserved.
  */
 import { useLayoutEffect, useRef } from "react";
 import { motion, useAnimationControls } from "framer-motion";
@@ -13,7 +13,12 @@ import PlayingCard from "./PlayingCard";
 import type { Card } from "../types";
 import { useDeckOrigin } from "../motion/useDeckOrigin";
 import { useMotionPrefs } from "../motion/useMotionPrefs";
-import { DEAL_SPRING, FLIP_TRANSITION, STAGGER_STEP } from "../motion/tokens";
+import { DEAL_SPRING, STAGGER_STEP } from "../motion/tokens";
+
+const DIMS: Record<"sm" | "md", string> = {
+  sm: "w-11 h-16",
+  md: "w-16 h-24 sm:w-20 sm:h-28",
+};
 
 interface DealtCardProps {
   card: Card | null;
@@ -23,6 +28,8 @@ interface DealtCardProps {
   index?: number;
   /** fly in from the deck on mount (default true). */
   dealFromDeck?: boolean;
+  /** "sm" = compact seat card, "md" = full felt card. */
+  size?: "sm" | "md";
   className?: string;
 }
 
@@ -31,6 +38,7 @@ export default function DealtCard({
   faceUp = true,
   index = 0,
   dealFromDeck = true,
+  size = "md",
   className = "",
 }: DealtCardProps) {
   const ref = useRef<HTMLDivElement>(null);
@@ -64,25 +72,10 @@ export default function DealtCard({
       ref={ref}
       animate={fly}
       exit={reduced ? { opacity: 0 } : { opacity: 0, x: -50, y: 36, rotate: 14, transition: { duration: 0.2 } }}
-      className={`w-16 h-24 sm:w-20 sm:h-28 ${className}`}
+      className={`${DIMS[size]} ${className}`}
       style={{ willChange: "transform" }}
     >
-      <div className="card-3d w-full h-full">
-        <motion.div
-          className="card-inner"
-          initial={{ rotateY: faceUp ? 0 : 180 }}
-          animate={{ rotateY: faceUp ? 0 : 180 }}
-          transition={reduced ? { duration: 0 } : FLIP_TRANSITION}
-          style={{ transformStyle: "preserve-3d", width: "100%", height: "100%" }}
-        >
-          <div className="card-face">
-            <PlayingCard card={card} index={index} noAnimate />
-          </div>
-          <div className="card-face card-face-back">
-            <PlayingCard card={null} index={index} noAnimate />
-          </div>
-        </motion.div>
-      </div>
+      <PlayingCard card={faceUp ? card : null} index={index} size={size} noAnimate />
     </motion.div>
   );
 }

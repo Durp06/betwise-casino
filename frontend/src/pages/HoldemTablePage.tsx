@@ -22,6 +22,8 @@ import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
 import ChatPanel from "../components/ChatPanel";
+import { DeckProvider } from "../motion/DeckProvider";
+import DeckStack from "../components/DeckStack";
 import { t } from "../i18n";
 
 export default function HoldemTablePage() {
@@ -142,6 +144,7 @@ export default function HoldemTablePage() {
   const chairs = Array.from({ length: table.max_seats }, (_, i) => i);
 
   return (
+    <DeckProvider>
     <div className="min-h-screen bg-felt-green flex flex-col">
       <header className="flex items-center justify-between px-4 py-3 border-b-[3px] border-ink bg-ink/80">
         <h1 className="font-display text-cream text-2xl">
@@ -161,7 +164,8 @@ export default function HoldemTablePage() {
         </p>
       )}
 
-      <main className="flex-1 flex flex-col items-center gap-6 p-6">
+      <main className="flex-1 flex flex-col items-center gap-6 p-6 relative">
+        <DeckStack className="absolute top-4 right-4 scale-[0.7] origin-top-right opacity-90 pointer-events-none" />
         {/* Board + pot */}
         <div className="flex flex-col items-center gap-3 mt-4">
           <PotDisplay
@@ -239,5 +243,6 @@ export default function HoldemTablePage() {
         <ChatPanel tableKind="holdem" tableId={tableId} />
       </main>
     </div>
+    </DeckProvider>
   );
 }
