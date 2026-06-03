@@ -100,6 +100,12 @@ export default function Lobby() {
           >
             {t("Leaderboard")}
           </button>
+          <button
+            onClick={() => void navigate("/pai-gow/lobby")}
+            className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
+          >
+            {t("Pai Gow")}
+          </button>
           <div className="ml-2 hidden sm:block">
             <Chipy size={80} expression="idle" animation="idle" pose="wave" />
           </div>

@@ -12,7 +12,7 @@ A fake-money multiplayer blackjack lounge with an AI coaching buddy named **Chip
 ## Team members
 
 - **Myles ([@Durp06](https://github.com/Durp06))** — backend (FastAPI + SQLAlchemy + Supabase), frontend (React/TS + Cuphead design pivot), the basic-strategy engine, the Chipy coaching flow (proactive pre/post advice with markdown stripping), multiplayer polling + table state, deploy plumbing (Railway + Dockerfile).
-- _Teammate #2 — [name, GitHub handle, one-line summary of their owned area]_
+- **halynk21 ([@halynk21](https://github.com/halynk21))** — Pai Gow Poker (house-banked third game): backend module (`backend/game/pai_gow/`) with Foxwoods house way, Chipy oracle (optimal_set), fortune progressive pool with atomic cross-table state, async state machine with `FOR UPDATE` row locks + savepoint-protected round-creation race retry; parallel routers (`pai_gow_{tables,game,advice}.py`); frontend slice (separate `paiGowStore.ts`, `HandSetter`, `ChipyPaiGowCoach`, `FortunePoolTicker`); 250+ new pytest tests including a 300-seed fuzz sweep for the house-way no-foul invariant.
 - _Teammate #3 — [name, GitHub handle, one-line summary of their owned area]_
 
 ## Where the nontrivial logic lives
@@ -25,6 +25,10 @@ A fake-money multiplayer blackjack lounge with an AI coaching buddy named **Chip
 | **Gold pick** (real-time-ish) | `frontend/src/hooks/useTablePoll.ts:16` | `useTablePoll(tableId, currentUserId)` | 3-second poll of `GET /api/tables/{id}/state` driving the multiplayer view. Reconciles into the Zustand store, detects when the turn becomes ours, and auto-opens Chipy. **Design decision:** polling over WebSockets — see "Design decisions" below. |
 | **Gold custom #1** | `backend/routers/advice.py:111` | streak update inside `/api/advice/{hand_id}` | Increments `users.current_streak` on every correct guess and resets to zero on a wrong guess, tracking `best_streak` as a max. Surfaced on `/profile` and `/leaderboard`. |
 | **Gold custom #2** | `backend/routers/game.py:51` (`GET /api/hands/{hand_id}/actions`) + `frontend/src/components/ReplayModal.tsx` | hand replay | After a hand finishes, the player can step through every decision they made — what they did, what was optimal, what Chipy said. Pulls ordered rows from `player_actions`. Authorization rule: only the owning user can read it during play; once the session is finished, anyone can. |
+| **Pai Gow — primary algorithm** | `backend/game/pai_gow/house_way.py` | `foxwoods(seven_cards)` | Foxwoods house way for Pai Gow Poker — a 10-rule dispatcher (straight flush, four of a kind, full house, three pairs, flush, straight, three of a kind, two pair, one pair, no pair) with rule-by-rule comments and round-7 joker preservation. Legal-by-construction split (back ≥ front under §7.3 unified ordering); 300-seed fuzz sweep verifies the no-foul invariant. The high-quad split (`KK \| KK+kickers`) passes the foul check via kicker tiebreak — this is the round-4 case where naive equality-as-foul would have crashed the dealer's own auto-set. |
+| **Pai Gow — coaching oracle** | `backend/game/pai_gow/optimal_set.py::find_optimal` + `evaluate_split` | Chipy's authoritative recommendation for the 2/5 split. v1 mirrors `house_way`; `_DEVIATIONS` table is in place for v2 Wong deviations. `evaluate_split` uses hand-strength equality (NOT card-identity) so EV-equivalent splits like swapping different K's in a quad-K split correctly count as optimal — the round-7 catch that fixed a streak-reset on correct plays. |
+| **Pai Gow — Fortune progressive pool** | `backend/game/pai_gow/fortune.py` + `backend/game/pai_gow/state.py::_drain_pool_with_lock` | Fortune-bonus side bet with two-tier payouts: fixed-amount (house-funded, bet × multiplier) + pool-funded (`SELECT … FOR UPDATE` row lock on `fortune_pool`, drains to seed on GRAND, half-of-surplus on MAJOR). Audit ledger in `fortune_pool_events`. The cross-table shared state is what makes Pai Gow specifically multiplayer at the per-game level beyond the app-level multi-user gates. |
+| **Pai Gow — round flow** | `backend/game/pai_gow/state.py::deal_to_player` | Async state machine with two concurrency disciplines baked in: (a) `SELECT … FOR UPDATE` on the round row before mutating `deck_state` / `dealer_dealt_cards` so concurrent deals serialize and the deck stays consistent; (b) savepoint-protected `IntegrityError` retry on `UNIQUE(table_id, round_number)` so the second of two simultaneous first-deals at a 2-seat table joins the existing round instead of crashing with 500. Tests cover the idempotent-deal-on-retry path and the second-player-after-`status='playing'` regression that the round-6 review flagged. |
 
 ## Design decisions
 
@@ -80,6 +84,44 @@ BETWISE_TEST_DB_URL=sqlite+aiosqlite:///:memory:
 ```
 
 The frontend additionally reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from a `frontend/.env.local` file (Vite picks these up automatically).
+
+## Pai Gow Poker — deploy checklist
+
+`backend/migrations/005_pai_gow.sql` is NOT run by CI or any automated process — same pattern as the earlier migrations (`001_initial.sql` through `004_chat.sql`). Before the deploy that ships PG code reaches production, **the migration must be applied manually to the prod Supabase database**.
+
+1. **Apply the migration** — Supabase dashboard → SQL Editor → paste the contents of `backend/migrations/005_pai_gow.sql` → Run. (Or `psql $DATABASE_URL -f backend/migrations/005_pai_gow.sql`.) The file is idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`); safe to run twice.
+2. **Verify the schema** — run these checks in the same SQL editor:
+   ```sql
+   -- 8 PG tables present
+   SELECT table_name FROM information_schema.tables
+   WHERE table_schema = 'public' AND table_name LIKE 'pai_gow_%' OR table_name LIKE 'fortune_pool%'
+   ORDER BY table_name;
+   -- expect: fortune_pool, fortune_pool_events, pai_gow_player_actions,
+   --        pai_gow_player_hands, pai_gow_rounds, pai_gow_seats,
+   --        pai_gow_strategy_streaks, pai_gow_tables  (8 rows)
+
+   -- fortune_pool singleton row seeded
+   SELECT id, amount_cents, seed_cents FROM fortune_pool
+   WHERE id = '00000000-0000-0000-0000-000000000001'::uuid;
+   -- expect: 1 row, amount_cents=100000, seed_cents=100000
+
+   -- seed event recorded
+   SELECT event_type, post_balance_cents FROM fortune_pool_events
+   WHERE event_type = 'seed';
+   -- expect: 1 row, post_balance_cents=100000
+   ```
+3. **Deploy the code** (push to main → Railway auto-deploys). If the migration was NOT applied first, the PG endpoints will 500 on every Fortune-bet deal and every `/api/pai-gow/fortune-pool` request.
+
+If you need to roll back: the migration is additive, so a safe rollback is to disable the PG router includes in `backend/main.py` and redeploy. The data tables stay in the DB harmlessly.
+
+## Pai Gow Poker v1 limitations (documented, not bugs)
+
+- **5% commission dropped** for v1 simplicity (spec §7.6). Chipy's EV figures are computed for the no-commission ruleset; a future v2 with commission active would also bump `COMMISSION_RULESET_VERSION` in `canonical.py` to invalidate cached entries.
+- **Banker rotation deferred to v2** (spec §15). v1 is house-banked. The data model does NOT carry a dead `banker_user_id` column; v2 would add it additively.
+- **Max seats = 3** at PG tables (spec §17 Q5) — matches blackjack's seat convention.
+- **Joker treated as Ace in house_way** (spec §11/§7.1). The evaluator's semi-wild semantics are full; house_way's dispatch uses Ace substitution for simplicity. The joker token is preserved in the returned split (round-7 fix) so the player can submit it. v2 may add joker-aware optimization for straight/flush completion in the dealer's split.
+- **`_DEVIATIONS` table is empty in v1** (`backend/game/pai_gow/optimal_set.py`). Chipy mirrors house_way for every hand. Adding a Wong deviation in v2 is a localized dict entry — no caller changes needed.
+- **Per-game streak storage** — Pai Gow uses its own `pai_gow_strategy_streaks` table (spec §12.6 round-4 decision); blackjack uses `users.current_streak/best_streak`. Documented inconsistency; v2 may unify under a generic `strategy_streak(user_id, game_type, ...)` table.
 
 ## Gold features summary
 
