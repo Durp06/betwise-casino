@@ -46,5 +46,12 @@ USER app
 
 # Run uvicorn from /app so absolute imports `from backend.X import …` resolve.
 # PORT is injected by Railway; fall back to 8000 for local docker run.
+#
+# Apply pending DB migrations BEFORE starting the server. `backend.migrate`
+# is idempotent (ledger + IF NOT EXISTS guards) and exits non-zero if a
+# migration fails, so a bad migration fails the deploy loudly instead of
+# booting a half-migrated app. With no DATABASE_URL set it no-ops and uvicorn
+# still starts (health-only boots). This replaces the old hand-run
+# `railway run ... migrate` step that was routinely forgotten.
 EXPOSE 8000
-CMD ["sh", "-c", "uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
+CMD ["sh", "-c", "python -m backend.migrate && uvicorn backend.main:app --host 0.0.0.0 --port ${PORT:-8000}"]
