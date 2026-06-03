@@ -198,6 +198,7 @@ async def seed_hand(
     cards: list = None,
     bet: int = 1_000,
     status: str = "active",
+    created_at: datetime = None,
 ) -> "backend.models.Hand":  # type: ignore[name-defined]
     import uuid as _uuid  # noqa: PLC0415
     from backend.models import Hand  # noqa: PLC0415
@@ -212,6 +213,10 @@ async def seed_hand(
         outcome=None,
         payout=None,
     )
+    # Allow callers to override created_at for ordering tests (AC-R-HIST1).
+    # Defaults to datetime.now(timezone.utc) when Hand.created_at column exists.
+    if created_at is not None:
+        hand.created_at = created_at
     db.add(hand)
     await db.commit()
     await db.refresh(hand)

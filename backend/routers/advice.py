@@ -148,9 +148,10 @@ async def get_advice(
             await db.refresh(user)
             current_streak = user.current_streak
             best_streak = user.best_streak
+            # Decision #3: accuracy = correct_decisions / total_decisions (per-decision denominator).
             player_accuracy = (
-                user.correct_decisions / user.total_hands
-                if user.total_hands > 0
+                user.correct_decisions / user.total_decisions
+                if user.total_decisions > 0
                 else 0.0
             )
         else:

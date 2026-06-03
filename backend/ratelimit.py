@@ -51,3 +51,14 @@ ADVICE_RATE_LIMIT = os.environ.get("BETWISE_ADVICE_RATE_LIMIT", "10/minute")
 # (~20/min) plus normal play; env-tunable so the test suite (which hammers these
 # in tight loops) can disable it and ops can tighten in production.
 MUTATION_RATE_LIMIT = os.environ.get("BETWISE_MUTATION_RATE_LIMIT", "120/minute")
+
+# Practice grading is stateless + memoized so compute cost is low, but we still
+# cap as defense-in-depth (mirrors advice.py's CSO hardening). The default is
+# intentionally higher than advice (100 vs 10) because:
+#   1. No Anthropic call → cost per request is negligible.
+#   2. test_practice_grade.py fires ~18 requests across its test functions in a
+#      single pytest run. slowapi tracks per-route so advice calls don't count
+#      here, but we need headroom above 18. 100/minute is safe AND still guards
+#      against genuine abuse (e.g. 1000-req burst scripting).
+# Overridable via env so ops can tighten in production without a deploy.
+PRACTICE_RATE_LIMIT = os.environ.get("BETWISE_PRACTICE_RATE_LIMIT", "100/minute")

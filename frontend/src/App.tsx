@@ -18,6 +18,7 @@ import PokerSetup from "./pages/PokerSetup";
 import PokerTablePage from "./pages/PokerTablePage";
 import HoldemLobby from "./pages/HoldemLobby";
 import HoldemTablePage from "./pages/HoldemTablePage";
+import HandHistory from "./pages/HandHistory";
 
 // ─── QueryClient ─────────────────────────────────────────────────────────────
 
@@ -142,6 +143,15 @@ export default function App() {
             element={
               <AuthGate>
                 <HoldemTablePage />
+              </AuthGate>
+            }
+          />
+
+          <Route
+            path="/history"
+            element={
+              <AuthGate>
+                <HandHistory />
               </AuthGate>
             }
           />

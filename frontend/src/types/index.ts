@@ -150,11 +150,16 @@ export interface HandReplayAction {
 
 // ─── Session review (Hand Review modal) ──────────────────────────────────────
 
-export type Classification = "best" | "good" | "inaccuracy" | "mistake" | "blunder";
+export type Classification = "best" | "good" | "inaccuracy" | "mistake" | "blunder" | "sharp";
 
 export interface ReviewAction extends HandReplayAction {
   classification: Classification;
   ev_loss_chips: number;
+  action_evs?: Record<string, number>;
+  best_action?: string;
+  best_ev?: number;
+  ev_delta?: number;
+  dealer_bust_pct?: number;
 }
 
 export interface SessionReview {
@@ -166,6 +171,8 @@ export interface SessionReview {
   ev_lost_chips: number;
   worst_action_id: string | null;
   actions: ReviewAction[];
+  sharp_count?: number;
+  blunder_count?: number;
 }
 
 // ─── Advice streaming ────────────────────────────────────────────────────────
@@ -401,4 +408,22 @@ export interface ChatMessage {
   username: string;
   body: string;
   created_at: string;
+}
+
+// ─── Practice grade (Pillar 4/6) ─────────────────────────────────────────────
+
+export interface PracticeGrade {
+  optimal_action: string;
+  action_evs: Record<string, number>;
+  best_ev: number;
+  ev_delta: number;
+  classification: Classification;
+  dealer_bust_pct: number;
+  explanation: string;
+}
+
+export interface PracticeGradeRequest {
+  hand: Card[];
+  dealer_upcard: Card;
+  action: Action;
 }

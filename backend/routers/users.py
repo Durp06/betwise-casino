@@ -34,9 +34,10 @@ async def get_me(
     user = await _get_user_by_id(current_user, db)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+    # Decision #3: accuracy = correct_decisions / total_decisions (per-decision denominator).
     accuracy = (
-        user.correct_decisions / user.total_hands
-        if user.total_hands > 0
+        user.correct_decisions / user.total_decisions
+        if user.total_decisions > 0
         else 0.0
     )
     return UserStatsOut(
@@ -45,6 +46,7 @@ async def get_me(
         chip_balance=user.chip_balance,
         total_hands=user.total_hands,
         correct_decisions=user.correct_decisions,
+        total_decisions=user.total_decisions,
         accuracy=accuracy,
         current_streak=user.current_streak,
         best_streak=user.best_streak,
@@ -61,8 +63,8 @@ async def upsert_me(
     """Create or return existing user row (idempotent first-login upsert)."""
     user = await _upsert_user(current_user, body.username, db)
     accuracy = (
-        user.correct_decisions / user.total_hands
-        if user.total_hands > 0
+        user.correct_decisions / user.total_decisions
+        if user.total_decisions > 0
         else 0.0
     )
     return UserStatsOut(
@@ -71,6 +73,7 @@ async def upsert_me(
         chip_balance=user.chip_balance,
         total_hands=user.total_hands,
         correct_decisions=user.correct_decisions,
+        total_decisions=user.total_decisions,
         accuracy=accuracy,
         current_streak=user.current_streak,
         best_streak=user.best_streak,
@@ -98,8 +101,8 @@ async def reset_chips(
     await db.flush()
     await db.refresh(user)
     accuracy = (
-        user.correct_decisions / user.total_hands
-        if user.total_hands > 0
+        user.correct_decisions / user.total_decisions
+        if user.total_decisions > 0
         else 0.0
     )
     return UserStatsOut(
@@ -108,6 +111,7 @@ async def reset_chips(
         chip_balance=user.chip_balance,
         total_hands=user.total_hands,
         correct_decisions=user.correct_decisions,
+        total_decisions=user.total_decisions,
         accuracy=accuracy,
         current_streak=user.current_streak,
         best_streak=user.best_streak,
@@ -185,14 +189,14 @@ async def _upsert_user(user_id: uuid.UUID, username: str, db: AsyncSession):
 
 
 async def _get_user_hands(user_id: uuid.UUID, db: AsyncSession) -> list:
-    """Return last 20 hands for user, ordered newest-first."""
-    from sqlalchemy import select, desc  # noqa: PLC0415
+    """Return last 20 hands for user, ordered newest-first by created_at (AC-R-HIST1)."""
+    from sqlalchemy import select  # noqa: PLC0415
     from backend.models import Hand  # noqa: PLC0415
 
     result = await db.execute(
         select(Hand)
         .where(Hand.user_id == user_id)
-        .order_by(desc(Hand.session_id))  # approximate newest-first by session
+        .order_by(Hand.created_at.desc(), Hand.id.desc())
         .limit(20)
     )
     return list(result.scalars().all())

@@ -27,6 +27,35 @@ def _now() -> datetime:
     return datetime.now(timezone.utc)
 
 
+# ─── TzDateTime ───────────────────────────────────────────────────────────────
+# SQLite strips timezone info when reading DateTime values back. This subclass
+# of DateTime wraps the dialect's result processor to re-attach UTC tzinfo on
+# load so that hand.created_at.tzinfo is always non-None (AC-M-HIST1 / AC-R-HIST2).
+# Subclassing DateTime (not TypeDecorator) ensures isinstance(col.type, DateTime)
+# remains True, which is checked by test_hand_created_at_column_exists_and_is_timezone_aware.
+
+class TzDateTime(DateTime):
+    """DateTime subclass that guarantees timezone-aware datetime values on readback.
+
+    Overrides _cached_result_processor so that after the dialect's own processor
+    runs (which may return a naive datetime on SQLite), UTC tzinfo is attached.
+    isinstance(col.type, DateTime) is True because TzDateTime IS a DateTime.
+    """
+    cache_ok = True
+
+    def _cached_result_processor(self, dialect, coltype):  # type: ignore[override]
+        base_proc = super()._cached_result_processor(dialect, coltype)
+
+        def process(value):
+            if base_proc is not None:
+                value = base_proc(value)
+            if value is not None and isinstance(value, datetime) and value.tzinfo is None:
+                return value.replace(tzinfo=timezone.utc)
+            return value
+
+        return process
+
+
 # ─── User ─────────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -37,6 +66,9 @@ class User(Base):
     chip_balance: Mapped[int] = mapped_column(Integer, nullable=False, default=100_000)
     total_hands: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     correct_decisions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # total_decisions: per-decision accuracy denominator (AC-M-HIST3, Decision #3).
+    # Increments once per recorded decision; accuracy = correct_decisions / total_decisions.
+    total_decisions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     current_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     best_streak: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
@@ -48,6 +80,7 @@ class User(Base):
 
     __table_args__ = (
         CheckConstraint("chip_balance >= 0", name="chip_balance_non_negative"),
+        CheckConstraint("total_decisions >= 0", name="total_decisions_non_negative"),
     )
 
 
@@ -130,6 +163,9 @@ class Hand(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     outcome: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     payout: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # created_at: used for newest-first ordering in _get_user_hands (AC-M-HIST1).
+    # Uses TzDateTime to ensure tz-aware datetimes survive SQLite readback (AC-R-HIST2).
+    created_at: Mapped[datetime] = mapped_column(TzDateTime(timezone=True), nullable=False, default=_now)
 
     # Relationships
     session: Mapped["GameSession"] = relationship("GameSession", back_populates="hands")

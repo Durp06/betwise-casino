@@ -45,9 +45,11 @@ async def _top_n(n: int, db: AsyncSession) -> list[LeaderboardRowOut]:
             username=u.username,
             chip_balance=u.chip_balance,
             total_hands=u.total_hands,
+            total_decisions=u.total_decisions,
+            # Decision #3: accuracy = correct_decisions / total_decisions (never > 100%).
             accuracy_pct=(
-                u.correct_decisions / u.total_hands * 100.0
-                if u.total_hands > 0
+                u.correct_decisions / u.total_decisions * 100.0
+                if u.total_decisions > 0
                 else 0.0
             ),
             best_streak=u.best_streak,
