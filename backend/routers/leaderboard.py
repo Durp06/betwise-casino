@@ -12,6 +12,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.auth import CurrentUser
 from backend.database import get_db
 from backend.schemas import LeaderboardRowOut
 
@@ -20,6 +21,7 @@ router = APIRouter(prefix="/leaderboard", tags=["leaderboard"])
 
 @router.get("", response_model=list[LeaderboardRowOut])
 async def get_leaderboard(
+    current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> list[LeaderboardRowOut]:
     """Return the top 20 users sorted by chip_balance descending."""

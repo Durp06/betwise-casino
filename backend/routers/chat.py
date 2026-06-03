@@ -103,8 +103,9 @@ async def get_messages(
 ) -> list[ChatMessageOut]:
     """Return the most recent 50 messages for this table, oldest-first.
 
-    Any authenticated user may read, matching the public `/state` read."""
-    return await _get_messages(table_kind, table_id, db)
+    Requires the caller to be SEATED at the table (same gate as POST).
+    """
+    return await _get_messages(table_kind, table_id, current_user, db)
 
 
 # ─── SQL helper (single source per router) ─────────────────────────────────────
@@ -172,6 +173,7 @@ async def _post_message(
 async def _get_messages(
     table_kind: str,
     table_id: uuid.UUID,
+    current_user: uuid.UUID,
     db: AsyncSession,
 ) -> list[ChatMessageOut]:
     from sqlalchemy import select  # noqa: PLC0415
@@ -180,6 +182,9 @@ async def _get_messages(
 
     if table_kind not in _VALID_TABLE_KINDS:
         raise HTTPException(status_code=404, detail="Unknown table kind")
+
+    if not await _is_seated(table_kind, table_id, current_user, db):
+        raise HTTPException(status_code=403, detail="You must be seated at this table to chat")
 
     # Fetch the most recent N (DESC) then reverse so the payload is oldest-first
     # for a chat scrollback that reads top-to-bottom.
