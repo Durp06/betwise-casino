@@ -207,11 +207,20 @@ async def get_post_advice(
             return
 
         dealt = list(hand.dealt_cards)
-        evaluation = _optimal_set.evaluate_split(dealt, body.front, body.back)
-        player_front_str = _cards_str(body.front)
-        player_back_str = _cards_str(body.back)
-        optimal_front_str = _cards_str(evaluation.optimal_front)
-        optimal_back_str = _cards_str(evaluation.optimal_back)
+        # Defense-in-depth: PaiGowAdviceIn already 422s a malformed split before
+        # we get here, but evaluate_split runs inside the SSE generator (after
+        # the 200 headers are sent), so a residual bad split must surface as a
+        # clean SSE error event, never an uncaught 500 mid-stream.
+        try:
+            evaluation = _optimal_set.evaluate_split(dealt, body.front, body.back)
+            player_front_str = _cards_str(body.front)
+            player_back_str = _cards_str(body.back)
+            optimal_front_str = _cards_str(evaluation.optimal_front)
+            optimal_back_str = _cards_str(evaluation.optimal_back)
+        except (ValueError, KeyError, TypeError) as e:
+            logger.warning("PG post-advice: invalid split payload: %s", e)
+            yield f"data: {json.dumps({'error': 'Invalid split for this hand'})}\n\n".encode()
+            return
 
         if evaluation.is_optimal:
             content = (

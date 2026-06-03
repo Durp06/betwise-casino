@@ -18,7 +18,7 @@ Banker rotation is explicitly deferred to v2 (see §15 Out of Scope). The data m
 
 ## 2. Architecture
 
-**Backend**: parallel-router pattern matching `routers/poker_*.py` and `routers/holdem.py`. Three new router files (`pai_gow_tables.py`, `pai_gow_game.py`, `pai_gow_advice.py`), one new game subpackage (`backend/game/pai_gow/`), one additive migration (`005_pai_gow.sql`).
+**Backend**: parallel-router pattern matching `routers/poker_*.py` and `routers/holdem.py`. Three new router files (`pai_gow_tables.py`, `pai_gow_game.py`, `pai_gow_advice.py`), one new game subpackage (`backend/game/pai_gow/`), one additive migration (`006_pai_gow.sql`).
 
 **Storage**: PG owns its full container schema — `pai_gow_tables`, `pai_gow_seats`, `pai_gow_rounds`, `pai_gow_player_hands`, `pai_gow_player_actions`, `pai_gow_strategy_streaks`, `fortune_pool`, `fortune_pool_events`. **Zero reuse** of `casino_tables` / `table_seats` / `game_sessions` — this matches poker's actual pattern (`poker_tournaments`, `poker_seats`, `poker_hands`) and eliminates the entire class of cross-game read-contamination bugs. The only existing table PG touches at all is `users`, and only its `chip_balance` column (no streak columns — PG has its own streak table).
 
@@ -79,7 +79,7 @@ backend/routers/pai_gow_tables.py       # prefix=/pai-gow/tables (list/create/jo
 backend/routers/pai_gow_game.py         # prefix=/pai-gow (deal, set-hand, replay, fortune-pool)
 backend/routers/pai_gow_advice.py       # prefix=/pai-gow/advice (pre + post Chipy SSE)
 
-backend/migrations/005_pai_gow.sql      # additive: creates all PG tables. No ALTER on existing.
+backend/migrations/006_pai_gow.sql      # additive: creates all PG tables. No ALTER on existing.
 ```
 
 ### Files to create — frontend
@@ -246,7 +246,7 @@ One hand per user per round (`UNIQUE(round_id, user_id)` on `pai_gow_player_hand
 
 That's it. PG owns its full container schema; no other reuse of existing tables.
 
-### 8.2 New tables (additive — `migrations/005_pai_gow.sql`)
+### 8.2 New tables (additive — `migrations/006_pai_gow.sql`)
 
 #### `pai_gow_tables`
 
@@ -928,7 +928,7 @@ npm --prefix frontend run build                          # vite build succeeds
 
 (Mirrors task list created by Claude Code in session.)
 
-- **Phase 2 — Data model + migration** — write `005_pai_gow.sql`, add SQLAlchemy models (8 new) + Pydantic schemas + `GAME_REGISTRY`/`GameType` updates.
+- **Phase 2 — Data model + migration** — write `006_pai_gow.sql`, add SQLAlchemy models (8 new) + Pydantic schemas + `GAME_REGISTRY`/`GameType` updates.
 - **Phase 3 — Core game modules (pure)** — `cards.py`, `evaluator.py`, `house_way.py`, `optimal_set.py`, `fortune.py`, `resolver.py`, `canonical.py`. TDD per drill-mode.md.
 - **Phase 4 — Parallel routers + state machine** — three router files, per-player deal + eager/lazy round resolution, escrow at deal, atomic fortune updates, auto-set on timeout.
 - **Phase 5 — Frontend** — pages + components + hook. Mobile-first CSS at 375px on PG pages only.
@@ -946,5 +946,5 @@ npm --prefix frontend run build                          # vite build succeeds
 - **Round 2** feedback corrected: copy/push side model, Fortune atomicity claim, cross-table CHECK, optimal_set scope trap, strategic surplus framing, hold'em verification, routing convention, Fortune criterion mixing, test budget weighting, state-transition concurrency, Chipy cache key + canonical form, streak parallel claim, foul rule precision, commission/EV consistency, HandSetter UX, deck_seed redundancy.
 - **Round 3** = round 2 corrections accepted with one nuance (house_way + optimal_set both nontrivial).
 - **Round 4** feedback corrected: foul rule must be strictly front > back (high-quad split case), streak storage best as separate PG table (additive, lowest teammate risk), canonical form must rank-sort before relabel + joker as distinct token.
-- **Round 5 (Phase 0 discovery)** folded in: parallel-router pattern, `/api/pai-gow/...` URL prefix, `005_pai_gow.sql` migration numbering, **attempted** semantic remapping of `GameSession.status` (later reverted in round 6).
+- **Round 5 (Phase 0 discovery)** folded in: parallel-router pattern, `/api/pai-gow/...` URL prefix, `006_pai_gow.sql` migration numbering, **attempted** semantic remapping of `GameSession.status` (later reverted in round 6).
 - **Round 6 (this spec)** = the architectural shift. PG owns its full container schema (`pai_gow_tables`, `pai_gow_seats`, `pai_gow_rounds`, etc.), mirroring poker's actual `poker_tournaments`/`poker_seats`/`poker_hands` pattern. Round-5's reuse-with-semantic-remapping of `casino_tables`/`table_seats`/`game_sessions` was abandoned because (a) it created a cross-game read-contamination class of bugs (existing blackjack queries on `game_sessions` aren't all game_type-filtered), (b) it didn't match the team's actual practice. Plus six bug fixes: separate `pai_gow_round` table (point 3 — session=round, multiple per table), `playing_started_at` column for timeout (point 4), canonical-sort `was_optimal` comparison (point 5), straight-flush tier added + fixed tier becomes bet-proportional + pool tier flat with qualifying minimum (points 6+8), multiplayer round flow with per-player deal that doesn't require `status='betting'` (point 7, the load-bearing fix), no `'forfeit'` in v1 (point 9).

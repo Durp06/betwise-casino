@@ -60,7 +60,7 @@ async def engine():
     SQLite this is fast (~milliseconds) and the determinism is worth it.
 
     NOTE: this seed is the test-only equivalent of the `INSERT ... ON CONFLICT`
-    in `migrations/005_pai_gow.sql`. The SQL migration is NOT run by CI or
+    in `migrations/006_pai_gow.sql`. The SQL migration is NOT run by CI or
     any automated process — it's applied manually to prod Supabase. Tests
     use `Base.metadata.create_all` for the schema and this fixture's INSERT
     for the singleton row.

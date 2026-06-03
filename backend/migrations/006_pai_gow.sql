@@ -1,14 +1,14 @@
--- migrations/005_pai_gow.sql
+-- migrations/006_pai_gow.sql
 -- Pai Gow Poker (house-banked) — schema additions.
+-- (Renumbered from 005 → 006: 005_study.sql already exists on main.)
 --
 -- Owner: halynk21
 --
--- DEPLOY: This file is NOT applied by CI or any automated process. It must
--- be applied MANUALLY to the prod Supabase database BEFORE the deploy that
--- includes the PG router code reaches production. Apply the same way the
--- earlier migrations (001-004) were applied — Supabase SQL editor or
--- `psql $DATABASE_URL -f 005_pai_gow.sql`. See README "How to run locally"
--- section for the verification queries.
+-- DEPLOY: applied automatically at container startup by backend/migrate.py
+-- (the Dockerfile CMD runs `python -m backend.migrate` before uvicorn). It is
+-- recorded in the schema_migrations ledger and runs exactly once. Applying it
+-- by hand (Supabase SQL editor or `psql $DATABASE_URL -f 006_pai_gow.sql`)
+-- still works and is harmless — the runner is idempotent (IF NOT EXISTS).
 --
 -- This migration is ADDITIVE ONLY. Zero ALTER on existing tables. PG owns its
 -- full container schema (mirrors poker_tournaments / poker_seats / poker_hands

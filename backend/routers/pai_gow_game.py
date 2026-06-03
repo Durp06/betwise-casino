@@ -13,10 +13,12 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from backend.auth import CurrentUser
 from backend.database import get_db
 from backend.game.pai_gow import state as pg_state
+from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import (
     FortunePoolOut,
     PaiGowDealIn,
@@ -32,7 +34,9 @@ router = APIRouter(prefix="/pai-gow", tags=["pai-gow-game"])
 
 
 @router.post("/tables/{table_id}/deal", response_model=PaiGowPlayerHandOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def deal(
+    request: Request,
     table_id: uuid.UUID,
     body: PaiGowDealIn,
     current_user: CurrentUser,
@@ -41,6 +45,7 @@ async def deal(
     """Place ante + optional fortune bet, deal 7 cards. Idempotent per
     `(round_id, user_id)` — client double-fire returns the existing hand.
     """
+    request.state.user_id = str(current_user)  # per-user rate-limit key
     hand = await pg_state.deal_to_player(
         db,
         table_id=table_id,
@@ -52,7 +57,9 @@ async def deal(
 
 
 @router.post("/hands/{hand_id}/set", response_model=PaiGowPlayerHandOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def set_hand(
+    request: Request,
     hand_id: uuid.UUID,
     body: PaiGowSetIn,
     current_user: CurrentUser,
@@ -63,6 +70,7 @@ async def set_hand(
     Returns the resolved hand if this set triggered the round's resolution
     (eager check per §9.3 step 6) — otherwise the hand in `set` status.
     """
+    request.state.user_id = str(current_user)  # per-user rate-limit key
     hand = await pg_state.submit_player_set(
         db,
         hand_id=hand_id,

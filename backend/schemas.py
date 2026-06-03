@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 # ─── Card ─────────────────────────────────────────────────────────────────────
 
@@ -756,9 +756,37 @@ class PaiGowReplayActionOut(BaseModel):
 
 # ── Chipy advice ─────────────────────────────────────────────────────────────
 
+def _validate_pai_gow_split(front: list[dict], back: list[dict]) -> None:
+    """Shared shape check for a Pai Gow split: front=2 cards, back=5, each a
+    {suit, value} dict. Raises ValueError (→ Pydantic 422) on any violation, so
+    malformed input is rejected at the request boundary instead of blowing up
+    deep inside an SSE generator after the 200 headers have been sent.
+    Not typed as CardIn because Pai Gow includes the joker sentinel
+    ({"suit":"joker","value":"JK"}), which is outside the blackjack CardValue
+    literal set.
+    """
+    if len(front) != 2:
+        raise ValueError(f"front must be exactly 2 cards, got {len(front)}")
+    if len(back) != 5:
+        raise ValueError(f"back must be exactly 5 cards, got {len(back)}")
+    for label, cards in (("front", front), ("back", back)):
+        for c in cards:
+            if not isinstance(c, dict) or "suit" not in c or "value" not in c:
+                raise ValueError(f"{label} cards must be {{'suit','value'}} objects")
+
+
 class PaiGowAdviceIn(BaseModel):
     """Player's submitted split for post-hand evaluation. Sent with POST
     /api/pai-gow/advice/{hand_id} so Chipy can compare against optimal_set.
     """
     front: list[dict]
     back: list[dict]
+
+    @field_validator("back")
+    @classmethod
+    def _check_split(cls, back: list[dict], info) -> list[dict]:  # noqa: ANN001
+        # Validate the whole split once `back` is bound (front is already parsed).
+        front = info.data.get("front")
+        if front is not None:
+            _validate_pai_gow_split(front, back)
+        return back
