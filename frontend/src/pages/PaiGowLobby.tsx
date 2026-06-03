@@ -108,9 +108,8 @@ export default function PaiGowLobby() {
             {tables.map((tbl) => (
               <li
                 key={tbl.id}
-                className="ink-outline-thick rounded-md p-3 sm:p-4 bg-cream text-ink
-                  flex flex-col sm:flex-row sm:items-center gap-3"
-                style={{ boxShadow: "4px 4px 0 0 #1A0A00" }}
+                className="ink-outline-thick shadow-[4px_4px_0_0_#1A0A00] rounded-md p-3 sm:p-4
+                  bg-cream text-ink flex flex-col sm:flex-row sm:items-center gap-3"
               >
                 <div className="flex-1 min-w-0">
                   <h2 className="font-display text-xl tracking-wider truncate">{tbl.name}</h2>

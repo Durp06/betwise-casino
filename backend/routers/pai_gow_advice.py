@@ -97,22 +97,8 @@ async def get_pre_advice(
     `optimal_set.find_optimal`, and asks Chipy to explain why that split is
     optimal in plain prose.
     """
-    from backend.models import PaiGowPlayerHand  # noqa: PLC0415
-
     request.state.user_id = str(current_user)
-
-    pre = (
-        await db.execute(
-            select(PaiGowPlayerHand).where(PaiGowPlayerHand.id == hand_id)
-        )
-    ).scalar_one_or_none()
-    if pre is None:
-        raise HTTPException(status_code=404, detail="Pai Gow hand not found")
-    if pre.user_id != current_user:
-        raise HTTPException(
-            status_code=403,
-            detail="Cannot request advice for another player's hand",
-        )
+    await _assert_hand_owned_by(hand_id, current_user, db)
 
     async def _sse_stream() -> AsyncGenerator[bytes, None]:
         from backend.models import PaiGowPlayerHand as _Hand  # noqa: PLC0415
@@ -165,6 +151,35 @@ async def get_pre_advice(
     return StreamingResponse(_sse_stream(), media_type="text/event-stream")
 
 
+# ─── Helpers ─────────────────────────────────────────────────────────────────
+
+
+async def _assert_hand_owned_by(
+    hand_id: uuid.UUID,
+    user_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    """Ownership pre-check shared by the `/pre` and `/post` SSE handlers.
+
+    Raises 404 if the hand doesn't exist, 403 if it's owned by a different
+    user. The SSE generators reload the hand inside the stream because the
+    pre-check copy may be stale by the time the stream starts.
+    """
+    from backend.models import PaiGowPlayerHand  # noqa: PLC0415
+
+    result = await db.execute(
+        select(PaiGowPlayerHand).where(PaiGowPlayerHand.id == hand_id)
+    )
+    hand = result.scalar_one_or_none()
+    if hand is None:
+        raise HTTPException(status_code=404, detail="Pai Gow hand not found")
+    if hand.user_id != user_id:
+        raise HTTPException(
+            status_code=403,
+            detail="Cannot request advice for another player's hand",
+        )
+
+
 @router.post("/{hand_id}")
 @limiter.limit(ADVICE_RATE_LIMIT)
 async def get_post_advice(
@@ -179,22 +194,8 @@ async def get_post_advice(
     play was optimal). Does NOT update the streak — that happens in
     `state.submit_player_set` at commit time.
     """
-    from backend.models import PaiGowPlayerHand  # noqa: PLC0415
-
     request.state.user_id = str(current_user)
-
-    pre = (
-        await db.execute(
-            select(PaiGowPlayerHand).where(PaiGowPlayerHand.id == hand_id)
-        )
-    ).scalar_one_or_none()
-    if pre is None:
-        raise HTTPException(status_code=404, detail="Pai Gow hand not found")
-    if pre.user_id != current_user:
-        raise HTTPException(
-            status_code=403,
-            detail="Cannot request advice for another player's hand",
-        )
+    await _assert_hand_owned_by(hand_id, current_user, db)
 
     async def _sse_stream() -> AsyncGenerator[bytes, None]:
         from backend.models import PaiGowPlayerHand as _Hand  # noqa: PLC0415

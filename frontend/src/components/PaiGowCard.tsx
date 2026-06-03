@@ -21,10 +21,10 @@ export default function PaiGowCard({ card, className = "", index = 0, noAnimate 
   if (card.suit === "joker") {
     return (
       <div
-        className={`paper-grain ink-outline-thick w-16 h-24 sm:w-20 sm:h-28 rounded-md
+        className={`paper-grain ink-outline-thick bg-cream shadow-[4px_4px_0_0_#1A0A00]
+          w-16 h-24 sm:w-20 sm:h-28 rounded-md
           relative flex items-center justify-center ${className}`}
         aria-label={t("Joker card")}
-        style={{ backgroundColor: "#F5F0E8", boxShadow: "4px 4px 0 0 #1A0A00" }}
       >
         <span className="font-display text-ink text-xs tracking-widest rotate-[-15deg]">
           JOKER
