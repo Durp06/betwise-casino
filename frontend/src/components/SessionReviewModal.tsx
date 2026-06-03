@@ -19,6 +19,7 @@ import PlayingCard from "./PlayingCard";
 import EvalBar from "./EvalBar";
 import RetrySpot from "./RetrySpot";
 import { t } from "../i18n";
+import { formatMoney } from "../utils/money";
 
 interface SessionReviewModalProps {
   sessionId: string;
@@ -73,7 +74,7 @@ function ActionRow({ action }: { action: ReviewAction }) {
         </span>
         {action.ev_loss_chips > 0 && (
           <span className="text-xs text-red-300 ml-auto">
-            -{t("EV")}: ${(action.ev_loss_chips / 100).toFixed(2)}
+            -{t("EV")}: {formatMoney(action.ev_loss_chips)}
           </span>
         )}
       </div>
@@ -211,7 +212,7 @@ export default function SessionReviewModal({
               </div>
               <div className="flex flex-col items-center">
                 <span className="text-xl font-bold text-red-300">
-                  ${(review.ev_lost_chips / 100).toFixed(2)}
+                  {formatMoney(review.ev_lost_chips)}
                 </span>
                 <span className="text-white/50 text-xs uppercase tracking-wide">{t("EV Lost")}</span>
               </div>

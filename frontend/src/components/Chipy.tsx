@@ -98,10 +98,13 @@ export default function Chipy({
         backgroundSize: `${COLS * 100}% ${ROWS * 100}%`,
         backgroundPosition: spritePosition(cell.col, cell.row),
         backgroundRepeat: "no-repeat",
-        // image-rendering: high-quality interpolation when scaling down a
-        // raster PNG to small sizes (80–96px). Without this, browsers can
-        // pick a "smart" downscale that softens line art.
-        imageRendering: "auto",
+        // crisp-edges: preserve pixel boundaries when scaling the sprite;
+        // prevents blurry/anti-aliased art edges at small display sizes.
+        imageRendering: "crisp-edges",
+        // Circular clip-path: Chipy is a round poker chip — the clip hides
+        // art that overflows its sprite cell (adjacent-cell bleed) and
+        // reinforces the chip silhouette.
+        clipPath: "circle(50% at 50% 50%)",
         ...style,
       }}
       role="img"

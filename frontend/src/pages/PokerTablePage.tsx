@@ -17,6 +17,10 @@ import PokerActionBar from "../components/PokerActionBar";
 import PokerChipyCoach from "../components/PokerChipyCoach";
 import { t } from "../i18n";
 
+/** Beat between a hand finishing (showdown visible) and auto-dealing the next
+ *  one, so the player can see the result. Honors the "dealt shortly" copy. */
+const NEXT_HAND_DELAY_MS = 2200;
+
 export default function PokerTablePage() {
   const { id: tournamentId } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -49,6 +53,41 @@ export default function PokerTablePage() {
       cancelled = true;
     };
   }, [tournamentId, setPokerTournamentState]);
+
+  // After a hand completes, the backend marks it `complete` and waits for the
+  // client to re-deal: POST /deal deals hand N+1 when none is active. The mount
+  // effect above only fires once, so without this the SNG froze after hand #1.
+  //
+  // We derive a STABLE primitive (the id of the hand we should deal after, or
+  // null) and depend on THAT — not the whole tournament-state object. The 3s
+  // poll re-delivers the same completed hand as a fresh object every cycle; if
+  // the effect depended on that object it would re-run mid-delay, its cleanup
+  // would clearTimeout the pending deal, and the next hand would never come.
+  const dealAfterHandId =
+    pokerTournamentState?.current_hand?.status === "complete" &&
+    pokerTournamentState?.tournament.status !== "complete"
+      ? pokerTournamentState.current_hand.id
+      : null;
+  useEffect(() => {
+    if (!tournamentId || !dealAfterHandId) return;
+    const timer = setTimeout(() => {
+      void (async () => {
+        const result = await dealPokerHand(tournamentId);
+        if (result.error) setError(result.error);
+        else if (result.data) setPokerTournamentState(result.data);
+      })();
+    }, NEXT_HAND_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [dealAfterHandId, tournamentId, setPokerTournamentState]);
+
+  // Manual control: deal the next hand immediately (skips the auto-deal beat).
+  // Handy for a trainer — review Chipy's read, then advance when you're ready.
+  async function handleDealNext(): Promise<void> {
+    if (!tournamentId) return;
+    const result = await dealPokerHand(tournamentId);
+    if (result.error) setError(result.error);
+    else if (result.data) setPokerTournamentState(result.data);
+  }
 
   if (!tournamentId) {
     return <Navigate to="/lobby" replace />;
@@ -187,12 +226,42 @@ export default function PokerTablePage() {
           />
         )}
 
-        {!isYourTurn && hand && (
-          <p className="text-cream/70 text-sm italic" data-testid="poker-waiting">
-            {hand.current_to_act_seat !== null
-              ? `${t("Waiting on seat")} ${hand.current_to_act_seat}…`
-              : t("Hand complete. Next hand will be dealt shortly.")}
-          </p>
+        {tournament.status === "complete" ? (
+          <div
+            data-testid="poker-tournament-over"
+            className="ink-outline-thick rounded-xl bg-cream/10 p-4 flex flex-col items-start gap-2"
+          >
+            <p className="font-display text-xl tracking-wider">{t("Tournament complete!")}</p>
+            <button
+              type="button"
+              onClick={() => void navigate("/lobby")}
+              className="ink-outline ink-shadow px-4 py-2 rounded-md bg-gold-bright text-ink font-ui uppercase tracking-wider text-sm"
+            >
+              {t("Back to lobby")}
+            </button>
+          </div>
+        ) : (
+          !isYourTurn && hand && (
+            hand.current_to_act_seat !== null ? (
+              <p className="text-cream/70 text-sm italic" data-testid="poker-waiting">
+                {`${t("Waiting on seat")} ${hand.current_to_act_seat}…`}
+              </p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-3" data-testid="poker-hand-complete">
+                <span className="text-cream/70 text-sm italic">
+                  {t("Hand complete — dealing next hand…")}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => void handleDealNext()}
+                  data-testid="poker-deal-next"
+                  className="ink-outline ink-shadow px-4 py-2 rounded-md bg-gold-bright text-ink font-ui uppercase tracking-wider text-sm"
+                >
+                  {t("Deal next hand")}
+                </button>
+              </div>
+            )
+          )
         )}
       </section>
 

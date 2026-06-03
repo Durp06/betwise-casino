@@ -1,15 +1,17 @@
 /**
  * PokerSetup.tsx — pre-game configuration for a new Texas Hold'em SNG.
  *
- * Fields: bot count (2–7), advice mode (Reads/Odds), buy-in (cents),
- * starting stack (chips). Submit → POST /api/poker/tournaments → navigate
- * to /poker/table/:id.
+ * Fields: bot count (2–7), advice mode (Reads/Odds), buy-in, starting stack.
+ * Submit → POST /api/poker/tournaments → navigate to /poker/table/:id.
+ * Wrapped in the shared GameLobbyShell so it matches every other game screen.
  */
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPokerTournament } from "../api/client";
 import type { PokerAdviceMode } from "../types";
 import { t } from "../i18n";
+import { formatMoney } from "../utils/money";
+import GameLobbyShell from "../components/GameLobbyShell";
 
 export default function PokerSetup() {
   const navigate = useNavigate();
@@ -39,20 +41,22 @@ export default function PokerSetup() {
   }
 
   return (
-    <main className="min-h-screen bg-felt-green text-cream p-6 flex justify-center">
+    <GameLobbyShell
+      title={t("Solo Poker Trainer")}
+      subtitle={t("Single-table tournament against 2–7 bot archetypes. Chipy coaches every decision.")}
+    >
       <form
         onSubmit={onSubmit}
-        className="ink-outline-thick rounded-xl bg-cream text-ink p-6 max-w-md w-full flex flex-col gap-4"
+        className="ink-outline-thick paper-grain rounded-xl p-6 max-w-md w-full mx-auto flex flex-col gap-4 text-ink"
+        style={{ backgroundColor: "#F5F0E8", boxShadow: "5px 5px 0 0 #1A0A00" }}
         data-testid="poker-setup-form"
       >
-        <h1 className="font-display text-3xl tracking-wider">{t("Texas Hold'em — Setup")}</h1>
-
         <label className="flex flex-col gap-1">
           <span className="font-ui uppercase tracking-widest text-xs">{t("Bot count")}</span>
           <select
             value={botCount}
             onChange={(e) => setBotCount(Number(e.target.value))}
-            className="border-2 border-ink rounded px-2 py-1"
+            className="border-2 border-ink rounded px-2 py-1 bg-cream"
             data-testid="poker-setup-bot-count"
           >
             {[2, 3, 4, 5, 6, 7].map((n) => (
@@ -92,18 +96,18 @@ export default function PokerSetup() {
         </fieldset>
 
         <label className="flex flex-col gap-1">
-          <span className="font-ui uppercase tracking-widest text-xs">{t("Buy-in (cents)")}</span>
+          <span className="font-ui uppercase tracking-widest text-xs">{t("Buy-in")}</span>
           <input
             type="number"
             min={100}
             step={100}
             value={buyInCents}
             onChange={(e) => setBuyInCents(Number(e.target.value))}
-            className="border-2 border-ink rounded px-2 py-1"
+            className="border-2 border-ink rounded px-2 py-1 bg-cream"
             data-testid="poker-setup-buyin"
           />
           <span className="text-xs text-ink/60">
-            ${(buyInCents / 100).toFixed(2)} {t("from bankroll")}
+            {formatMoney(buyInCents)} {t("from bankroll")}
           </span>
         </label>
 
@@ -117,7 +121,7 @@ export default function PokerSetup() {
             step={100}
             value={startingStack}
             onChange={(e) => setStartingStack(Number(e.target.value))}
-            className="border-2 border-ink rounded px-2 py-1"
+            className="border-2 border-ink rounded px-2 py-1 bg-cream"
             data-testid="poker-setup-stack"
           />
         </label>
@@ -135,12 +139,12 @@ export default function PokerSetup() {
         <button
           type="submit"
           disabled={submitting}
-          className="px-4 py-2 font-ui uppercase tracking-widest border-2 border-ink bg-gold-bright text-ink disabled:opacity-40 rounded"
+          className="ink-outline ink-shadow px-4 py-2 font-ui uppercase tracking-widest bg-gold-bright text-ink disabled:opacity-40 rounded"
           data-testid="poker-setup-submit"
         >
           {submitting ? t("Buying in…") : t("Buy in & start")}
         </button>
       </form>
-    </main>
+    </GameLobbyShell>
   );
 }

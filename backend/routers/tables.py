@@ -93,11 +93,22 @@ async def get_table_state(
 # ─── SQL helpers ─────────────────────────────────────────────────────────────
 
 async def _list_tables(db: AsyncSession) -> list[TableListOut]:
-    """List all tables with seats_taken count."""
-    from sqlalchemy import select, func  # noqa: PLC0415
+    """List waiting/playing tables with seats_taken count, ordered by status priority then recency."""
+    from sqlalchemy import select, func, case  # noqa: PLC0415
     from backend.models import CasinoTable, TableSeat  # noqa: PLC0415
 
-    result = await db.execute(select(CasinoTable).order_by(CasinoTable.created_at))
+    # Status priority: waiting (0) before playing (1); finished rows excluded.
+    status_priority = case(
+        (CasinoTable.status == "waiting", 0),
+        (CasinoTable.status == "playing", 1),
+        else_=2,
+    )
+
+    result = await db.execute(
+        select(CasinoTable)
+        .where(CasinoTable.status.in_(("waiting", "playing")))
+        .order_by(status_priority, CasinoTable.created_at.desc())
+    )
     tables = result.scalars().all()
 
     output = []

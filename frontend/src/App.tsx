@@ -11,6 +11,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useSession } from "./auth/supabase";
 import Login from "./pages/Login";
 import Lobby from "./pages/Lobby";
+import BlackjackLobby from "./pages/BlackjackLobby";
 import Table from "./pages/Table";
 import Profile from "./pages/Profile";
 import Leaderboard from "./pages/Leaderboard";
@@ -85,6 +86,14 @@ export default function App() {
             element={
               <AuthGate>
                 <Lobby />
+              </AuthGate>
+            }
+          />
+          <Route
+            path="/blackjack"
+            element={
+              <AuthGate>
+                <BlackjackLobby />
               </AuthGate>
             }
           />
