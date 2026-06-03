@@ -177,10 +177,13 @@ async def _join_seat(
     """
     from datetime import datetime, timezone  # noqa: PLC0415
     from sqlalchemy import select, delete  # noqa: PLC0415
+    from sqlalchemy.exc import IntegrityError  # noqa: PLC0415
     from backend.models import CasinoTable, TableSeat  # noqa: PLC0415
 
-    # Fetch table
-    result = await db.execute(select(CasinoTable).where(CasinoTable.id == table_id))
+    # Fetch table with a row-level lock to prevent concurrent seat-grab races.
+    result = await db.execute(
+        select(CasinoTable).where(CasinoTable.id == table_id).with_for_update()
+    )
     table = result.scalar_one_or_none()
     if table is None:
         raise HTTPException(status_code=404, detail="Table not found")
@@ -231,7 +234,14 @@ async def _join_seat(
         joined_at=datetime.now(timezone.utc),
     )
     db.add(seat)
-    await db.flush()
+    try:
+        await db.flush()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Seat just taken — please retry",
+        ) from None
     await db.refresh(seat)
 
     return SeatOut(

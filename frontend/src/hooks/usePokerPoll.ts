@@ -6,16 +6,19 @@
  * action submit (POST /act) returns the new state synchronously and the next
  * poll will pick up subsequent bot actions if any.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { getPokerTournamentState } from "../api/client";
 import { useGameStore } from "../store/gameStore";
 
 const POLL_INTERVAL_MS = 3000;
+/** Number of consecutive failures before calling onError. */
+const ERROR_THRESHOLD = 3;
 
-export function usePokerPoll(tournamentId: string): void {
+export function usePokerPoll(tournamentId: string, onError?: (msg: string) => void): void {
   const setPokerTournamentState = useGameStore(
     (s) => s.setPokerTournamentState,
   );
+  const failureCount = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,7 +29,14 @@ export function usePokerPoll(tournamentId: string): void {
       }
       const result = await getPokerTournamentState(tournamentId);
       if (cancelled) return;
-      if (result.error || result.data === null) return;
+      if (result.error || result.data === null) {
+        failureCount.current += 1;
+        if (failureCount.current >= ERROR_THRESHOLD && onError) {
+          onError(result.error ?? "Failed to load tournament state");
+        }
+        return;
+      }
+      failureCount.current = 0;
       setPokerTournamentState(result.data);
     }
 
@@ -47,5 +57,5 @@ export function usePokerPoll(tournamentId: string): void {
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [tournamentId, setPokerTournamentState]);
+  }, [tournamentId, setPokerTournamentState, onError]);
 }

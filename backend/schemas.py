@@ -139,7 +139,7 @@ class TableStateOut(BaseModel):
 # ─── Game actions ─────────────────────────────────────────────────────────────
 
 class DealIn(BaseModel):
-    bet: int
+    bet: int = Field(gt=0)
 
 
 class ActionIn(BaseModel):

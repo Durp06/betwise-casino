@@ -100,8 +100,9 @@ export default function Table() {
     sessionId: string;
     handId: string;
   } | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
 
-  useTablePoll(tableId ?? "", currentUserId);
+  useTablePoll(tableId ?? "", currentUserId, setPollError);
 
   // Proactive Chipy. In "quick" mode we fire the pre-stream so Chipy chimes
   // in with the recommendation before the player acts. In "drill" mode we
@@ -238,6 +239,31 @@ export default function Table() {
   }
 
   if (!tableState) {
+    if (pollError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#1A0A00" }}>
+          <div role="alert" className="flex flex-col items-center gap-4 p-6 bg-ink/80 rounded-xl text-cream">
+            <p className="font-flavor text-action-hit">{t("Connection lost — could not load table")}</p>
+            <p className="text-sm text-cream/70">{pollError}</p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => { setPollError(null); }}
+                className="px-4 py-2 border-2 border-cream text-cream rounded font-ui uppercase tracking-wider hover:bg-cream hover:text-ink"
+              >
+                {t("Retry")}
+              </button>
+              <a
+                href="/lobby"
+                className="px-4 py-2 border-2 border-cream text-cream rounded font-ui uppercase tracking-wider hover:bg-cream hover:text-ink"
+              >
+                {t("Back to lobby")}
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ backgroundColor: "#1A0A00" }}>
         <span role="status" aria-busy="true" className="font-flavor text-cream/70 animate-pulse">

@@ -60,13 +60,9 @@ async def _get_session_review(
     caller_hand = result.scalar_one_or_none()
 
     if caller_hand is None:
-        # Owner-or-finished rule
-        if session.status == "finished":
-            raise HTTPException(status_code=404, detail="No hand to review in this session")
-        raise HTTPException(
-            status_code=403,
-            detail="Cannot view review while session is in progress without a hand",
-        )
+        # Uniform 404 regardless of session state — do not leak session existence
+        # via a distinguishable 403 vs 404 status code or detail string.
+        raise HTTPException(status_code=404, detail="Session not found")
 
     # Fetch actions ordered ascending by created_at
     result = await db.execute(
