@@ -33,6 +33,19 @@ import type {
   ChatTableKind,
   PracticeGrade,
   PracticeGradeRequest,
+  FortunePool,
+  PaiGowAdvicePostSummary,
+  PaiGowAdvicePreSummary,
+  PaiGowCard,
+  PaiGowDealIn,
+  PaiGowPlayerHand,
+  PaiGowReplayAction,
+  PaiGowSeat,
+  PaiGowSetIn,
+  PaiGowTableCreateIn,
+  PaiGowTableListItem,
+  PaiGowTableOut,
+  PaiGowTableState,
 } from "../types";
 
 // ─── Auth header helper ───────────────────────────────────────────────────────
