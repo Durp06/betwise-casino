@@ -103,6 +103,8 @@ class CasinoTable(Base):
 
     __table_args__ = (
         CheckConstraint("status IN ('waiting','playing','finished')", name="table_status_check"),
+        CheckConstraint("min_bet > 0", name="min_bet_positive"),
+        CheckConstraint("max_bet >= min_bet", name="max_bet_ge_min_bet"),
     )
 
 
@@ -163,6 +165,11 @@ class Hand(Base):
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     outcome: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
     payout: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # advice_graded_card_count: idempotency key for the streak mutation in advice.py.
+    # Records len(hand.cards) at the time the streak was last graded for this hand.
+    # A replay (same hand_id, same card count) is detected and skipped so the user
+    # cannot pump their streak by re-requesting advice without taking an action first.
+    advice_graded_card_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
     # created_at: used for newest-first ordering in _get_user_hands (AC-M-HIST1).
     # Uses TzDateTime to ensure tz-aware datetimes survive SQLite readback (AC-R-HIST2).
     created_at: Mapped[datetime] = mapped_column(TzDateTime(timezone=True), nullable=False, default=_now)

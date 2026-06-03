@@ -35,8 +35,9 @@ export default function HoldemTablePage() {
 
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
 
-  useHoldemPoll(tableId ?? "");
+  useHoldemPoll(tableId ?? "", setPollError);
 
   const refresh = useCallback(async () => {
     if (!tableId) return;
@@ -91,6 +92,31 @@ export default function HoldemTablePage() {
   }
 
   if (!holdemTableState) {
+    if (pollError) {
+      return (
+        <div className="min-h-screen bg-felt-green flex items-center justify-center">
+          <div role="alert" className="flex flex-col items-center gap-4 p-6 bg-ink/80 rounded-xl text-cream">
+            <p className="font-flavor text-action-hit">{t("Connection lost — could not load table")}</p>
+            <p className="text-sm text-cream/70">{pollError}</p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => { setPollError(null); void refresh(); }}
+                className="px-4 py-2 border-2 border-cream text-cream rounded font-ui uppercase tracking-wider hover:bg-cream hover:text-ink"
+              >
+                {t("Retry")}
+              </button>
+              <a
+                href="/holdem"
+                className="px-4 py-2 border-2 border-cream text-cream rounded font-ui uppercase tracking-wider hover:bg-cream hover:text-ink"
+              >
+                {t("Back to lobby")}
+              </a>
+            </div>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className="min-h-screen bg-felt-green flex items-center justify-center">
         <span role="status" aria-busy="true" className="text-cream animate-pulse">

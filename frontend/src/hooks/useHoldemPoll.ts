@@ -5,14 +5,17 @@
  * hidden, and re-polls immediately when it becomes visible again. Other humans'
  * actions arrive on the same 3s cadence — this is the multiplayer sync.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { getHoldemTableState } from "../api/client";
 import { useGameStore } from "../store/gameStore";
 
 const POLL_INTERVAL_MS = 3000;
+/** Number of consecutive failures before calling onError. */
+const ERROR_THRESHOLD = 3;
 
-export function useHoldemPoll(tableId: string): void {
+export function useHoldemPoll(tableId: string, onError?: (msg: string) => void): void {
   const setHoldemTableState = useGameStore((s) => s.setHoldemTableState);
+  const failureCount = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -20,7 +23,15 @@ export function useHoldemPoll(tableId: string): void {
     async function poll(): Promise<void> {
       if (document.visibilityState === "hidden") return;
       const result = await getHoldemTableState(tableId);
-      if (cancelled || result.error || result.data === null) return;
+      if (cancelled) return;
+      if (result.error || result.data === null) {
+        failureCount.current += 1;
+        if (failureCount.current >= ERROR_THRESHOLD && onError) {
+          onError(result.error ?? "Failed to load table state");
+        }
+        return;
+      }
+      failureCount.current = 0;
       setHoldemTableState(result.data);
     }
 
@@ -37,5 +48,5 @@ export function useHoldemPoll(tableId: string): void {
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [tableId, setHoldemTableState]);
+  }, [tableId, setHoldemTableState, onError]);
 }

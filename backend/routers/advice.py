@@ -132,18 +132,28 @@ async def get_advice(
         )
         was_correct = body.player_guess == opt
 
-        # ── Update streak (gold feature) ─────────────────────────────────────
+        # ── Update streak (gold feature) — idempotent per (hand_id, card_count) ─
+        # Idempotency key: a replay request keeps hand.cards frozen, so
+        # len(hand.cards) is the same. Legitimate multi-decision play grows the
+        # hand (hit appends a card), so each real decision has a distinct count.
+        # We skip the streak mutation on a repeat of the same card-count.
+        card_count = len(hand.cards)
+        is_replay = hand.advice_graded_card_count == card_count
+
         result = await db.execute(select(User).where(User.id == current_user))
         user = result.scalar_one_or_none()
         if user is not None:
-            if was_correct:
-                user.current_streak += 1
-                if user.current_streak > user.best_streak:
-                    user.best_streak = user.current_streak
-            else:
-                user.current_streak = 0
-            # Update accuracy stats (total_hands / correct_decisions NOT updated here —
-            # that's the game action endpoint's job; we only track streak in advice)
+            if not is_replay:
+                # Grade this decision: bump streak on correct, reset on wrong.
+                if was_correct:
+                    user.current_streak += 1
+                    if user.current_streak > user.best_streak:
+                        user.best_streak = user.current_streak
+                else:
+                    user.current_streak = 0
+                # Stamp the idempotency key so replays are detected.
+                hand.advice_graded_card_count = card_count
+            # Regardless of replay, return the current streak values.
             await db.flush()
             await db.refresh(user)
             current_streak = user.current_streak

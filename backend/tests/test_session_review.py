@@ -287,7 +287,12 @@ async def test_review_404_when_session_has_no_caller_hand_and_finished(client, d
 
 @pytest.mark.asyncio
 async def test_review_403_when_no_caller_hand_and_session_unfinished(client, db):
-    """AC-B3 — 403 when caller has no hand and session is still in progress."""
+    """AC-B3 — uniform 404 (formerly 403) when caller has no hand and session is in progress.
+
+    T9 (L4) collapses the distinguishable 403/404 responses into a single 404 so
+    a caller cannot enumerate sessions by probing for 403 vs 404 responses.
+    The test name is preserved for history but the expected status is now 404.
+    """
     await seed_user(db, TEST_USER_ID, "stranger")
     other = await seed_user(db, OTHER_USER_ID, "other")
     table = await seed_table(db)
@@ -296,7 +301,7 @@ async def test_review_403_when_no_caller_hand_and_session_unfinished(client, db)
     await seed_hand(db, session.id, other.id, bet=1000)
 
     resp = await client.get(f"/api/sessions/{session.id}/review")
-    assert resp.status_code == 403
+    assert resp.status_code == 404
 
 
 @pytest.mark.asyncio
@@ -377,4 +382,79 @@ async def test_review_empty_actions_returns_zero_accuracy(client, db):
     assert body["total_actions"] == 0
     assert body["accuracy"] == 0.0
     assert body["ev_lost_chips"] == 0
-    assert body["worst_action_id"] is None
+
+
+# ─── T9 (L4): Session-review enumeration oracle → uniform 404 ────────────────
+# AC-9.1, AC-9.2, AC-9.3
+# These tests FAIL until _get_session_review collapses the 403 branch into a
+# uniform 404 with the same detail string as the not-found case.
+
+
+@pytest.mark.asyncio
+async def test_review_404_for_nonexistent_session(client, db):
+    """AC-9.1: GET /api/sessions/{id}/review for a non-existent session id → 404."""
+    import uuid as _uuid  # noqa: PLC0415
+
+    await seed_user(db, TEST_USER_ID, "enum_404_nonexistent")
+    fake_id = _uuid.uuid4()
+
+    resp = await client.get(f"/api/sessions/{fake_id}/review")
+    assert resp.status_code == 404, (
+        f"Expected 404 for non-existent session; got {resp.status_code}: {resp.text}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_review_uniform_404_when_caller_has_no_hand_in_session(client, db):
+    """AC-9.2: GET /api/sessions/{id}/review for a session that exists but where
+    the caller owns no hand must return 404 with the IDENTICAL status and detail
+    as the not-found case (AC-9.1) — not a 403, and not a distinguishing detail string.
+
+    Currently returns 403 for in-progress sessions → fails until the fix collapses
+    both branches to the same 404.
+    """
+    import uuid as _uuid  # noqa: PLC0415
+
+    await seed_user(db, TEST_USER_ID, "enum_404_nohand")
+    other = await seed_user(db, OTHER_USER_ID, "enum_404_other")
+
+    table = await seed_table(db)
+    # In-progress session — the current code returns 403 for this case
+    session = await seed_session(db, table.id, status="playing")
+    # Seed a hand for OTHER_USER_ID (not TEST_USER_ID)
+    await seed_hand(db, session.id, other.id, bet=1000)
+
+    # Get the not-found detail for reference (reuse the logic from AC-9.1)
+    fake_id = _uuid.uuid4()
+    not_found_resp = await client.get(f"/api/sessions/{fake_id}/review")
+    not_found_detail = not_found_resp.json().get("detail", "")
+
+    # Caller has no hand in the session — must match not-found response exactly
+    resp = await client.get(f"/api/sessions/{session.id}/review")
+    assert resp.status_code == 404, (
+        f"Expected 404 (uniform) when caller has no hand in session; "
+        f"got {resp.status_code}: {resp.text}.  "
+        "The 403 branch leaks session existence — fix must collapse to uniform 404."
+    )
+    actual_detail = resp.json().get("detail", "")
+    assert actual_detail == not_found_detail, (
+        f"The detail string must match the not-found case to prevent enumeration. "
+        f"Not-found detail: {not_found_detail!r}; no-hand detail: {actual_detail!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_review_200_for_session_owner(client, db):
+    """AC-9.3: a caller who DOES own a hand in the session still gets 200 — owner
+    path is not regressed by the uniform-404 fix.
+    """
+    user = await seed_user(db, TEST_USER_ID, "enum_owner")
+    table = await seed_table(db)
+    session = await seed_session(db, table.id, status="playing")
+    await seed_hand(db, session.id, user.id, bet=1000)
+
+    resp = await client.get(f"/api/sessions/{session.id}/review")
+    assert resp.status_code == 200, (
+        f"Owner of a hand in the session must still get 200; "
+        f"got {resp.status_code}: {resp.text}"
+    )

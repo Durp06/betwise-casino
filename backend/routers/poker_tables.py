@@ -23,9 +23,11 @@ from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.requests import Request
 
 from backend.auth import CurrentUser
 from backend.database import get_db
+from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import (
     PokerTournamentCreateIn,
     PokerTournamentOut,
@@ -41,12 +43,15 @@ router = APIRouter(prefix="/poker/tournaments", tags=["poker_tables"])
 
 
 @router.post("", response_model=PokerTournamentOut, status_code=201)
+@limiter.limit(MUTATION_RATE_LIMIT)
 async def create_tournament(
+    request: Request,
     body: PokerTournamentCreateIn,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> PokerTournamentOut:
     """Create a new SNG tournament, deduct buy-in, assign random archetypes."""
+    request.state.user_id = str(current_user)
     if not (2 <= body.bot_count <= 7):
         raise HTTPException(status_code=400, detail="bot_count must be between 2 and 7")
     if body.advice_mode not in ("reads", "odds"):
@@ -87,14 +92,26 @@ async def _create_tournament_with_seats(
     body: PokerTournamentCreateIn,
     db: AsyncSession,
 ) -> PokerTournamentOut:
-    """Atomic: deducts buy-in, creates tournament row, creates seats."""
+    """Deduct the buy-in and create the tournament + seats in one transaction.
+
+    The User row is locked with ``with_for_update()`` before the balance
+    check-then-debit so two concurrent buy-ins can't both pass the check and
+    double-debit the bankroll (CSO H1). A UNIQUE-constraint violation on commit
+    surfaces as a clean 409 rather than a 500 — defense-in-depth that mirrors
+    ``holdem._join_seat`` (a real seat collision between two creates isn't
+    actually reachable here because each tournament gets a fresh id).
+    """
     from sqlalchemy import select  # noqa: PLC0415
+    from sqlalchemy.exc import IntegrityError  # noqa: PLC0415
 
     from backend.game.poker.archetypes import assign_random_archetypes  # noqa: PLC0415
     from backend.models import PokerSeat, PokerTournament, User  # noqa: PLC0415
 
-    # Look up user; check bankroll
-    user = (await db.execute(select(User).where(User.id == current_user))).scalar_one_or_none()
+    # Lock the user row before the balance check-then-debit so concurrent
+    # buy-ins can't both observe the pre-debit balance and double-spend.
+    user = (await db.execute(
+        select(User).where(User.id == current_user).with_for_update()
+    )).scalar_one_or_none()
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     if user.chip_balance < body.buy_in_cents:
@@ -104,6 +121,7 @@ async def _create_tournament_with_seats(
         )
 
     seed = random.randint(0, 2**31 - 1)
+    now = datetime.now(timezone.utc)
     tournament = PokerTournament(
         id=uuid.uuid4(),
         bot_count=body.bot_count,
@@ -115,19 +133,16 @@ async def _create_tournament_with_seats(
         status="active",
         button_seat=0,
         current_hand_number=0,
-        created_at=datetime.now(timezone.utc),
+        created_at=now,
     )
     db.add(tournament)
     await db.flush()  # ensure tournament.id is bindable for seats
-
-    # Deduct bankroll
-    user.chip_balance -= body.buy_in_cents
 
     # Assign archetypes randomly (per brief §7 mandate)
     rng = random.Random(seed)
     archetypes = assign_random_archetypes(body.bot_count, rng=rng, guarantee_variety=False)
 
-    # Create seats — human first (seat 0), then bots
+    # Create seats — human first (seat 0), then bots.
     seats = [
         PokerSeat(
             id=uuid.uuid4(),
@@ -139,7 +154,7 @@ async def _create_tournament_with_seats(
             current_stack=body.starting_stack_chips,
             is_bust=False,
             is_bot=False,
-            joined_at=datetime.now(timezone.utc),
+            joined_at=now,
         )
     ]
     for i, spec in enumerate(archetypes, start=1):
@@ -154,11 +169,22 @@ async def _create_tournament_with_seats(
                 current_stack=body.starting_stack_chips,
                 is_bust=False,
                 is_bot=True,
-                joined_at=datetime.now(timezone.utc),
+                joined_at=now,
             )
         )
     db.add_all(seats)
-    await db.commit()
+
+    # Debit the bankroll in the same transaction as the seat inserts.
+    user.chip_balance -= body.buy_in_cents
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=409,
+            detail="Tournament creation conflict — please retry",
+        ) from None
     await db.refresh(tournament)
 
     return PokerTournamentOut.model_validate(tournament)

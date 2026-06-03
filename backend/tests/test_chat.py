@@ -318,3 +318,68 @@ async def test_cross_table_isolation(multi, db):
 
     g_a = await _get(ac, as_user, TEST_USER_ID, "blackjack", table_a.id)
     assert [m["body"] for m in g_a.json()] == ["message in A"]
+
+
+# ─── T10 (L7): Chat GET requires seated membership ────────────────────────────
+# AC-10.1, AC-10.2, AC-10.3
+# These tests FAIL until the GET /api/chat/{kind}/{table_id}/messages handler
+# applies the _is_seated check (currently only the POST path checks seating).
+
+
+@pytest.mark.asyncio
+async def test_get_messages_200_for_seated_user(multi, db):
+    """AC-10.1: a seated user can GET /api/chat/{kind}/{table_id}/messages (200).
+    Regression guard — the GET path must still work for the legitimate case.
+    """
+    ac, as_user = multi
+    table = await _seed_blackjack_seat(db, TEST_USER_ID, "chat_get_seated_alice")
+
+    # Post a message first so there is something to read
+    r = await _post(ac, as_user, TEST_USER_ID, "blackjack", table.id, "hello seated")
+    assert r.status_code == 201, r.text
+
+    g = await _get(ac, as_user, TEST_USER_ID, "blackjack", table.id)
+    assert g.status_code == 200, (
+        f"Seated user must be able to GET chat messages (200); "
+        f"got {g.status_code}: {g.text}"
+    )
+    bodies = [m["body"] for m in g.json()]
+    assert "hello seated" in bodies
+
+
+@pytest.mark.asyncio
+async def test_get_messages_403_for_non_seated_user(multi, db):
+    """AC-10.2: a non-seated authenticated user (OTHER_USER_ID, never seated at
+    this table) gets 403 from the GET, matching the POST path's gate.
+
+    Seed table + seat TEST_USER_ID; OTHER_USER_ID (exists as a user but is not
+    seated) tries to GET → must get 403.
+
+    Currently returns 200 (the GET has no seat check) → fails until the fix.
+    """
+    ac, as_user = multi
+    # Seat TEST_USER_ID at the table
+    table = await _seed_blackjack_seat(db, TEST_USER_ID, "chat_get_nonseated_alice")
+    # Create OTHER_USER_ID as a valid user but do NOT seat them
+    await seed_user(db, OTHER_USER_ID, "chat_get_nonseated_bob")
+
+    g = await _get(ac, as_user, OTHER_USER_ID, "blackjack", table.id)
+    assert g.status_code == 403, (
+        f"Non-seated user must get 403 from GET chat messages; "
+        f"got {g.status_code}: {g.text}.  "
+        "The GET handler currently lacks the _is_seated check present on the POST path."
+    )
+
+
+@pytest.mark.asyncio
+async def test_get_messages_404_for_unknown_table_kind(multi, db):
+    """AC-10.3: GET /api/chat/{kind}/{table_id}/messages with an unknown table_kind
+    returns 404 (guard is not regressed by the seating fix).
+    """
+    ac, as_user = multi
+    await seed_user(db, TEST_USER_ID, "chat_get_kind404_user")
+
+    g = await _get(ac, as_user, TEST_USER_ID, "roulette", uuid.uuid4())
+    assert g.status_code == 404, (
+        f"Unknown table_kind must return 404; got {g.status_code}: {g.text}"
+    )

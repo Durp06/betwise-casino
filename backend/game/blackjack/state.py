@@ -50,6 +50,12 @@ def resolve_hand(
             return ("push", bet)
         return ("blackjack", bet * 5 // 2)
 
+    # Dealer natural blackjack beats any non-natural hand (including a 3-card 21).
+    # This branch MUST come before the generic value compare so that a player with
+    # a 3-card total of 21 (not a blackjack) correctly loses to a dealer natural.
+    if eng.is_blackjack(dealer_cards):
+        return ("loss", 0)
+
     player_val = eng.hand_value(cards)
     dealer_val = eng.hand_value(dealer_cards)
 

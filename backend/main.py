@@ -16,6 +16,7 @@ from __future__ import annotations
 import logging
 import os
 import traceback
+from typing import Optional
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -32,6 +33,61 @@ from backend.routers import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ─── SPA path safety helper (defined unconditionally at module level) ──────────
+
+def _safe_static_path(dist: str, full_path: str) -> Optional[str]:
+    """Return the real path of `full_path` inside `dist` if it is safe to serve.
+
+    Safety rules (all must pass):
+    - `full_path` is non-empty.
+    - `full_path` does not start with '/'.
+    - `full_path` does not contain backslashes.
+    - `full_path` does not contain a '..' path segment.
+    - `full_path` is not an absolute path (os.path.isabs) or a Windows drive path.
+    - The resolved real path lies strictly inside `dist` (commonpath check).
+    - The resolved path is an actual file (not a directory or missing).
+
+    Returns the resolved real path string on success, or None on any rejection.
+    """
+    if not full_path:
+        return None
+    # Reject leading slash
+    if full_path.startswith("/"):
+        return None
+    # Reject backslashes (Windows path injection)
+    if "\\" in full_path:
+        return None
+    # Reject any '..' path segment anywhere in the path
+    parts = full_path.replace("\\", "/").split("/")
+    if ".." in parts:
+        return None
+    # Reject absolute paths and Windows drive paths
+    if os.path.isabs(full_path):
+        return None
+    # Windows drive-letter check: e.g. 'C:something'
+    if len(full_path) >= 2 and full_path[1] == ":":
+        return None
+
+    candidate = os.path.join(dist, full_path)
+    real = os.path.realpath(candidate)
+    root = os.path.realpath(dist)
+
+    # Ensure the resolved path is inside dist
+    try:
+        common = os.path.commonpath([real, root])
+    except ValueError:
+        # Different drives on Windows — definitely not inside dist
+        return None
+    if common != root:
+        return None
+
+    if not os.path.isfile(real):
+        return None
+
+    return real
+
 
 # ─── App construction ─────────────────────────────────────────────────────────
 
@@ -151,10 +207,10 @@ if os.path.isdir(_frontend_dist):
         # for non-/api paths. Reject /api/* defensively in case ordering changes.
         if full_path.startswith("api/") or full_path.startswith("api"):
             return JSONResponse(status_code=404, content={"detail": "Not Found"})
-        # Try the literal file (e.g. favicon.ico, robots.txt at dist root)
-        candidate = os.path.join(_frontend_dist, full_path)
-        if full_path and os.path.isfile(candidate):
-            return FileResponse(candidate)
+        # Use the safe helper — never pass full_path directly to FileResponse.
+        safe = _safe_static_path(_frontend_dist, full_path)
+        if safe is not None:
+            return FileResponse(safe)
         # Otherwise serve the SPA shell; React Router takes over client-side.
         return FileResponse(_index_html)
 else:

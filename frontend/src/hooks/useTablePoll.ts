@@ -9,14 +9,21 @@
  * Chipy triggers (pre-play / post-play) live in Table.tsx and ActionBar.tsx
  * respectively — the polling hook stays pure state-reconciliation.
  */
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { getTableState } from "../api/client";
 import { useGameStore } from "../store/gameStore";
 
 const POLL_INTERVAL_MS = 3000;
+/** Number of consecutive failures before calling onError. */
+const ERROR_THRESHOLD = 3;
 
-export function useTablePoll(tableId: string, currentUserId: string | null): void {
+export function useTablePoll(
+  tableId: string,
+  currentUserId: string | null,
+  onError?: (msg: string) => void,
+): void {
   const { reconcileFromPoll } = useGameStore();
+  const failureCount = useRef(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -26,8 +33,16 @@ export function useTablePoll(tableId: string, currentUserId: string | null): voi
 
       const result = await getTableState(tableId);
       if (cancelled) return;
-      if (result.error || result.data === null) return;
+      if (result.error || result.data === null) {
+        failureCount.current += 1;
+        if (failureCount.current >= ERROR_THRESHOLD && onError) {
+          onError(result.error ?? "Failed to load table state");
+        }
+        return;
+      }
 
+      // Successful poll — reset failure counter.
+      failureCount.current = 0;
       reconcileFromPoll(result.data, currentUserId ?? "");
     }
 
@@ -48,5 +63,5 @@ export function useTablePoll(tableId: string, currentUserId: string | null): voi
       clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [tableId, currentUserId, reconcileFromPoll]);
+  }, [tableId, currentUserId, reconcileFromPoll, onError]);
 }

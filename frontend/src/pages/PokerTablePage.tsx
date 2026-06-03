@@ -24,9 +24,10 @@ export default function PokerTablePage() {
   const setPokerTournamentState = useGameStore((s) => s.setPokerTournamentState);
   const [dealing, setDealing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pollError, setPollError] = useState<string | null>(null);
 
   // Always-on poll while mounted
-  usePokerPoll(tournamentId ?? "");
+  usePokerPoll(tournamentId ?? "", setPollError);
 
   // On first mount, ensure a hand is dealt
   useEffect(() => {
@@ -51,6 +52,35 @@ export default function PokerTablePage() {
 
   if (!tournamentId) {
     return <Navigate to="/lobby" replace />;
+  }
+
+  if (pollError) {
+    return (
+      <main className="min-h-screen bg-felt-green text-cream p-6">
+        <div
+          role="alert"
+          className="ink-outline-thick rounded-xl bg-red-100 text-red-900 p-4"
+        >
+          <p>{t("Connection lost — could not load tournament state")}</p>
+          <p className="text-sm mt-1 text-red-700">{pollError}</p>
+          <div className="flex gap-3 mt-3">
+            <button
+              type="button"
+              onClick={() => { setPollError(null); }}
+              className="px-3 py-1 border-2 border-ink bg-cream text-ink rounded"
+            >
+              {t("Retry")}
+            </button>
+            <a
+              href="/lobby"
+              className="px-3 py-1 border-2 border-ink bg-cream text-ink rounded"
+            >
+              {t("Back to lobby")}
+            </a>
+          </div>
+        </div>
+      </main>
+    );
   }
 
   if (error) {
