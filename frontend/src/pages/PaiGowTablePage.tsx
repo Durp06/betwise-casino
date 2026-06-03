@@ -28,11 +28,12 @@ import { usePaiGowPoll } from "../hooks/usePaiGowPoll";
 import { usePaiGowStore } from "../store/paiGowStore";
 import type { PaiGowCard } from "../types";
 import { t } from "../i18n";
+import { formatMoney } from "../utils/money";
 
 function formatDollars(cents: number | null): string {
   if (cents === null) return "—";
-  const sign = cents > 0 ? "+" : "";
-  return `${sign}$${(cents / 100).toFixed(2)}`;
+  const sign = cents > 0 ? "+" : cents < 0 ? "-" : "";
+  return `${sign}${formatMoney(Math.abs(cents))}`;
 }
 
 export default function PaiGowTablePage() {
@@ -241,7 +242,7 @@ export default function PaiGowTablePage() {
               </h3>
               <div className="flex flex-wrap gap-3 items-end">
                 <label className="font-ui text-xs uppercase tracking-widest">
-                  {t("Ante")} ({tableState.min_bet_cents / 100}–{tableState.max_bet_cents / 100})
+                  {t("Ante")} ({formatMoney(tableState.min_bet_cents)}–{formatMoney(tableState.max_bet_cents)})
                   <input
                     type="number"
                     value={bet / 100}
@@ -252,7 +253,7 @@ export default function PaiGowTablePage() {
                   />
                 </label>
                 <label className="font-ui text-xs uppercase tracking-widest">
-                  {t("Fortune")} ({tableState.min_fortune_bet_cents / 100}–{tableState.max_fortune_bet_cents / 100})
+                  {t("Fortune")} ({formatMoney(tableState.min_fortune_bet_cents)}–{formatMoney(tableState.max_fortune_bet_cents)})
                   <input
                     type="number"
                     value={fortuneBet / 100}

@@ -4,6 +4,8 @@
  * Drawn as stacked SVG ellipses (each offset 4 px up from the one below)
  * to suggest physical chip layers. Total value below in display font.
  */
+import { formatMoney } from "../utils/money";
+
 interface ChipStackProps {
   /** Bet amount in cents */
   amount: number;
@@ -70,7 +72,7 @@ export default function ChipStack({ amount, className = "" }: ChipStackProps) {
         })}
       </div>
       <span className="font-display text-gold-bright text-base gold-drop">
-        ${(amount / 100).toFixed(0)}
+        {formatMoney(amount)}
       </span>
     </div>
   );

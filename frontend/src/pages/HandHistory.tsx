@@ -12,10 +12,7 @@ import { getMe, getUserHands } from "../api/client";
 import type { Hand, UserStats } from "../types";
 import SessionReviewModal from "../components/SessionReviewModal";
 import { t } from "../i18n";
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+import { formatMoney } from "../utils/money";
 
 export default function HandHistory() {
   const [me, setMe] = useState<UserStats | null>(null);
@@ -148,7 +145,7 @@ export default function HandHistory() {
                     {hand.outcome ?? "—"}
                   </span>
                   <span className="font-ui text-ink/80 text-right">
-                    {formatCents(hand.bet)}
+                    {formatMoney(hand.bet)}
                   </span>
                 </button>
               );

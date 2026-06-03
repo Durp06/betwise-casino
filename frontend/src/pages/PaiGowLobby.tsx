@@ -1,18 +1,16 @@
 /**
- * PaiGowLobby.tsx — Pai Gow Poker table list + create form.
+ * PaiGowLobby.tsx — Pai Gow Poker table browser at /pai-gow/lobby.
  *
- * Minimal additive — does NOT touch the existing blackjack Lobby. The main
- * Lobby gets a one-line link to /pai-gow/lobby.
+ * Same shared chrome (GameLobbyShell) + cream-plaque table rows as the
+ * Blackjack / Hold'em lobbies, so every game's table list looks the same.
  */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPaiGowTable, joinPaiGowTable, listPaiGowTables } from "../api/client";
 import type { PaiGowTableListItem } from "../types";
 import { t } from "../i18n";
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(0)}`;
-}
+import { formatMoney } from "../utils/money";
+import GameLobbyShell from "../components/GameLobbyShell";
 
 export default function PaiGowLobby() {
   const navigate = useNavigate();
@@ -39,6 +37,8 @@ export default function PaiGowLobby() {
 
   useEffect(() => {
     void fetchTables();
+    const id = setInterval(() => { void fetchTables(); }, 5000);
+    return () => clearInterval(id);
   }, [fetchTables]);
 
   async function handleCreate(): Promise<void> {
@@ -68,126 +68,147 @@ export default function PaiGowLobby() {
     void navigate(`/pai-gow/table/${tableId}`);
   }
 
-  return (
-    <main className="min-h-screen bg-felt-green p-4 sm:p-6">
-      <header className="max-w-3xl mx-auto mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="font-display text-cream text-3xl sm:text-4xl tracking-wider">
-            {t("Pai Gow Poker")}
-          </h1>
-          <p className="font-flavor text-cream/70 text-sm italic">
-            {t("House-banked. Split 7 cards into front + back. Beat the dealer.")}
-          </p>
-        </div>
-        <button
-          type="button"
-          onClick={() => void navigate("/lobby")}
-          className="px-3 py-2 rounded-md border-[3px] border-ink bg-cream text-ink
-            font-ui uppercase text-xs"
-        >
-          {t("← All games")}
-        </button>
-      </header>
+  const newTableButton = (
+    <button
+      type="button"
+      onClick={() => setShowCreate((v) => !v)}
+      className="ink-outline-thick ink-shadow font-display tracking-wider
+        px-5 py-3 rounded-md text-cream text-lg uppercase min-h-[52px]"
+      style={{ backgroundColor: "#C0392B" }}
+    >
+      {t("New Table")}
+    </button>
+  );
 
-      <section className="max-w-3xl mx-auto" aria-busy={loading}>
-        {loading && <p className="text-cream font-ui">{t("Loading…")}</p>}
-        {error !== null && (
-          <p role="alert" className="text-red-300 font-ui">
+  return (
+    <GameLobbyShell
+      title={t("Pai Gow Poker")}
+      subtitle={t("House-banked. Split 7 cards into front + back. Beat the dealer.")}
+      action={newTableButton}
+    >
+      {actionError !== null && (
+        <p role="alert" className="font-flavor text-action-hit text-sm mb-3 italic">
+          {actionError}
+        </p>
+      )}
+
+      {/* Create form */}
+      {showCreate && (
+        <div
+          className="ink-outline-thick paper-grain rounded-md p-4 mb-4 space-y-2"
+          style={{ backgroundColor: "#F5F0E8", boxShadow: "5px 5px 0 0 #1A0A00" }}
+        >
+          <label className="block font-ui text-ink text-xs uppercase tracking-widest">
+            {t("Table name")}
+          </label>
+          <input
+            type="text"
+            value={newName}
+            onChange={(e) => setNewName(e.target.value)}
+            maxLength={100}
+            className="w-full px-2 py-2 border-[3px] border-ink rounded-md font-body text-ink"
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => void handleCreate()}
+              disabled={creating || newName.trim() === ""}
+              className="ink-outline ink-shadow px-4 py-2 rounded-md bg-gold-bright text-ink
+                font-ui uppercase text-xs tracking-widest disabled:opacity-40"
+            >
+              {creating ? t("Creating…") : t("Create")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowCreate(false)}
+              className="ink-outline px-4 py-2 rounded-md bg-cream text-ink
+                font-ui uppercase text-xs tracking-widest"
+            >
+              {t("Cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Loading skeleton */}
+      {loading && (
+        <div role="status" aria-busy="true" className="flex flex-col gap-3">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="ink-outline h-20 rounded-md animate-pulse"
+              style={{ backgroundColor: "#F5F0E8", opacity: 0.5 }}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Error state */}
+      {!loading && error !== null && (
+        <div role="alert" className="text-center py-8">
+          <p className="font-flavor text-action-hit italic">
             {t("Failed to load tables:")} {error}
           </p>
-        )}
+          <button
+            onClick={() => void fetchTables()}
+            className="mt-3 font-ui text-cream uppercase tracking-wider text-sm underline"
+          >
+            {t("Try again")}
+          </button>
+        </div>
+      )}
 
-        {tables !== null && tables.length === 0 && (
-          <p className="text-cream/70 font-flavor italic">
-            {t("No tables yet. Create one.")}
-          </p>
-        )}
+      {/* Empty state */}
+      {!loading && error === null && tables !== null && tables.length === 0 && (
+        <div className="text-center py-12">
+          <p className="font-flavor text-cream italic mt-3 mb-1">{t("No tables yet. Create one.")}</p>
+        </div>
+      )}
 
-        {tables !== null && tables.length > 0 && (
-          <ul className="space-y-3">
-            {tables.map((tbl) => (
-              <li
+      {/* Table list */}
+      {!loading && error === null && tables !== null && tables.length > 0 && (
+        <div className="flex flex-col gap-4">
+          {tables.map((tbl) => {
+            const isFull = tbl.seats_taken >= tbl.max_seats;
+            return (
+              <div
                 key={tbl.id}
-                className="ink-outline-thick shadow-[4px_4px_0_0_#1A0A00] rounded-md p-3 sm:p-4
-                  bg-cream text-ink flex flex-col sm:flex-row sm:items-center gap-3"
+                className="ink-outline-thick paper-grain rounded-md p-5
+                  flex flex-col sm:flex-row items-start sm:items-center gap-3"
+                style={{ backgroundColor: "#F5F0E8", boxShadow: "5px 5px 0 0 #1A0A00" }}
               >
                 <div className="flex-1 min-w-0">
-                  <h2 className="font-display text-xl tracking-wider truncate">{tbl.name}</h2>
-                  <p className="font-ui text-xs">
-                    {t("Min")} {formatCents(tbl.min_bet_cents)} · {t("Max")}{" "}
-                    {formatCents(tbl.max_bet_cents)} · {tbl.seats_taken}/{tbl.max_seats}{" "}
-                    {t("seated")}
+                  <span className="font-display text-ink text-3xl truncate">{tbl.name}</span>
+                  <div className="font-flavor text-ink/70 text-xs mt-1 flex items-center gap-2 flex-wrap">
+                    <span className="text-action-double">
+                      {formatMoney(tbl.min_bet_cents)}–{formatMoney(tbl.max_bet_cents)}
+                    </span>
+                    <span>·</span>
+                    <span>{tbl.seats_taken}/{tbl.max_seats} {t("seated")}</span>
                     {tbl.active_round_status !== null && (
-                      <> · {tbl.active_round_status}</>
+                      <>
+                        <span>·</span>
+                        <span>{tbl.active_round_status}</span>
+                      </>
                     )}
-                  </p>
+                  </div>
                 </div>
                 <button
                   type="button"
                   onClick={() => void handleJoin(tbl.id)}
-                  disabled={joining !== null || tbl.seats_taken >= tbl.max_seats}
-                  className="px-4 py-3 rounded-md border-[3px] border-ink bg-gold-bright
-                    font-ui uppercase text-xs tracking-widest min-h-[44px]
-                    disabled:opacity-40 disabled:cursor-not-allowed"
+                  disabled={joining !== null || isFull}
+                  className={`ink-outline-thick ink-shadow font-display tracking-wider
+                    px-5 py-3 rounded-md text-base text-cream uppercase min-h-[52px]
+                    ${isFull ? "bg-ink/40 cursor-not-allowed opacity-50" : "bg-action-stand"}`}
+                  aria-busy={joining === tbl.id}
                 >
-                  {joining === tbl.id ? t("Joining…") : t("Sit down")}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <div className="mt-6">
-          {!showCreate && (
-            <button
-              type="button"
-              onClick={() => setShowCreate(true)}
-              className="px-4 py-3 rounded-md border-[3px] border-ink bg-cream text-ink
-                font-ui uppercase tracking-widest min-h-[44px]"
-            >
-              {t("Create table")}
-            </button>
-          )}
-          {showCreate && (
-            <div className="ink-outline-thick rounded-md p-3 bg-cream text-ink space-y-2">
-              <label className="block font-ui text-xs uppercase tracking-widest">
-                {t("Table name")}
-              </label>
-              <input
-                type="text"
-                value={newName}
-                onChange={(e) => setNewName(e.target.value)}
-                maxLength={100}
-                className="w-full px-2 py-2 border-[3px] border-ink rounded-md font-body"
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => void handleCreate()}
-                  disabled={creating || newName.trim() === ""}
-                  className="px-4 py-2 rounded-md border-[3px] border-ink bg-gold-bright
-                    font-ui uppercase text-xs tracking-widest disabled:opacity-40"
-                >
-                  {creating ? t("Creating…") : t("Create")}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowCreate(false)}
-                  className="px-4 py-2 rounded-md border-[3px] border-ink bg-cream text-ink
-                    font-ui uppercase text-xs tracking-widest"
-                >
-                  {t("Cancel")}
+                  {joining === tbl.id ? t("…") : isFull ? t("Full") : t("Sit Down")}
                 </button>
               </div>
-            </div>
-          )}
-          {actionError !== null && (
-            <p role="alert" className="text-red-300 font-ui mt-2">
-              {actionError}
-            </p>
-          )}
+            );
+          })}
         </div>
-      </section>
-    </main>
+      )}
+    </GameLobbyShell>
   );
 }

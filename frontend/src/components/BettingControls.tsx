@@ -9,6 +9,7 @@ import { t } from "../i18n";
 import { useGameStore } from "../store/gameStore";
 import { dealHand } from "../api/client";
 import type { Hand } from "../types";
+import { formatMoney } from "../utils/money";
 
 interface BettingControlsProps {
   tableId: string;
@@ -103,7 +104,7 @@ export default function BettingControls({
 
   async function handleDeal(): Promise<void> {
     if (betAmount < minBet) {
-      setError(t(`Minimum bet is $${(minBet / 100).toFixed(2)}`));
+      setError(t(`Minimum bet is ${formatMoney(minBet)}`));
       return;
     }
     if (betAmount > chipBalance) {
@@ -156,7 +157,7 @@ export default function BettingControls({
           {t("Bet")}
         </span>
         <span className="font-display text-gold-bright text-2xl gold-drop">
-          ${(betAmount / 100).toFixed(2)}
+          {formatMoney(betAmount)}
         </span>
         {betAmount > 0 && (
           <button

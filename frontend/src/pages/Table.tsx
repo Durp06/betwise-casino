@@ -22,6 +22,7 @@ import ChatPanel from "../components/ChatPanel";
 import Chipy from "../components/Chipy";
 import type { ChipyExpression, ChipyAnimation, ChipyPose } from "../components/Chipy";
 import { t } from "../i18n";
+import { formatMoney } from "../utils/money";
 
 // Maps a hand outcome (or status fallback) to Chipy's reaction state.
 // Backend doesn't always set hand.outcome — a bust during the player's turn
@@ -358,7 +359,7 @@ export default function Table() {
                         {t("Bet")}
                       </span>
                       <span className="font-display text-gold-bright">
-                        ${(hand.bet / 100).toFixed(2)}
+                        {formatMoney(hand.bet)}
                       </span>
                     </div>
                   </div>
@@ -381,7 +382,7 @@ export default function Table() {
           && myHand?.id === lastFinishedHandId
           && chipyMood.title && (
           <div
-            className="ink-outline rounded-2xl flex items-center gap-4 px-5 py-4 paper-grain"
+            className={`ink-outline rounded-2xl flex items-center gap-4 px-5 py-4 paper-grain banner-pulse${chipyMood.expression === "happy" ? " sparkle" : ""}`}
             style={{
               backgroundColor: "#F5F0E8",
               boxShadow: "5px 5px 0 0 #1A0A00",
@@ -399,7 +400,7 @@ export default function Table() {
               </h2>
               {myHand?.payout !== undefined && myHand.payout !== null && myHand.payout > 0 && (
                 <p className="font-ui text-action-stand text-base mt-1">
-                  +${(myHand.payout / 100).toFixed(2)}
+                  +{formatMoney(myHand.payout)}
                 </p>
               )}
               {chipyMood.title && (

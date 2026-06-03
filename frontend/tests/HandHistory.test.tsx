@@ -140,13 +140,11 @@ describe("AC-F-HIST1: HandHistory renders the list of hands on success", () => {
     render(<HandHistory />);
 
     await waitFor(() => {
-      // bet=1000 → $10.00 or bet=500 → $5.00
+      // formatMoney shows clean whole dollars: bet=1000 → "$10", bet=500 → "$5"
+      // (cents are only shown when an amount is fractional, e.g. a 3:2 payout).
       const hasBet =
-        screen.queryByText(/\$10\.00/) !== null ||
-        screen.queryByText(/\$5\.00/) !== null ||
-        // or raw cents representation
-        screen.queryByText(/1000/) !== null ||
-        screen.queryByText(/500/) !== null;
+        screen.queryByText(/\$10\b/) !== null ||
+        screen.queryByText(/\$5\b/) !== null;
       expect(hasBet).toBe(true);
     });
   });
