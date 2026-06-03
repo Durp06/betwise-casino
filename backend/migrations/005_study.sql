@@ -1,10 +1,11 @@
 -- BetWise Casino — Study Migration
--- Version: 003
+-- Version: 005  (renumbered from 003 after poker added 002/003/004)
 -- Author: BetWise Casino team
 --
 -- How to run:
 --   Option A (Supabase): Paste into the Supabase SQL editor and execute.
---   Option B (psql):     psql $DATABASE_URL -f 003_study.sql
+--   Option B (psql):     psql $DATABASE_URL -f 005_study.sql
+--   Applied to prod 2026-06-03 via the app engine over Railway DATABASE_URL.
 --
 -- This migration is IDEMPOTENT — safe to run multiple times.
 -- All ALTER TABLE statements use ADD COLUMN IF NOT EXISTS guards.
