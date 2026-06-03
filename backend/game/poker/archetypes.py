@@ -267,8 +267,14 @@ def _preflop_decision(
             chosen_hand_class="premium",
         )
 
-    facing_bet = ctx.to_call_bb > 0
-    if facing_bet:
+    # A raise has actually happened only when the price to call exceeds the big
+    # blind. Facing *only* the unraised big blind is not aggression — it's the
+    # forced bring-in every unopened seat sees (to_call == 1bb; the SB sees
+    # 0.5bb, the BB sees 0). Treating that as a bet to fold to is what made bots
+    # fold ~85% of hands and never open-raise. So only the >1bb case routes into
+    # the fold-to-a-raise logic; the unraised pot falls through to OPEN logic.
+    facing_raise = ctx.to_call_bb > 1.0
+    if facing_raise:
         # Facing a raise. Re-raise with premium; call with strong-but-not-3-bettable;
         # fold otherwise. Maniacs/LAGs 3-bet wider; Nits/SetMiners never 3-bet bluff.
         if _is_premium_starter(hand) and rng.random() > spec.fold_to_aggression * 0.2:
@@ -327,14 +333,17 @@ def _preflop_decision(
             coach_note=f"{spec.name} limps — their VPIP-PFR gap is non-trivial.",
             chosen_hand_class="speculative",
         )
-    if ctx.to_call_bb == 0.0 and ctx.position == "BB":
-        # Free check in the big blind
+    if ctx.to_call_bb == 0.0:
+        # Nothing to call (the big blind, or a fully-completed pot) — take the
+        # free flop. A bot must never fold when checking is free. (The router
+        # passes position="MP" for every bot, so this can't rely on the position
+        # label to recognize the big blind.)
         return ArchetypeDecision(
             action="check",
             raise_to_bb=0.0,
             intent="blind_defend",
             estimated_opponent_range=frozenset(),
-            coach_note="BB checks for free.",
+            coach_note="Checks for free — no bet to face.",
             chosen_hand_class="any",
         )
     return ArchetypeDecision(
@@ -398,16 +407,23 @@ def _postflop_decision(
                 chosen_hand_class="strong",
             )
 
-        # Medium hand → call if pot odds work
-        if medium and pot_odds < 0.35:
-            return ArchetypeDecision(
-                action="call",
-                raise_to_bb=0.0,
-                intent="value",
-                estimated_opponent_range=top_pct(30),
-                coach_note=f"{spec.name} calls with a medium hand — pot odds support it.",
-                chosen_hand_class="medium",
-            )
+        # Medium made hand (pair / two pair) → defend. Good pot odds: always
+        # call. Bad pot odds (facing a big bet): call unless the archetype's
+        # fold-to-aggression tells it to lay the made hand down. A made hand must
+        # never auto-fold to a standard c-bet — the old code fell through to an
+        # unconditional fold whenever pot_odds >= 0.35, so every bot folded every
+        # pair to a pot-sized bet.
+        if medium:
+            if pot_odds < 0.35 or rng.random() > spec.fold_to_aggression:
+                return ArchetypeDecision(
+                    action="call",
+                    raise_to_bb=0.0,
+                    intent="value",
+                    estimated_opponent_range=top_pct(30),
+                    coach_note=f"{spec.name} calls with a medium made hand — pot odds support it.",
+                    chosen_hand_class="medium",
+                )
+            return _fold(spec, "laid_down_medium")
 
         # Weak hand vs aggression — Nit/Mouse folds; Maniac/LAG sometimes calls/raises
         if weak and rng.random() < spec.fold_to_aggression:
