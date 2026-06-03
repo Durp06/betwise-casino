@@ -101,27 +101,34 @@ def test_safe_static_path_returns_real_path_for_legit_file(tmp_path):
 # ─── AC-1.3 — structural: spa_fallback's source calls `_safe_static_path` ───
 
 def test_spa_fallback_source_calls_safe_static_path():
-    """AC-1.3 (structural): `spa_fallback` must delegate file resolution to
-    `_safe_static_path` — not pass `full_path` to FileResponse directly.
+    """AC-1.3 (structural): the `spa_fallback` route must delegate file
+    resolution to `_safe_static_path` — not pass `full_path` to FileResponse
+    directly. If the route stops calling the helper (e.g. reverted to a direct
+    os.path.join call), traversal is re-introduced silently.
 
-    This is a compile-time regression guard. If the route stops calling the
-    helper (e.g. reverted to a direct os.path.join call), traversal is
-    re-introduced silently. The helper must be both defined and called.
+    Read main.py's source TEXT rather than the live `spa_fallback` function
+    object: the route is registered inside `if os.path.isdir(_frontend_dist)`,
+    so the function is only *defined* when `frontend/dist` exists at import time.
+    In a backend-only environment (CI runs pytest without building the frontend)
+    `spa_fallback` is absent, but its `def` is always present in the source file.
+    The `_safe_static_path` helper is always defined regardless.
     """
     import backend.main as main_mod  # noqa: PLC0415
 
-    # The helper must be importable as an attribute of main.py
+    # The helper must always be importable as a module-level function.
     assert hasattr(main_mod, "_safe_static_path"), (
         "backend.main must expose `_safe_static_path` as a module-level function"
     )
 
-    # The fallback route must call the helper
-    assert hasattr(main_mod, "spa_fallback"), (
-        "backend.main must have a `spa_fallback` function (the SPA catch-all route)"
+    # Inspect the module source text (works whether or not the route was
+    # registered at import time).
+    module_src = inspect.getsource(main_mod)
+    assert "def spa_fallback" in module_src, (
+        "backend.main must define a `spa_fallback` SPA catch-all route"
     )
-    source = inspect.getsource(main_mod.spa_fallback)
-    assert "_safe_static_path" in source, (
-        "spa_fallback source must call `_safe_static_path`; "
-        "currently it appears to pass full_path directly to FileResponse, "
-        "which is the path-traversal vulnerability."
+    fallback_src = module_src[module_src.index("def spa_fallback"):]
+    assert "_safe_static_path" in fallback_src, (
+        "spa_fallback must call `_safe_static_path`; "
+        "passing full_path directly to FileResponse re-introduces the "
+        "path-traversal vulnerability."
     )
