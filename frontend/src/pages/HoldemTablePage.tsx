@@ -24,6 +24,8 @@ import HoldemActionBar from "../components/HoldemActionBar";
 import ChatPanel from "../components/ChatPanel";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
+import ChipFly from "../components/ChipFly";
+import { useTableActionFeed } from "../motion/useTableActionFeed";
 import { t } from "../i18n";
 
 export default function HoldemTablePage() {
@@ -40,6 +42,39 @@ export default function HoldemTablePage() {
   const [pollError, setPollError] = useState<string | null>(null);
 
   useHoldemPoll(tableId ?? "", setPollError);
+
+  // Multiplayer presence: per-seat badges + chips-to-pot flies from the action log.
+  const currentHand = holdemTableState?.current_hand ?? null;
+  const actionEvents = useTableActionFeed(currentHand);
+  const [lastActionBySeat, setLastActionBySeat] = useState<
+    Record<number, { action: string; amount: number; key: number }>
+  >({});
+  const [flies, setFlies] = useState<{ id: number; seat: number; amount: number }[]>([]);
+  useEffect(() => {
+    if (actionEvents.length === 0) return;
+    const timers: number[] = [];
+    for (const ev of actionEvents) {
+      setLastActionBySeat((prev) => ({
+        ...prev,
+        [ev.seatNumber]: { action: ev.action, amount: ev.amount, key: ev.actionIndex },
+      }));
+      if (["bet", "raise", "call", "all_in"].includes(ev.action)) {
+        setFlies((prev) => [...prev, { id: ev.actionIndex, seat: ev.seatNumber, amount: ev.amount }]);
+      }
+      const seatNum = ev.seatNumber;
+      const idx = ev.actionIndex;
+      const tid = window.setTimeout(() => {
+        setLastActionBySeat((prev) => {
+          if (prev[seatNum]?.key !== idx) return prev;
+          const next = { ...prev };
+          delete next[seatNum];
+          return next;
+        });
+      }, 1800);
+      timers.push(tid);
+    }
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [actionEvents]);
 
   const refresh = useCallback(async () => {
     if (!tableId) return;
@@ -199,10 +234,22 @@ export default function HoldemTablePage() {
                 isCurrentToAct={isCurrentToAct}
                 isButton={isButton}
                 isYou={isYou}
+                lastAction={handSeat ? lastActionBySeat[handSeat.seat_number]?.action ?? null : null}
+                lastActionAmount={handSeat ? lastActionBySeat[handSeat.seat_number]?.amount ?? 0 : 0}
               />
             );
           })}
         </div>
+
+        {/* Chips arcing to the pot when a seat bets/raises/calls */}
+        {flies.map((f) => (
+          <ChipFly
+            key={f.id}
+            seatNumber={f.seat}
+            amount={f.amount}
+            onDone={() => setFlies((prev) => prev.filter((x) => x.id !== f.id))}
+          />
+        ))}
 
         {/* Controls */}
         <div className="w-full max-w-md flex flex-col items-center gap-3">

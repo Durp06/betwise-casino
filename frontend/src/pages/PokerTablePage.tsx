@@ -17,6 +17,8 @@ import PokerActionBar from "../components/PokerActionBar";
 import PokerChipyCoach from "../components/PokerChipyCoach";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
+import ChipFly from "../components/ChipFly";
+import { useTableActionFeed } from "../motion/useTableActionFeed";
 import { t } from "../i18n";
 
 /** Beat between a hand finishing (showdown visible) and auto-dealing the next
@@ -34,6 +36,40 @@ export default function PokerTablePage() {
 
   // Always-on poll while mounted
   usePokerPoll(tournamentId ?? "", setPollError);
+
+  // Multiplayer presence: turn the polled action log into per-seat badges +
+  // chips-to-pot flies (bots' bets/folds/checks become visible).
+  const currentHand = pokerTournamentState?.current_hand ?? null;
+  const actionEvents = useTableActionFeed(currentHand);
+  const [lastActionBySeat, setLastActionBySeat] = useState<
+    Record<number, { action: string; amount: number; key: number }>
+  >({});
+  const [flies, setFlies] = useState<{ id: number; seat: number; amount: number }[]>([]);
+  useEffect(() => {
+    if (actionEvents.length === 0) return;
+    const timers: number[] = [];
+    for (const ev of actionEvents) {
+      setLastActionBySeat((prev) => ({
+        ...prev,
+        [ev.seatNumber]: { action: ev.action, amount: ev.amount, key: ev.actionIndex },
+      }));
+      if (["bet", "raise", "call", "all_in"].includes(ev.action)) {
+        setFlies((prev) => [...prev, { id: ev.actionIndex, seat: ev.seatNumber, amount: ev.amount }]);
+      }
+      const seatNum = ev.seatNumber;
+      const idx = ev.actionIndex;
+      const tid = window.setTimeout(() => {
+        setLastActionBySeat((prev) => {
+          if (prev[seatNum]?.key !== idx) return prev;
+          const next = { ...prev };
+          delete next[seatNum];
+          return next;
+        });
+      }, 1800);
+      timers.push(tid);
+    }
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [actionEvents]);
 
   // On first mount, ensure a hand is dealt
   useEffect(() => {
@@ -215,10 +251,22 @@ export default function PokerTablePage() {
                   isCurrentToAct={isCurrent}
                   isButton={isButton}
                   isYou={seat.seat_number === yourSeatNumber}
+                  lastAction={lastActionBySeat[seat.seat_number]?.action ?? null}
+                  lastActionAmount={lastActionBySeat[seat.seat_number]?.amount ?? 0}
                 />
               );
             })}
           </div>
+
+          {/* Chips arcing to the pot when a seat bets/raises/calls */}
+          {flies.map((f) => (
+            <ChipFly
+              key={f.id}
+              seatNumber={f.seat}
+              amount={f.amount}
+              onDone={() => setFlies((prev) => prev.filter((x) => x.id !== f.id))}
+            />
+          ))}
         </div>
 
         {/* Action bar — only when it's your turn AND you have a hand */}
