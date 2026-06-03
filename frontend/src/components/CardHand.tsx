@@ -2,7 +2,7 @@
  * CardHand.tsx — horizontal hand layout with brass-coin value badge.
  */
 import type { Card } from "../types";
-import PlayingCard from "./PlayingCard";
+import AnimatedCardRow from "./AnimatedCardRow";
 import { t } from "../i18n";
 
 interface CardHandProps {
@@ -20,15 +20,13 @@ export default function CardHand({ cards, handValue, label }: CardHandProps) {
         </span>
       )}
 
-      <div className="flex flex-row justify-center gap-2 deal-stagger">
-        {cards.length === 0 ? (
+      {cards.length === 0 ? (
+        <div className="flex flex-row justify-center gap-2">
           <span className="font-flavor text-cream/60 italic text-sm">{t("No cards")}</span>
-        ) : (
-          cards.map((card, idx) => (
-            <PlayingCard key={idx} card={card} index={idx} />
-          ))
-        )}
-      </div>
+        </div>
+      ) : (
+        <AnimatedCardRow cards={cards} />
+      )}
 
       {handValue !== undefined && handValue !== null && (
         <span

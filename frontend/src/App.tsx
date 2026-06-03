@@ -8,6 +8,8 @@
 import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MotionConfig } from "framer-motion";
+import { DEAL_SPRING } from "./motion/tokens";
 import { useSession } from "./auth/supabase";
 import Login from "./pages/Login";
 import Lobby from "./pages/Lobby";
@@ -75,6 +77,7 @@ function AuthGate({ children }: AuthGateProps) {
 export default function App() {
   return (
     <QueryClientProvider client={queryClient}>
+      <MotionConfig reducedMotion="user" transition={DEAL_SPRING}>
       <BrowserRouter>
         <Routes>
           {/* Public */}
@@ -190,6 +193,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/lobby" replace />} />
         </Routes>
       </BrowserRouter>
+      </MotionConfig>
     </QueryClientProvider>
   );
 }
