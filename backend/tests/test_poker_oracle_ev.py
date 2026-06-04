@@ -402,3 +402,51 @@ def test_gbc3_decision_classification_optional_new_fields_have_defaults() -> Non
     assert dc.required_equity is None, f"required_equity should default to None, got {dc.required_equity}"
     assert dc.ev_loss_bb is None, f"ev_loss_bb should default to None, got {dc.ev_loss_bb}"
     assert dc.explanation is None, f"explanation should default to None, got {dc.explanation}"
+
+
+# ---------------------------------------------------------------------------
+# EV-formula regression guard (review finding: EV(call) must use the full
+# post-call pot, pot_bb + 2*to_call_bb, NOT pot_bb + to_call_bb).
+#
+# This pins the formula tightly where the bug manifested. The earlier G-tests
+# only checked verdict *categories* at extreme equities, so a magnitude bug
+# slipped through. These assertions fail under the buggy formula:
+#   pot=10, to_call=5, required_equity = 5/(10+2*5) = 0.25
+#   * break-even (equity == 0.25), action=call:
+#       correct EV(call) = 0.25*(10+2*5) - 5 = 0.0   → verdict "best", ev_loss 0
+#       buggy   EV(call) = 0.25*(10+5)  - 5 = -1.25  → ev_loss 1.25, "inaccuracy"
+#   * equity=0.05, action=call (best is fold, EV 0):
+#       correct ev_loss = |0 - (0.05*20 - 5)| = 4.0 bb exactly
+#       buggy   ev_loss = |0 - (0.05*15 - 5)| = 4.25 bb
+# ---------------------------------------------------------------------------
+
+def test_ev_formula_breakeven_and_magnitude_regression() -> None:
+    """At break-even equity a call loses ~0 EV (verdict 'best'); EV-loss magnitude is exact."""
+    # Break-even: equity exactly equals required_equity(10, 5) = 0.25.
+    snap_be = _snap(
+        hand_str="JTs", hole=("Jh", "Th"), board=("Qd", "9c", "3h"),
+        street="flop", pot_bb=10.0, to_call_bb=5.0, stack_bb=100.0,
+        is_bubble=False, live_equity=0.25,
+    )
+    res_be = classify_decision(snap_be, "call", "odds")
+    assert res_be.verdict == "best", (
+        f"Calling at exactly break-even equity must lose ~0 EV → 'best', got {res_be.verdict!r} "
+        f"(ev_loss_bb={res_be.ev_loss_bb}). A non-zero ev_loss here means EV(call) uses the "
+        f"wrong pot size."
+    )
+    assert res_be.ev_loss_bb == pytest.approx(0.0, abs=1e-9), (
+        f"break-even ev_loss_bb must be 0, got {res_be.ev_loss_bb}"
+    )
+
+    # Exact magnitude: equity 0.05, best action is fold (EV 0), so
+    # ev_loss == |EV(fold) - EV(call)| == |0 - (0.05*(10+2*5) - 5)| == 4.0 bb.
+    snap_mag = _snap(
+        hand_str="72o", hole=("7s", "2c"), board=("Ah", "Kd", "Qc"),
+        street="flop", pot_bb=10.0, to_call_bb=5.0, stack_bb=100.0,
+        is_bubble=False, live_equity=0.05,
+    )
+    res_mag = classify_decision(snap_mag, "call", "odds")
+    assert res_mag.ev_loss_bb == pytest.approx(4.0, abs=1e-9), (
+        f"ev_loss_bb for a 0.05-equity call into pot=10/to_call=5 must be exactly 4.0 bb "
+        f"(equity*(pot+2*to_call)-to_call), got {res_mag.ev_loss_bb}"
+    )

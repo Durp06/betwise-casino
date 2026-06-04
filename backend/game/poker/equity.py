@@ -231,12 +231,12 @@ def _enumerate_equity(
 ) -> float:
     """Exact enumeration over villain-combo × remaining-board-completions.
 
-    Called when len(board) >= 3 (1 or 0 cards to come).
-    Falls back to seeded MC (via _mc_equity) if the combination count
-    exceeds max_iters.
+    Called when len(board) >= 3, i.e. cards-to-come is 2 (flop), 1 (turn),
+    or 0 (river). Falls back to seeded MC (via _mc_equity) if the
+    combination count exceeds max_iters.
     """
     dead = list(hero_hole) + board
-    cards_to_come = 5 - len(board)  # 0 or 1 (or 2 on the flop)
+    cards_to_come = 5 - len(board)  # 2 on the flop, 1 on the turn, 0 on the river
 
     # Build all villain-combo combinations (one per villain)
     villain_combo_lists = [range_to_combos(r, dead) for r in villain_ranges]

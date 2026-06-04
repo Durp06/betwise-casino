@@ -166,13 +166,17 @@ decisions are graded with real EV instead of falling to HEURISTIC:
 
 - **call / check / fold** (facing a bet, `to_call_bb > 0`, not already caught
   by the all-in bucket):
-  - `pot_if_called = pot_bb + to_call_bb` (pot after hero calls; villain's bet
-    is already in `pot_bb` per the existing snapshot convention — confirm
-    against the existing pot-odds bucket which uses `pot_before_call =
-    pot_bb`, `opp_bet = to_call_bb` and `required_equity(pot_bb, to_call_bb)`;
-    keep the *same* convention so the two buckets agree).
-  - `EV(call) = equity * (pot_bb + to_call_bb) - to_call_bb`
+  - `pot_bb` is the pot **before** the opponent's bet — the SAME convention as
+    `required_equity(pot_before_call, opp_bet)`, which the existing pot-odds
+    bucket uses with `pot_before_call = pot_bb`, `opp_bet = to_call_bb`. The
+    final pot after the opponent bets `to_call_bb` and hero calls `to_call_bb`
+    is therefore `pot_bb + 2 * to_call_bb`.
+  - `EV(call) = equity * (pot_bb + 2 * to_call_bb) - to_call_bb`
   - `EV(fold) = 0` (sunk chips excluded).
+  - **Consistency:** substituting `equity = required_equity = to_call_bb /
+    (pot_bb + 2*to_call_bb)` gives `EV(call) = 0`, so the EV break-even lands
+    exactly at the required-equity threshold. Using `pot_bb + to_call_bb` would
+    break even at the wrong equity and mis-scale `ev_loss_bb` — caught in review.
   - `required = required_equity(pot_bb, to_call_bb) + _icm_threshold_adjustment(snapshot)`.
   - Best action = `call` if `equity >= required` else `fold`. `ev_loss_bb` =
     `|EV(best) - EV(played)|` in bb. Bucket via `_bucket_delta_bb`.

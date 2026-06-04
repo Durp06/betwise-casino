@@ -118,11 +118,11 @@ def _bucket_delta_bb(ev_loss_bb: float) -> Verdict:
     """
     if ev_loss_bb <= 0.05:
         return "best"
-    if ev_loss_bb <= 0.50:
+    if ev_loss_bb <= 0.25:
         return "good"
-    if ev_loss_bb <= 2.0:
+    if ev_loss_bb <= 1.0:
         return "inaccuracy"
-    if ev_loss_bb <= 5.0:
+    if ev_loss_bb <= 3.0:
         return "mistake"
     return "blunder"
 
@@ -231,7 +231,10 @@ def _classify_with_equity(
     assert equity is not None
 
     # ─── bet/raise → simplified semi-bluff model (mostly no_verdict) ──
-    if human_action in ("raise",):
+    # all_in as an aggressor reaches here (all_in *calls* are caught earlier by
+    # the pot-odds-vs-all-in DETERMINISTIC bucket). Route it through the same
+    # semi-bluff model instead of letting it fall through to the catch-all.
+    if human_action in ("raise", "all_in"):
         return _classify_bet_raise(snapshot, human_action, equity, mode)
 
     # ─── check with no bet → free check, cannot grade aggression choice ─
@@ -274,17 +277,26 @@ def _classify_call_or_fold(
 ) -> DecisionClassification:
     """EV-based grading for call/fold facing a bet.
 
-    EV(call) = equity * (pot_bb + to_call_bb) - to_call_bb
-    EV(fold) = 0
-    Required equity = required_equity(pot_bb, to_call_bb) + ICM adjustment
-    Best action = call if equity >= required, else fold.
+    pot_bb is the pot BEFORE the opponent's bet (same convention as
+    required_equity). The final pot after the opponent bets to_call_bb and
+    hero calls to_call_bb is therefore (pot_bb + 2 * to_call_bb).
+
+        EV(call) = equity * (pot_bb + 2 * to_call_bb) - to_call_bb
+        EV(fold) = 0
+        Required equity = required_equity(pot_bb, to_call_bb) + ICM adjustment
+        Best action = call if equity >= required, else fold.
+
+    This makes the EV break-even (EV(call) == 0) land exactly at
+    equity == required_equity, keeping the magnitude consistent with the
+    direction. Using (pot_bb + to_call_bb) would break even at the wrong
+    equity and systematically mis-scale ev_loss_bb.
     """
     pot_bb = snapshot.pot_bb
     to_call_bb = snapshot.to_call_bb
     icm_adj = _icm_threshold_adjustment(snapshot)
     req_eq = required_equity(pot_bb, to_call_bb) + icm_adj
 
-    ev_call = equity * (pot_bb + to_call_bb) - to_call_bb
+    ev_call = equity * (pot_bb + 2 * to_call_bb) - to_call_bb
     ev_fold = 0.0
 
     best_action: HumanAction = "call" if equity >= req_eq else "fold"
