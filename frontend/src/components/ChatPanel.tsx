@@ -13,8 +13,10 @@
  * into an href/src/style/onClick attribute, eval, or a constructed DOM node.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
+import { AnimatePresence } from "framer-motion";
 import { getChatMessages, postChatMessage } from "../api/client";
 import type { ChatMessage, ChatTableKind } from "../types";
+import FadeSlide from "../motion/presence/FadeSlide";
 import { t } from "../i18n";
 
 const POLL_INTERVAL_MS = 3000;
@@ -150,13 +152,15 @@ export default function ChatPanel({ tableKind, tableId }: ChatPanelProps) {
           </p>
         )}
 
-        {messages.map((m) => (
-          <div key={m.id} className="text-sm leading-snug break-words">
-            <span className="font-ui text-gold-bright mr-1">{m.username}</span>
-            {/* Body rendered as a TEXT node — React escapes it, so markup is inert. */}
-            <span className="font-flavor text-cream/90">{m.body}</span>
-          </div>
-        ))}
+        <AnimatePresence initial={false}>
+          {messages.map((m) => (
+            <FadeSlide key={m.id} y={6} className="text-sm leading-snug break-words">
+              <span className="font-ui text-gold-bright mr-1">{m.username}</span>
+              {/* Body rendered as a TEXT node — React escapes it, so markup is inert. */}
+              <span className="font-flavor text-cream/90">{m.body}</span>
+            </FadeSlide>
+          ))}
+        </AnimatePresence>
       </div>
 
       {sendError && (

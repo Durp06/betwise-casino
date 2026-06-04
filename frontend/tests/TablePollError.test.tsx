@@ -25,16 +25,6 @@ vi.mock("../src/api/client", () => ({
   leaveTable: leaveTableMock,
   // Always fail the state poll — this is the condition under test
   getTableState: vi.fn().mockResolvedValue({ data: null, error: "HTTP 500" }),
-  // BalanceHeader (in Table's header) fetches the bankroll on mount — stub it so
-  // it renders the balance (not an error alert that would clash with the poll alert).
-  getMe: vi.fn().mockResolvedValue({
-    data: {
-      id: "u", username: "tester", chip_balance: 5_000_000, total_hands: 0,
-      correct_decisions: 0, accuracy: 0, current_streak: 0, best_streak: 0,
-      created_at: "2026-06-03T00:00:00Z",
-    },
-    error: null,
-  }),
   streamPreAdvice: vi.fn(async (_: string, __: (t: string) => void, onDone: () => void) => {
     onDone();
   }),

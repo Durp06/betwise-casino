@@ -5,19 +5,21 @@
  * (when it's your turn) + Chipy coach. On first mount, fires deal so the
  * tournament is in a playable state.
  */
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate, Navigate } from "react-router-dom";
 import { useGameStore } from "../store/gameStore";
 import { usePokerPoll } from "../hooks/usePokerPoll";
-import { useWalletStore } from "../store/walletStore";
 import { dealPokerHand } from "../api/client";
 import Board from "../components/Board";
 import PotDisplay from "../components/PotDisplay";
 import PokerSeat from "../components/PokerSeat";
 import PokerActionBar from "../components/PokerActionBar";
 import PokerChipyCoach from "../components/PokerChipyCoach";
+import { DeckProvider } from "../motion/DeckProvider";
+import DeckStack from "../components/DeckStack";
+import ChipFly from "../components/ChipFly";
+import { useTableActionFeed } from "../motion/useTableActionFeed";
 import { t } from "../i18n";
-import BalanceHeader from "../components/BalanceHeader";
 
 /** Beat between a hand finishing (showdown visible) and auto-dealing the next
  *  one, so the player can see the result. Honors the "dealt shortly" copy. */
@@ -28,13 +30,46 @@ export default function PokerTablePage() {
   const navigate = useNavigate();
   const pokerTournamentState = useGameStore((s) => s.pokerTournamentState);
   const setPokerTournamentState = useGameStore((s) => s.setPokerTournamentState);
-  const walletRefresh = useWalletStore((s) => s.refresh);
   const [dealing, setDealing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
 
   // Always-on poll while mounted
   usePokerPoll(tournamentId ?? "", setPollError);
+
+  // Multiplayer presence: turn the polled action log into per-seat badges +
+  // chips-to-pot flies (bots' bets/folds/checks become visible).
+  const currentHand = pokerTournamentState?.current_hand ?? null;
+  const actionEvents = useTableActionFeed(currentHand);
+  const [lastActionBySeat, setLastActionBySeat] = useState<
+    Record<number, { action: string; amount: number; key: number }>
+  >({});
+  const [flies, setFlies] = useState<{ id: number; seat: number; amount: number }[]>([]);
+  useEffect(() => {
+    if (actionEvents.length === 0) return;
+    const timers: number[] = [];
+    for (const ev of actionEvents) {
+      setLastActionBySeat((prev) => ({
+        ...prev,
+        [ev.seatNumber]: { action: ev.action, amount: ev.amount, key: ev.actionIndex },
+      }));
+      if (["bet", "raise", "call", "all_in"].includes(ev.action)) {
+        setFlies((prev) => [...prev, { id: ev.actionIndex, seat: ev.seatNumber, amount: ev.amount }]);
+      }
+      const seatNum = ev.seatNumber;
+      const idx = ev.actionIndex;
+      const tid = window.setTimeout(() => {
+        setLastActionBySeat((prev) => {
+          if (prev[seatNum]?.key !== idx) return prev;
+          const next = { ...prev };
+          delete next[seatNum];
+          return next;
+        });
+      }, 1800);
+      timers.push(tid);
+    }
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [actionEvents]);
 
   // On first mount, ensure a hand is dealt
   useEffect(() => {
@@ -66,8 +101,6 @@ export default function PokerTablePage() {
   // poll re-delivers the same completed hand as a fresh object every cycle; if
   // the effect depended on that object it would re-run mid-delay, its cleanup
   // would clearTimeout the pending deal, and the next hand would never come.
-  // Depending on the id means an unchanged completed hand doesn't re-run the
-  // effect at all, so the timer survives to fire.
   const dealAfterHandId =
     pokerTournamentState?.current_hand?.status === "complete" &&
     pokerTournamentState?.tournament.status !== "complete"
@@ -84,20 +117,6 @@ export default function PokerTablePage() {
     }, NEXT_HAND_DELAY_MS);
     return () => clearTimeout(timer);
   }, [dealAfterHandId, tournamentId, setPokerTournamentState]);
-
-  // Refresh wallet when the tournament completes (payout credited server-side).
-  const tournamentStatus = pokerTournamentState?.tournament.status ?? null;
-  const completedTournamentId = tournamentStatus === "complete" ? tournamentId : null;
-  const lastRefreshedTournamentId = useRef<string | null>(null);
-  useEffect(() => {
-    if (
-      completedTournamentId &&
-      lastRefreshedTournamentId.current !== completedTournamentId
-    ) {
-      lastRefreshedTournamentId.current = completedTournamentId;
-      void walletRefresh();
-    }
-  }, [completedTournamentId, walletRefresh]);
 
   // Manual control: deal the next hand immediately (skips the auto-deal beat).
   // Handy for a trainer — review Chipy's read, then advance when you're ready.
@@ -186,27 +205,26 @@ export default function PokerTablePage() {
   const isYourTurn = hand?.current_to_act_seat === yourSeatNumber;
 
   return (
+    <DeckProvider>
     <main className="min-h-screen bg-felt-green text-cream p-4 flex flex-col gap-4 lg:flex-row" data-testid="poker-table-page">
       <section className="flex-1 flex flex-col gap-4">
         <header className="flex items-center justify-between">
           <h1 className="font-display text-2xl tracking-wider">
             {t("Hold'em Tournament")} #{tournament.current_hand_number}
           </h1>
-          <div className="flex items-center gap-4">
-            <BalanceHeader />
-            <button
-              type="button"
-              onClick={() => void navigate("/lobby")}
-              className="text-xs font-ui underline"
-              data-testid="poker-table-leave"
-            >
-              {t("Lobby")}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => void navigate("/lobby")}
+            className="text-xs font-ui underline"
+            data-testid="poker-table-leave"
+          >
+            {t("Lobby")}
+          </button>
         </header>
 
         {/* Felt — seats around the board */}
-        <div className="bg-felt-green/80 ink-outline-thick rounded-3xl p-6 flex flex-col items-center gap-4">
+        <div className="bg-felt-green/80 ink-outline-thick rounded-3xl p-6 flex flex-col items-center gap-4 relative">
+          <DeckStack className="absolute top-4 right-4 scale-[0.7] origin-top-right opacity-90 pointer-events-none" />
           {hand && (
             <>
               <PotDisplay
@@ -233,10 +251,22 @@ export default function PokerTablePage() {
                   isCurrentToAct={isCurrent}
                   isButton={isButton}
                   isYou={seat.seat_number === yourSeatNumber}
+                  lastAction={lastActionBySeat[seat.seat_number]?.action ?? null}
+                  lastActionAmount={lastActionBySeat[seat.seat_number]?.amount ?? 0}
                 />
               );
             })}
           </div>
+
+          {/* Chips arcing to the pot when a seat bets/raises/calls */}
+          {flies.map((f) => (
+            <ChipFly
+              key={f.id}
+              seatNumber={f.seat}
+              amount={f.amount}
+              onDone={() => setFlies((prev) => prev.filter((x) => x.id !== f.id))}
+            />
+          ))}
         </div>
 
         {/* Action bar — only when it's your turn AND you have a hand */}
@@ -291,6 +321,7 @@ export default function PokerTablePage() {
         <PokerChipyCoach handId={hand?.id ?? null} />
       </section>
     </main>
+    </DeckProvider>
   );
 }
 

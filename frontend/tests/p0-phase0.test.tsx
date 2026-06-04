@@ -63,9 +63,6 @@ vi.mock("../src/api/client", () => ({
   dealHand: vi.fn().mockResolvedValue({ data: null, error: null }),
   takeAction: vi.fn().mockResolvedValue({ data: null, error: null }),
   listHoldemTables: vi.fn().mockResolvedValue({ data: [], error: null }),
-  // Stub for walletStore.refresh() — called by BalanceHeader on mount and
-  // after money-moving mutations in the pages under test.
-  getMe: vi.fn().mockResolvedValue({ data: null, error: null }),
 }));
 
 // ─── Mock supabase / useSession ───────────────────────────────────────────────
@@ -131,7 +128,7 @@ describe("P0-1a: createTable success → joinTable → navigate /table/:id", () 
     joinTableMock.mockResolvedValue({ data: { id: "seat-1", user_id: "dev-user", seat_number: 1 }, error: null });
     listTablesMock.mockResolvedValue({ data: [], error: null });
 
-    const Lobby = (await import("../src/pages/Lobby")).default;
+    const Lobby = (await import("../src/pages/BlackjackLobby")).default;
 
     const user = userEvent.setup();
     render(
@@ -146,7 +143,7 @@ describe("P0-1a: createTable success → joinTable → navigate /table/:id", () 
     // Wait for loading to settle
     await waitFor(() => expect(listTablesMock).toHaveBeenCalled());
 
-    const openBtn = screen.getByRole("button", { name: /open table/i });
+    const openBtn = await screen.findByRole("button", { name: /open table/i });
     await user.click(openBtn);
 
     await waitFor(() => {
@@ -179,7 +176,7 @@ describe("P0-1b: join error shows alert, no navigation", () => {
     joinTableMock.mockResolvedValue({ data: null, error: "Table is full" });
     listTablesMock.mockResolvedValue({ data: [], error: null });
 
-    const Lobby = (await import("../src/pages/Lobby")).default;
+    const Lobby = (await import("../src/pages/BlackjackLobby")).default;
 
     const user = userEvent.setup();
     render(
@@ -193,7 +190,7 @@ describe("P0-1b: join error shows alert, no navigation", () => {
 
     await waitFor(() => expect(listTablesMock).toHaveBeenCalled());
 
-    const openBtn = screen.getByRole("button", { name: /open table/i });
+    const openBtn = await screen.findByRole("button", { name: /open table/i });
     await user.click(openBtn);
 
     // Alert must appear
@@ -217,7 +214,7 @@ describe("P0-1c: createTable error → no join attempt", () => {
     createTableMock.mockResolvedValue({ data: null, error: "Server error" });
     listTablesMock.mockResolvedValue({ data: [], error: null });
 
-    const Lobby = (await import("../src/pages/Lobby")).default;
+    const Lobby = (await import("../src/pages/BlackjackLobby")).default;
 
     const user = userEvent.setup();
     render(
@@ -230,7 +227,7 @@ describe("P0-1c: createTable error → no join attempt", () => {
 
     await waitFor(() => expect(listTablesMock).toHaveBeenCalled());
 
-    const openBtn = screen.getByRole("button", { name: /open table/i });
+    const openBtn = await screen.findByRole("button", { name: /open table/i });
     await user.click(openBtn);
 
     await waitFor(() => {
@@ -299,7 +296,7 @@ describe("P0-2d: defensive filter — finished table name absent from DOM", () =
       error: null,
     });
 
-    const Lobby = (await import("../src/pages/Lobby")).default;
+    const Lobby = (await import("../src/pages/BlackjackLobby")).default;
 
     render(
       <MemoryRouter initialEntries={["/lobby"]}>
@@ -332,7 +329,7 @@ describe("P0-3a: deterministic wobble — animation-delay is index-derived, not 
 
     listTablesMock.mockResolvedValue({ data: TABLES, error: null });
 
-    const Lobby = (await import("../src/pages/Lobby")).default;
+    const Lobby = (await import("../src/pages/BlackjackLobby")).default;
 
     // First render
     const { unmount, container: c1 } = render(
@@ -541,15 +538,8 @@ describe("P0-4b: HoldemActionBar — busy state on fold while submitting", () =>
 // P0-5a: "Choose a Game" heading in Lobby — before game cards and table list
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("P0-5a: Choose a Game heading appears before game cards and table list", () => {
-  it("renders a heading with 'Choose a Game' text that precedes game-card and table elements", async () => {
-    listTablesMock.mockResolvedValue({
-      data: [
-        { id: "t1", name: "Test Table", min_bet: 500, max_bet: 50000, max_seats: 3, status: "waiting", seats_taken: 0 },
-      ],
-      error: null,
-    });
-
+describe("P0-5a: Choose a Game heading precedes the four game cards in the picker", () => {
+  it("renders a 'Choose a Game' heading followed by Blackjack/Hold'em/Poker/Pai Gow cards", async () => {
     const Lobby = (await import("../src/pages/Lobby")).default;
 
     render(
@@ -558,20 +548,20 @@ describe("P0-5a: Choose a Game heading appears before game cards and table list"
       </MemoryRouter>,
     );
 
-    await waitFor(() => {
-      expect(screen.getByText("Test Table")).toBeInTheDocument();
-    });
-
-    // The heading must be in the DOM
-    const heading = screen.getByText(/choose a game/i);
+    // Heading present
+    const heading = await screen.findByText(/choose a game/i);
     expect(heading).toBeInTheDocument();
 
-    // The heading must appear before the table list in DOM order
-    const allText = document.body.innerHTML;
-    const headingPos = allText.indexOf("Choose a Game");
-    const tablePos   = allText.indexOf("Test Table");
-    expect(headingPos).toBeGreaterThanOrEqual(0);
-    expect(headingPos).toBeLessThan(tablePos);
+    // All four game cards present (one consistent picker)
+    expect(screen.getByTestId("blackjack-lobby-card")).toBeInTheDocument();
+    expect(screen.getByTestId("holdem-lobby-card")).toBeInTheDocument();
+    expect(screen.getByTestId("poker-lobby-card")).toBeInTheDocument();
+    expect(screen.getByTestId("paigow-lobby-card")).toBeInTheDocument();
+
+    // Heading precedes the first game card in DOM order
+    const html = document.body.innerHTML;
+    expect(html.indexOf("Choose a Game")).toBeGreaterThanOrEqual(0);
+    expect(html.indexOf("Choose a Game")).toBeLessThan(html.indexOf("blackjack-lobby-card"));
   });
 });
 

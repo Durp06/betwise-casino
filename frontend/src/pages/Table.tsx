@@ -6,8 +6,8 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
-import { useWalletStore } from "../store/walletStore";
 import { useTablePoll } from "../hooks/useTablePoll";
 import { useSession } from "../auth/supabase";
 import { leaveTable, streamPreAdvice } from "../api/client";
@@ -24,7 +24,8 @@ import Chipy from "../components/Chipy";
 import type { ChipyExpression, ChipyAnimation, ChipyPose } from "../components/Chipy";
 import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
-import BalanceHeader from "../components/BalanceHeader";
+import { DeckProvider } from "../motion/DeckProvider";
+import DeckStack from "../components/DeckStack";
 
 // Maps a hand outcome (or status fallback) to Chipy's reaction state.
 // Backend doesn't always set hand.outcome — a bust during the player's turn
@@ -163,35 +164,6 @@ export default function Table() {
     };
   }, [resetChipy]);
 
-  // Refresh wallet balance when a hand reaches a terminal outcome (payout
-  // settles via the poll), so the header doesn't show a stale balance after
-  // a win or loss. Guard on lastFinishedHandId so we only fire once per hand.
-  const walletRefresh = useWalletStore((s) => s.refresh);
-  const lastRefreshedHandId = useRef<string | null>(null);
-  useEffect(() => {
-    // Only refresh once the hand is TRULY terminal (payout settled). ActionBar
-    // sets lastFinishedHandId on any non-"active" status — including "standing",
-    // where the player is done but the dealer hasn't acted and no payout has
-    // landed yet. Gating on lastFinishedHandId alone would fire too early AND
-    // latch lastRefreshedHandId, suppressing the real post-payout refresh and
-    // leaving the header stale. Mirror the banner's isHandFinished gate.
-    const handIsTerminal =
-      myHand !== null &&
-      (Boolean(myHand.outcome) ||
-        myHand.status === "finished" ||
-        myHand.status === "bust" ||
-        myHand.status === "blackjack");
-    if (
-      myHand &&
-      handIsTerminal &&
-      lastFinishedHandId === myHand.id &&
-      lastRefreshedHandId.current !== myHand.id
-    ) {
-      lastRefreshedHandId.current = myHand.id;
-      void walletRefresh();
-    }
-  }, [myHand, lastFinishedHandId, walletRefresh]);
-
   // Tab-close / hard-refresh: use a pagehide listener so leaveTable fires on
   // the actual unload event, NOT in the effect cleanup. The cleanup only
   // removes the listener — this way StrictMode's throwaway unmount does NOT
@@ -322,6 +294,7 @@ export default function Table() {
   const chipyMood = chipyForOutcome(myHand?.outcome, myHand?.status);
 
   return (
+    <DeckProvider>
     <div className="table-surface min-h-screen flex flex-col">
       {/* Header */}
       <header
@@ -331,8 +304,7 @@ export default function Table() {
         <h1 className="font-display text-cream text-2xl gold-drop truncate">
           {tableState.name}
         </h1>
-        <div className="flex items-center gap-3 font-ui uppercase tracking-wider text-xs text-cream">
-          <BalanceHeader />
+        <div className="flex gap-3 font-ui uppercase tracking-wider text-xs text-cream">
           <button
             onClick={goToLobby}
             className="hover:text-gold-bright"
@@ -361,12 +333,13 @@ export default function Table() {
         {/* Felt table inset — dealer at top, then every seated player's hand */}
         {tableState.session && (
           <div
-            className="ink-outline rounded-2xl p-5 flex flex-col gap-5"
+            className="ink-outline rounded-2xl p-5 flex flex-col gap-5 relative"
             style={{
               backgroundColor: "#145A32",
               boxShadow: "4px 4px 0 0 #1A0A00, inset 0 0 60px rgba(0,0,0,0.45)",
             }}
           >
+            <DeckStack className="absolute top-3 right-3 scale-[0.7] origin-top-right opacity-90 pointer-events-none" />
             <CardHand
               cards={dealerCards}
               handValue={handValueDisplay(dealerCards) ?? undefined}
@@ -561,16 +534,22 @@ export default function Table() {
         </div>
       </main>
 
-      {replayHandId && (
-        <ReplayModal handId={replayHandId} onClose={() => setReplayHandId(null)} />
-      )}
-      {reviewState && (
-        <SessionReviewModal
-          sessionId={reviewState.sessionId}
-          handId={reviewState.handId}
-          onClose={handleReviewClose}
-        />
-      )}
+      <AnimatePresence>
+        {replayHandId && (
+          <ReplayModal key="replay" handId={replayHandId} onClose={() => setReplayHandId(null)} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {reviewState && (
+          <SessionReviewModal
+            key="review"
+            sessionId={reviewState.sessionId}
+            handId={reviewState.handId}
+            onClose={handleReviewClose}
+          />
+        )}
+      </AnimatePresence>
     </div>
+    </DeckProvider>
   );
 }
