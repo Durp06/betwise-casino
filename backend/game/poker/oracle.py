@@ -8,6 +8,15 @@ Design constraints (specs/texas-holdem.md §AC-B40..B43; brief §4.2 landmine):
   the streak (the brief mandates streaks count ONLY deterministic spots).
 - ICM overlay near the bubble — tighter calling threshold.
 
+Extended (specs/poker-review-pr1-equity-engine.md §4.3):
+- When live_equity is not None AND neither existing DETERMINISTIC short-circuit
+  fires, grade ordinary call/check/fold via real EV (EV(call) vs EV(fold))
+  and bet/raise via a simplified semi-bluff model.
+- The live_equity=None path is byte-for-byte behaviorally identical to current
+  main — no existing tests change behavior.
+- New verdict fields (equity, required_equity, ev_loss_bb, explanation) are
+  additive and optional with None defaults.
+
 This module is the educational core of the feature. Its output drives:
 - streak (deterministic spots only)
 - session review (chess.com-style classification + EV-loss for deterministic)
@@ -16,7 +25,7 @@ This module is the educational core of the feature. Its output drives:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal, Optional
 
 from .cards import Card
@@ -51,7 +60,12 @@ class DecisionSnapshot:
 
 @dataclass(frozen=True)
 class DecisionClassification:
-    """The verdict + supporting data."""
+    """The verdict + supporting data.
+
+    The four new fields (equity, required_equity, ev_loss_bb, explanation) are
+    additive and optional — they default to None so every existing construction
+    site (live callers + existing tests) continues to compile unchanged.
+    """
 
     confidence_tier: ConfidenceTier
     recommended_action: Optional[HumanAction]
@@ -61,6 +75,11 @@ class DecisionClassification:
     principle_note: Optional[str]            # populated for HEURISTIC
     coach_summary: str
     counts_toward_streak: bool
+    # Additive fields — populated only for EV-graded spots (Task 6 / §4.5)
+    equity: Optional[float] = field(default=None)
+    required_equity: Optional[float] = field(default=None)
+    ev_loss_bb: Optional[float] = field(default=None)
+    explanation: Optional[str] = field(default=None)
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -90,6 +109,24 @@ def _icm_threshold_adjustment(snapshot: DecisionSnapshot) -> float:
     return 0.0
 
 
+def _bucket_delta_bb(ev_loss_bb: float) -> Verdict:
+    """Map an EV-loss in big blinds to a verdict tier.
+
+    Ported from backend/game/blackjack/review.py::_bucket_delta, re-tuned
+    to big-blind units (specs/poker-review-pr1-equity-engine.md §4.4).
+    Thresholds are monotone — move boundaries, never special-case tests.
+    """
+    if ev_loss_bb <= 0.05:
+        return "best"
+    if ev_loss_bb <= 0.25:
+        return "good"
+    if ev_loss_bb <= 1.0:
+        return "inaccuracy"
+    if ev_loss_bb <= 3.0:
+        return "mistake"
+    return "blunder"
+
+
 # ─── Classification ─────────────────────────────────────────────────────────
 
 
@@ -102,6 +139,9 @@ def classify_decision(
 
     DETERMINISTIC: hard correct/incorrect + EV-loss in chips.
     HEURISTIC: principle-based note only; no verdict, no streak penalty.
+
+    Extended: when snapshot.live_equity is not None and neither existing
+    DETERMINISTIC short-circuit fires, grades call/check/fold via real EV.
     """
     # ─── DETERMINISTIC: short-stack push/fold ──────────────────────────
     if _is_short_stack_pushfold(snapshot):
@@ -157,8 +197,156 @@ def classify_decision(
             counts_toward_streak=True,
         )
 
+    # ─── NEW: EV-based call/check/fold grading (live_equity provided) ──
+    if snapshot.live_equity is not None:
+        return _classify_with_equity(snapshot, human_action, mode)
+
     # ─── HEURISTIC: deep postflop / general spots ──────────────────────
     note = _build_heuristic_note(snapshot, human_action)
+    return DecisionClassification(
+        confidence_tier="HEURISTIC",
+        recommended_action=None,
+        correct=None,
+        verdict="no_verdict",
+        ev_loss_chips=None,
+        principle_note=note,
+        coach_summary=note,
+        counts_toward_streak=False,
+    )
+
+
+def _classify_with_equity(
+    snapshot: DecisionSnapshot,
+    human_action: HumanAction,
+    mode: CoachMode,
+) -> DecisionClassification:
+    """Grade a decision when live_equity is available.
+
+    Call/check/fold facing a bet → deterministic EV grading.
+    Bet/raise → simplified semi-bluff model (mostly no_verdict in v1).
+    Check with no bet → no_verdict (checking free is not gradable without
+    a bet-or-check-back model).
+    """
+    equity = snapshot.live_equity  # guaranteed not None at this point
+    assert equity is not None
+
+    # ─── bet/raise → simplified semi-bluff model (mostly no_verdict) ──
+    # all_in as an aggressor reaches here (all_in *calls* are caught earlier by
+    # the pot-odds-vs-all-in DETERMINISTIC bucket). Route it through the same
+    # semi-bluff model instead of letting it fall through to the catch-all.
+    if human_action in ("raise", "all_in"):
+        return _classify_bet_raise(snapshot, human_action, equity, mode)
+
+    # ─── check with no bet → free check, cannot grade aggression choice ─
+    if human_action == "check" and snapshot.to_call_bb == 0:
+        note = _build_heuristic_note(snapshot, human_action)
+        return DecisionClassification(
+            confidence_tier="HEURISTIC",
+            recommended_action=None,
+            correct=None,
+            verdict="no_verdict",
+            ev_loss_chips=None,
+            principle_note=note,
+            coach_summary=note,
+            counts_toward_streak=False,
+        )
+
+    # ─── call / fold facing a bet (to_call_bb > 0) ────────────────────
+    if snapshot.to_call_bb > 0 and human_action in ("call", "fold", "check"):
+        return _classify_call_or_fold(snapshot, human_action, equity, mode)
+
+    # ─── fallback for unhandled combinations ──────────────────────────
+    note = _build_heuristic_note(snapshot, human_action)
+    return DecisionClassification(
+        confidence_tier="HEURISTIC",
+        recommended_action=None,
+        correct=None,
+        verdict="no_verdict",
+        ev_loss_chips=None,
+        principle_note=note,
+        coach_summary=note,
+        counts_toward_streak=False,
+    )
+
+
+def _classify_call_or_fold(
+    snapshot: DecisionSnapshot,
+    human_action: HumanAction,
+    equity: float,
+    mode: CoachMode,
+) -> DecisionClassification:
+    """EV-based grading for call/fold facing a bet.
+
+    pot_bb is the pot BEFORE the opponent's bet (same convention as
+    required_equity). The final pot after the opponent bets to_call_bb and
+    hero calls to_call_bb is therefore (pot_bb + 2 * to_call_bb).
+
+        EV(call) = equity * (pot_bb + 2 * to_call_bb) - to_call_bb
+        EV(fold) = 0
+        Required equity = required_equity(pot_bb, to_call_bb) + ICM adjustment
+        Best action = call if equity >= required, else fold.
+
+    This makes the EV break-even (EV(call) == 0) land exactly at
+    equity == required_equity, keeping the magnitude consistent with the
+    direction. Using (pot_bb + to_call_bb) would break even at the wrong
+    equity and systematically mis-scale ev_loss_bb.
+    """
+    pot_bb = snapshot.pot_bb
+    to_call_bb = snapshot.to_call_bb
+    icm_adj = _icm_threshold_adjustment(snapshot)
+    req_eq = required_equity(pot_bb, to_call_bb) + icm_adj
+
+    ev_call = equity * (pot_bb + 2 * to_call_bb) - to_call_bb
+    ev_fold = 0.0
+
+    best_action: HumanAction = "call" if equity >= req_eq else "fold"
+    ev_best = ev_call if best_action == "call" else ev_fold
+
+    # EV of the action the player actually took
+    if human_action == "call":
+        ev_played = ev_call
+    else:  # fold or check treated as fold in this branch
+        ev_played = ev_fold
+
+    ev_loss = abs(ev_best - ev_played)
+    verdict = _bucket_delta_bb(ev_loss)
+    correct = human_action == best_action or (human_action == "check" and best_action == "fold")
+
+    summary = (
+        f"Pot odds need {req_eq:.1%} equity; you have {equity:.1%}. "
+        f"{'Call' if best_action == 'call' else 'Fold'} is correct."
+    )
+
+    return DecisionClassification(
+        confidence_tier="DETERMINISTIC",
+        recommended_action=best_action,
+        correct=correct,
+        verdict=verdict,
+        ev_loss_chips=int(ev_loss * 100),  # convert bb to fake-cent chips (100 per bb)
+        principle_note=None,
+        coach_summary=summary,
+        counts_toward_streak=True,
+        equity=equity,
+        required_equity=req_eq,
+        ev_loss_bb=ev_loss,
+        explanation=summary,
+    )
+
+
+def _classify_bet_raise(
+    snapshot: DecisionSnapshot,
+    human_action: HumanAction,
+    equity: float,
+    mode: CoachMode,
+) -> DecisionClassification:
+    """Simplified semi-bluff model for bet/raise decisions.
+
+    v1 grades only the obvious value-bet case; everything else returns
+    no_verdict (HEURISTIC) because actual fold equity is unknowable without
+    a villain-response model.  This is the design's honesty boundary.
+    """
+    note = _build_heuristic_note(snapshot, human_action)
+    note = note + " Bet/raise grading requires villain response model — principle-based only."
     return DecisionClassification(
         confidence_tier="HEURISTIC",
         recommended_action=None,

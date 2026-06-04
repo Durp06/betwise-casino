@@ -27,6 +27,9 @@ import HoldemOddsCoach from "../components/HoldemOddsCoach";
 import WaitingForPlayers from "../components/WaitingForPlayers";
 import ChatPanel from "../components/ChatPanel";
 import HoldemRulesModal from "../components/HoldemRulesModal";
+import PokerReviewModal, {
+  type PokerReviewModalProps,
+} from "../components/PokerReviewModal";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
 import ChipFly from "../components/ChipFly";
@@ -49,6 +52,9 @@ export default function HoldemTablePage() {
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
+  // The review modal to show, or null. Hand review opens for a specific hand id;
+  // session review opens a Game Review scoped to this table visit.
+  const [review, setReview] = useState<PokerReviewModalProps | null>(null);
 
   useHoldemPoll(tableId ?? "", setPollError);
 
@@ -199,6 +205,10 @@ export default function HoldemTablePage() {
   const isMyTurn =
     isHandActive && yourHandSeat !== null && hand.current_to_act_seat === your_seat_number;
 
+  // A hand the caller had a seat in, that has finished, can be reviewed.
+  const isHandComplete = hand !== null && hand.status !== "active";
+  const canReviewHand = isHandComplete && yourHandSeat !== null;
+
   const chairs = Array.from({ length: table.max_seats }, (_, i) => i);
 
   return (
@@ -298,6 +308,41 @@ export default function HoldemTablePage() {
             </button>
           )}
 
+          {/* Minimal hand-result area — shown when the current hand has finished
+              and the caller had a seat in it. Hosts the review entry points. */}
+          {canReviewHand && hand && (
+            <div
+              data-testid="holdem-hand-result"
+              className="w-full flex flex-col items-center gap-2 bg-ink/70 ink-outline rounded-xl p-3"
+            >
+              <span className="font-flavor text-cream/80 text-sm italic">
+                {t("Hand complete.")}
+              </span>
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <button
+                  type="button"
+                  data-testid="holdem-review-hand"
+                  onClick={() =>
+                    setReview({ mode: "hand", game: "holdem", handId: hand.id, onClose: () => setReview(null) })
+                  }
+                  className="ink-outline ink-shadow px-4 py-2 rounded-md bg-gold-bright text-ink font-ui uppercase tracking-wider text-sm"
+                >
+                  {t("Review hand")}
+                </button>
+                <button
+                  type="button"
+                  data-testid="holdem-review-session"
+                  onClick={() =>
+                    setReview({ mode: "game", game: "holdem", gameId: tableId, onClose: () => setReview(null) })
+                  }
+                  className="ink-outline px-4 py-2 rounded-md text-cream font-ui uppercase tracking-wider text-sm hover:bg-cream hover:text-ink"
+                >
+                  {t("Session review")}
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Seated, but not enough players to deal yet — keep the felt alive
               instead of showing a dead table (Hold'em needs ≥2 humans). */}
           {seated && !isHandActive && seats.length < 2 && (
@@ -345,6 +390,7 @@ export default function HoldemTablePage() {
 
       <AnimatePresence>
         {showRules && <HoldemRulesModal key="rules" onClose={() => setShowRules(false)} />}
+        {review && <PokerReviewModal key="review" {...review} />}
       </AnimatePresence>
     </div>
     </DeckProvider>

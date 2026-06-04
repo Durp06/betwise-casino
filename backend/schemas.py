@@ -447,6 +447,73 @@ class PokerSessionReviewOut(BaseModel):
     actions: list[PokerReviewActionOut]
 
 
+# ─── Unified equity-backed Hand/Game review (PR2 LOCKED contract) ────────────
+# specs/poker-review-pr2.md. Shared shape across solo poker + multiplayer
+# hold'em; opponent hole cards are NEVER included (range-based grading).
+
+ReviewGame = Literal["holdem", "poker"]
+ReviewVerdict = Literal["best", "good", "inaccuracy", "mistake", "blunder", "no_verdict"]
+ReviewConfidenceTier = Literal["DETERMINISTIC", "HEURISTIC"]
+ReviewScope = Literal["tournament", "table_visit"]
+
+
+class HandReviewActionOut(BaseModel):
+    """One graded caller decision in a HandReview (caller's own actions only)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    action_index: int
+    street: PokerStreet
+    action: str
+    amount_bb: float
+    verdict: ReviewVerdict
+    confidence_tier: ReviewConfidenceTier
+    recommended_action: Optional[str] = None
+    equity: Optional[float] = None
+    required_equity: Optional[float] = None
+    ev_loss_bb: Optional[float] = None
+    explanation: Optional[str] = None
+
+
+class HandReviewOut(BaseModel):
+    """Per-hand decision review. ``your_hole`` is always the caller's own cards;
+    ``board`` is the full board reached. No opponent hole cards ever appear."""
+
+    model_config = ConfigDict(from_attributes=True)
+    hand_id: str
+    game: ReviewGame
+    your_hole: list[CardOut]
+    board: list[CardOut]
+    graded_count: int
+    accuracy: float
+    ev_lost_bb: float
+    worst_action_index: Optional[int] = None
+    actions: list[HandReviewActionOut]
+
+
+class GameReviewHandOut(BaseModel):
+    """One hand's summary row inside a GameReview."""
+
+    model_config = ConfigDict(from_attributes=True)
+    hand_id: str
+    accuracy: float
+    ev_lost_bb: float
+    graded_count: int
+    worst_verdict: Optional[ReviewVerdict] = None
+
+
+class GameReviewOut(BaseModel):
+    """Session-level report card. Scope = whole tournament (solo) or the
+    caller's current table visit (multiplayer)."""
+
+    model_config = ConfigDict(from_attributes=True)
+    scope: ReviewScope
+    game: ReviewGame
+    overall_accuracy: float
+    total_ev_lost_bb: float
+    graded_count: int
+    hands: list[GameReviewHandOut]
+
+
 # ─── Multiplayer Texas Hold'em (cash ring game) ──────────────────────────────
 # specs/holdem-multiplayer.md. Reuses PokerActionType / PokerStreet above.
 

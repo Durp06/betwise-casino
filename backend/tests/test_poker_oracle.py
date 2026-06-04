@@ -131,7 +131,7 @@ def test_deep_postflop_is_heuristic() -> None:
         to_call_bb=5.0,    # not all-in
         n_live_opponents=1,
         seats_remaining=8,
-        live_equity=0.45,
+        live_equity=None,  # heuristic path = no equity available (live callers pass None); EV grading covered in test_poker_oracle_ev.py
     )
     c = classify_decision(snap, "call", "odds")
     assert c.confidence_tier == "HEURISTIC"
@@ -152,7 +152,7 @@ def test_heuristic_principle_note_mentions_useful_concepts() -> None:
         pot_bb=10.0,
         to_call_bb=5.0,
         is_bubble=True,
-        live_equity=0.55,
+        live_equity=None,  # heuristic path = no equity available (live callers pass None); EV grading covered in test_poker_oracle_ev.py
     )
     c = classify_decision(snap, "call", "odds")
     # Principle note should mention something concrete (equity, pot odds, or
@@ -211,7 +211,7 @@ def test_icm_overlay_tightens_calling_threshold() -> None:
 
 def test_streak_counts_deterministic_only() -> None:
     # Heuristic doesn't count
-    snap_h = _snap(stack_bb=100, street="flop", pot_bb=5, to_call_bb=2, live_equity=0.5,
+    snap_h = _snap(stack_bb=100, street="flop", pot_bb=5, to_call_bb=2, live_equity=None,  # heuristic path = no equity available (live callers pass None); EV grading covered in test_poker_oracle_ev.py
                    board=("Qd", "Jc", "7h"))
     assert classify_decision(snap_h, "call", "odds").counts_toward_streak is False
 

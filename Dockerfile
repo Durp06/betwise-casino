@@ -25,6 +25,17 @@ FROM python:3.11-slim
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1
 
+# Mark this image as the production runtime. This activates two fail-safes that
+# are otherwise dormant (they key off ENVIRONMENT=production):
+#   - auth.py refuses the BETWISE_DEV_USER_ID dev-bypass (returns 503) so a
+#     stray dev var can never silently authenticate every request as one user.
+#   - database.py refuses the in-memory SQLite fallback when DATABASE_URL is
+#     missing, failing the deploy loudly instead of booting a throwaway DB.
+# Tests and the Playwright e2e harness run OUTSIDE this image, so they are
+# unaffected. NOTE: do NOT set BETWISE_DEV_USER_ID in the Railway production
+# environment — combined with this flag it will (intentionally) 503 the service.
+ENV ENVIRONMENT=production
+
 WORKDIR /app
 
 # Install backend dependencies (cached layer if requirements.txt unchanged)

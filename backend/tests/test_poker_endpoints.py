@@ -448,7 +448,10 @@ async def test_advice_refuses_non_participant(client, db, mocker):
 
 @pytest.mark.asyncio
 async def test_session_review_lists_human_actions(client, db):
-    """AC-R11 — session review aggregates the user's actions across hands."""
+    """AC-R11 — session review aggregates the user's actions across hands.
+
+    PR2 upgraded this endpoint to the unified GameReview shape (equity-backed,
+    compute-on-read); the assertions below match the new contract."""
     await seed_user(db, TEST_USER_ID, "reviewer", chip_balance=100_000)
     r = await client.post(
         "/api/poker/tournaments",
@@ -464,7 +467,9 @@ async def test_session_review_lists_human_actions(client, db):
     review = await client.get(f"/api/poker/tournaments/{tid}/review")
     assert review.status_code == 200
     body = review.json()
-    assert body["total_actions"] >= 0
-    assert "deterministic_actions" in body
-    assert "ev_lost_chips" in body
-    assert isinstance(body["actions"], list)
+    assert body["scope"] == "tournament"
+    assert body["game"] == "poker"
+    assert "overall_accuracy" in body
+    assert "total_ev_lost_bb" in body
+    assert "graded_count" in body
+    assert isinstance(body["hands"], list)
