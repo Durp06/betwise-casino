@@ -9,6 +9,15 @@ __pycache__/
 # SQLite databases
 *.db
 *.db-journal
+*.sqlite
+*.sqlite-journal
+
+# Playwright e2e artifacts
+playwright-report/
+test-results/
+/frontend/playwright-report/
+/frontend/test-results/
+/playwright/.cache/
 
 # Python virtualenvs
 .venv/
