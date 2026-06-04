@@ -21,6 +21,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
 export const supabase = createClient(
   supabaseUrl ?? "https://placeholder.supabase.co",
   supabaseAnonKey ?? "placeholder-anon-key",
+  {
+    // Make the "identity survives refresh" contract explicit rather than
+    // relying on supabase-js's implicit defaults: persist the session to
+    // localStorage, silently refresh the access token before it expires, and
+    // pick up the session from the URL hash after an OAuth/magic-link redirect.
+    auth: {
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+    },
+  },
 );
 
 // ─── useSession ──────────────────────────────────────────────────────────────
