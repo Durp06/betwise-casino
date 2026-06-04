@@ -12,6 +12,8 @@ import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
 import PaiGowRulesModal from "../components/PaiGowRulesModal";
+import { StaggerList, StaggerItem } from "../motion/presence/StaggerList";
+import { AnimatePresence } from "framer-motion";
 
 export default function PaiGowLobby() {
   const navigate = useNavigate();
@@ -179,12 +181,12 @@ export default function PaiGowLobby() {
 
       {/* Table list */}
       {!loading && error === null && tables !== null && tables.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <StaggerList className="flex flex-col gap-4">
           {tables.map((tbl) => {
             const isFull = tbl.seats_taken >= tbl.max_seats;
             return (
+              <StaggerItem key={tbl.id}>
               <div
-                key={tbl.id}
                 className="ink-outline-thick paper-grain rounded-md p-5
                   flex flex-col sm:flex-row items-start sm:items-center gap-3"
                 style={{ backgroundColor: "#F5F0E8", boxShadow: "5px 5px 0 0 #1A0A00" }}
@@ -217,12 +219,15 @@ export default function PaiGowLobby() {
                   {joining === tbl.id ? t("…") : isFull ? t("Full") : t("Sit Down")}
                 </button>
               </div>
+              </StaggerItem>
             );
           })}
-        </div>
+        </StaggerList>
       )}
 
-      {showRules && <PaiGowRulesModal onClose={() => setShowRules(false)} />}
+      <AnimatePresence>
+        {showRules && <PaiGowRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </GameLobbyShell>
   );
 }

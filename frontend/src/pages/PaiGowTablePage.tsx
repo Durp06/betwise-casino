@@ -23,19 +23,15 @@ import ChipyPaiGowCoach from "../components/ChipyPaiGowCoach";
 import FortunePoolTicker from "../components/FortunePoolTicker";
 import HandSetter from "../components/HandSetter";
 import PaiGowCardComp from "../components/PaiGowCard";
+import PaiGowResultView from "../components/PaiGowResultView";
 import PaiGowSeat from "../components/PaiGowSeat";
 import PaiGowRulesModal from "../components/PaiGowRulesModal";
+import { AnimatePresence } from "framer-motion";
 import { usePaiGowPoll } from "../hooks/usePaiGowPoll";
 import { usePaiGowStore } from "../store/paiGowStore";
 import type { PaiGowCard } from "../types";
 import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
-
-function formatDollars(cents: number | null): string {
-  if (cents === null) return "—";
-  const sign = cents > 0 ? "+" : cents < 0 ? "-" : "";
-  return `${sign}${formatMoney(Math.abs(cents))}`;
-}
 
 export default function PaiGowTablePage() {
   const { id: tableId } = useParams<{ id: string }>();
@@ -192,25 +188,28 @@ export default function PaiGowTablePage() {
 
       <div className="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-[1fr_auto] gap-4">
         <section>
-          {/* Dealer area */}
-          <div className="ink-outline-thick rounded-xl p-3 mb-4 bg-ink/70">
-            <h2 className="font-display text-cream text-lg tracking-wider mb-2">
-              {t("Dealer")}
-            </h2>
-            {round !== null && round.dealer_dealt_cards !== null ? (
-              <div className="flex flex-wrap gap-2">
-                {round.dealer_dealt_cards.map((c, i) => (
-                  <PaiGowCardComp key={`d${i}`} card={c} index={i} noAnimate />
-                ))}
-              </div>
-            ) : (
-              <p className="font-flavor italic text-cream/70 text-sm">
-                {round === null
-                  ? t("No round yet.")
-                  : t("Dealer cards reveal at the end of the round.")}
-              </p>
-            )}
-          </div>
+          {/* Dealer area — hidden on `finished` because PaiGowResultView
+              shows the dealer + player split side-by-side. */}
+          {(round === null || round.status !== "finished") && (
+            <div className="ink-outline-thick rounded-xl p-3 mb-4 bg-ink/70">
+              <h2 className="font-display text-cream text-xl tracking-wider mb-2">
+                {t("Dealer")}
+              </h2>
+              {round !== null && round.dealer_dealt_cards !== null ? (
+                <div className="flex flex-wrap gap-2">
+                  {round.dealer_dealt_cards.map((c, i) => (
+                    <PaiGowCardComp key={`d${i}`} card={c} index={i} noAnimate />
+                  ))}
+                </div>
+              ) : (
+                <p className="font-flavor italic text-cream/70 text-sm">
+                  {round === null
+                    ? t("No round yet.")
+                    : t("Dealer cards reveal at the end of the round.")}
+                </p>
+              )}
+            </div>
+          )}
 
           {/* Seats */}
           <div className="flex flex-wrap gap-2 justify-center mb-4">
@@ -229,22 +228,8 @@ export default function PaiGowTablePage() {
             <HandSetter hand={myHand} onSubmitted={() => void refetch()} />
           )}
 
-          {showResult && myHand !== null && (
-            <div className="ink-outline-thick rounded-xl p-3 bg-cream text-ink">
-              <h3 className="font-display text-xl tracking-wider">
-                {myHand.hand_result === "win"
-                  ? t("You win!")
-                  : myHand.hand_result === "push"
-                    ? t("Push")
-                    : t("Dealer wins")}
-              </h3>
-              <p className="font-ui text-sm">
-                {t("Ante")}: {formatDollars(myHand.ante_payout_cents)}
-                {myHand.fortune_payout_cents !== null && (
-                  <> · {t("Fortune")}: {formatDollars(myHand.fortune_payout_cents)}</>
-                )}
-              </p>
-            </div>
+          {showResult && myHand !== null && round !== null && (
+            <PaiGowResultView round={round} myHand={myHand} />
           )}
 
           {showBettingControls && (
@@ -297,7 +282,9 @@ export default function PaiGowTablePage() {
         <ChipyPaiGowCoach />
       </div>
 
-      {showRules && <PaiGowRulesModal onClose={() => setShowRules(false)} />}
+      <AnimatePresence>
+        {showRules && <PaiGowRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </main>
   );
 }

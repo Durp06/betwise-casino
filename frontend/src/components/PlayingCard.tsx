@@ -3,7 +3,9 @@
  *
  * White-cream face, 3 px black outline, chunky suit SVG in the center,
  * Lilita One values in two corners. Back of card uses the diamond
- * pattern in deep red. Deal-in animation via `.card-deal`.
+ * pattern in deep red. `size` switches between the full felt card ("md")
+ * and the compact seat card ("sm"). Motion is owned by DealtCard; this is the
+ * static visual (noAnimate path used for thumbnails/replays).
  */
 import type { Card } from "../types";
 import { t } from "../i18n";
@@ -13,9 +15,19 @@ interface PlayingCardProps {
   className?: string;
   index?: number;
   noAnimate?: boolean;
+  size?: "sm" | "md";
 }
 
 const RED_SUITS = new Set(["hearts", "diamonds"]);
+
+const DIMS: Record<"sm" | "md", string> = {
+  sm: "w-11 h-16",
+  md: "w-16 h-24 sm:w-20 sm:h-28",
+};
+const VALUE_CLS: Record<"sm" | "md", string> = {
+  sm: "text-[11px]",
+  md: "text-xl",
+};
 
 function jitterDeg(index: number): number {
   const pattern = [-2, 1.2, -0.8, 1.6, -1.4, 1.0];
@@ -77,15 +89,18 @@ export default function PlayingCard({
   className = "",
   index = 0,
   noAnimate = false,
+  size = "md",
 }: PlayingCardProps) {
   const tilt = jitterDeg(index);
   const animClass = noAnimate ? "" : "card-deal";
+  const dim = DIMS[size];
+  const valueCls = VALUE_CLS[size];
 
   // Face-down
   if (!card) {
     return (
       <div
-        className={`card-back-pattern ink-outline-thick w-16 h-24 sm:w-20 sm:h-28 rounded-md
+        className={`card-back-pattern ink-outline-thick ${dim} rounded-md
           relative flex items-center justify-center ${animClass} ${className}`}
         aria-label={t("Face-down card")}
         style={{
@@ -105,7 +120,7 @@ export default function PlayingCard({
 
   return (
     <div
-      className={`paper-grain ink-outline-thick w-16 h-24 sm:w-20 sm:h-28 rounded-md
+      className={`paper-grain ink-outline-thick ${dim} rounded-md
         relative flex flex-col justify-between p-1.5 ${animClass} ${className}`}
       aria-label={`${card.value} of ${card.suit}`}
       style={{
@@ -117,7 +132,7 @@ export default function PlayingCard({
     >
       {/* Top-left value */}
       <span
-        className="text-xl leading-none font-ui"
+        className={`${valueCls} leading-none font-ui`}
         style={{ color: cornerColor }}
       >
         {card.value}
@@ -132,7 +147,7 @@ export default function PlayingCard({
 
       {/* Bottom-right value (rotated) */}
       <span
-        className="text-xl leading-none font-ui self-end rotate-180"
+        className={`${valueCls} leading-none font-ui self-end rotate-180`}
         style={{ color: cornerColor }}
       >
         {card.value}
