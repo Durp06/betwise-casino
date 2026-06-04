@@ -195,6 +195,7 @@ export default function HoldemTablePage() {
                 isCurrentToAct={isCurrentToAct}
                 isButton={isButton}
                 isYou={isYou}
+                moveDeadlineAt={isCurrentToAct ? hand?.move_deadline_at ?? null : null}
               />
             );
           })}

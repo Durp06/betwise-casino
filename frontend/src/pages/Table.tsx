@@ -20,6 +20,7 @@ import ReplayModal from "../components/ReplayModal";
 import SessionReviewModal from "../components/SessionReviewModal";
 import ChatPanel from "../components/ChatPanel";
 import Chipy from "../components/Chipy";
+import MoveTimer from "../components/MoveTimer";
 import type { ChipyExpression, ChipyAnimation, ChipyPose } from "../components/Chipy";
 import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
@@ -379,6 +380,7 @@ export default function Table() {
                           ← {t("their turn")}
                         </span>
                       )}
+                      {isActive && <MoveTimer deadlineAt={hand.move_deadline_at} />}
                     </div>
                     <div className="flex items-baseline gap-2 text-xs">
                       <span className="font-flavor text-cream/70 uppercase tracking-wider">

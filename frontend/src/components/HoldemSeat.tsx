@@ -8,6 +8,7 @@
  */
 import type { HoldemHandSeatState, HoldemSeat as HoldemSeatType, PokerCard } from "../types";
 import PlayingCard from "./PlayingCard";
+import MoveTimer from "./MoveTimer";
 import { t } from "../i18n";
 
 interface HoldemSeatProps {
@@ -17,6 +18,9 @@ interface HoldemSeatProps {
   isCurrentToAct: boolean;
   isButton: boolean;
   isYou: boolean;
+  /** The current actor's move deadline (ISO-8601) when this is the seat on the
+   *  clock, else null. Drives the per-seat countdown. */
+  moveDeadlineAt?: string | null;
 }
 
 export default function HoldemSeat({
@@ -26,6 +30,7 @@ export default function HoldemSeat({
   isCurrentToAct,
   isButton,
   isYou,
+  moveDeadlineAt = null,
 }: HoldemSeatProps) {
   const empty = occupant === null && handSeat === null;
   const username = handSeat?.username ?? occupant?.username ?? null;
@@ -92,6 +97,9 @@ export default function HoldemSeat({
           </span>
         )}
       </div>
+
+      {/* Move-timer countdown — shown only on the seat that is on the clock. */}
+      {isCurrentToAct && <MoveTimer deadlineAt={moveDeadlineAt} />}
 
       {/* Stack */}
       <div className="text-xs font-mono text-ink" data-testid={`holdem-seat-stack-${chairNumber}`}>
