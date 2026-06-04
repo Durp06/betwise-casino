@@ -12,6 +12,8 @@ import type { PokerAdviceMode } from "../types";
 import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
+import PokerRulesModal from "../components/PokerRulesModal";
+import { AnimatePresence } from "framer-motion";
 
 export default function PokerSetup() {
   const navigate = useNavigate();
@@ -21,6 +23,7 @@ export default function PokerSetup() {
   const [startingStack, setStartingStack] = useState(1500);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
 
   async function onSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -44,6 +47,16 @@ export default function PokerSetup() {
     <GameLobbyShell
       title={t("Solo Poker Trainer")}
       subtitle={t("Single-table tournament against 2–7 bot archetypes. Chipy coaches every decision.")}
+      action={
+        <button
+          type="button"
+          onClick={() => setShowRules(true)}
+          className="ink-outline ink-shadow-sm font-ui uppercase tracking-wider
+            text-xs sm:text-sm px-4 py-3 rounded-md bg-cream text-ink min-h-[52px]"
+        >
+          {t("How to Play")}
+        </button>
+      }
     >
       <form
         onSubmit={onSubmit}
@@ -145,6 +158,10 @@ export default function PokerSetup() {
           {submitting ? t("Buying in…") : t("Buy in & start")}
         </button>
       </form>
+
+      <AnimatePresence>
+        {showRules && <PokerRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </GameLobbyShell>
   );
 }
