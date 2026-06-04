@@ -91,9 +91,13 @@ export default function HoldemTablePage() {
     setUsingCard(true);
     setError(null);
     const result = await useHoldemTimeCard(tableId);
-    setUsingCard(false);
+    // Apply the fresh card count BEFORE clearing busy so the button re-enables
+    // in the same render as the decremented count (await breaks React's auto-
+    // batching, so ordering matters — otherwise there's a frame where the button
+    // is clickable but still shows the stale count).
     if (result.error) setError(result.error);
     else setHoldemTableState(result.data);
+    setUsingCard(false);
   }
 
   if (!tableId) {
