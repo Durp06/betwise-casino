@@ -32,6 +32,7 @@ import ChipFly from "../components/ChipFly";
 import { useTableActionFeed } from "../motion/useTableActionFeed";
 import { AnimatePresence } from "framer-motion";
 import { t } from "../i18n";
+import BalanceHeader from "../components/BalanceHeader";
 
 export default function HoldemTablePage() {
   const { id: tableId } = useParams<{ id: string }>();
@@ -207,6 +208,7 @@ export default function HoldemTablePage() {
           {table.name} · {t("Hold'em")}
         </h1>
         <div className="flex items-center gap-4">
+          <BalanceHeader />
           <button
             type="button"
             onClick={() => setShowRules(true)}

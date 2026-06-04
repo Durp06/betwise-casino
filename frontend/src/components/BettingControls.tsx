@@ -7,6 +7,7 @@
 import { useState } from "react";
 import { t } from "../i18n";
 import { useGameStore } from "../store/gameStore";
+import { useWalletStore } from "../store/walletStore";
 import { dealHand } from "../api/client";
 import type { Hand } from "../types";
 import { formatMoney } from "../utils/money";
@@ -90,6 +91,7 @@ export default function BettingControls({
   onDealSuccess,
 }: BettingControlsProps) {
   const { betAmount, placeBet, setMyHand, setLastFinishedHandId } = useGameStore();
+  const walletRefresh = useWalletStore((s) => s.refresh);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -127,6 +129,8 @@ export default function BettingControls({
       // once a new hand is in the air.
       setLastFinishedHandId(null);
       onDealSuccess?.(result.data);
+      // Refresh the wallet balance after placing a bet (buy-in deducted).
+      void walletRefresh();
     }
   }
 

@@ -19,6 +19,9 @@ test-results/
 /frontend/test-results/
 /playwright/.cache/
 
+# Local browser/tooling artifacts
+.playwright-mcp/
+
 # Python virtualenvs
 .venv/
 venv/

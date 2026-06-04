@@ -7,8 +7,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { http, HttpResponse } from "msw";
 import { setupServer } from "msw/node";
 import { MemoryRouter } from "react-router-dom";
-import { beforeAll, afterAll, afterEach, describe, it, expect } from "vitest";
+import { beforeAll, beforeEach, afterAll, afterEach, describe, it, expect } from "vitest";
 import HoldemLobby from "../src/pages/HoldemLobby";
+import { useWalletStore } from "../src/store/walletStore";
 
 const TABLE = {
   id: "tbl-1",
@@ -22,9 +23,33 @@ const TABLE = {
   seats_taken: 2,
 };
 
-const server = setupServer();
+// BalanceHeader calls GET /api/users/me on mount. Keep the MSW handler for the
+// actual network call, and also pre-seed the walletStore with a non-null balance
+// before each test so BalanceHeader renders the balance display immediately (no
+// role="status" loading span) and doesn't conflict with the page's own loading
+// skeleton which also uses role="status".
+const ME_RESPONSE = {
+  id: "u1",
+  username: "tester",
+  chip_balance: 5_000_000,
+  total_hands: 0,
+  correct_decisions: 0,
+  accuracy: 0,
+  current_streak: 0,
+  best_streak: 0,
+  created_at: "2026-06-03T00:00:00Z",
+};
+
+const server = setupServer(
+  http.get("/api/users/me", () => HttpResponse.json(ME_RESPONSE)),
+);
 
 beforeAll(() => server.listen({ onUnhandledRequest: "bypass" }));
+// Pre-seed the walletStore so BalanceHeader renders the balance display (no
+// role="status") when the component first mounts synchronously.
+beforeEach(() => {
+  useWalletStore.setState({ balance: ME_RESPONSE.chip_balance, loading: false, error: null });
+});
 afterEach(() => server.resetHandlers());
 afterAll(() => server.close());
 
