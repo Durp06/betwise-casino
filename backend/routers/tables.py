@@ -306,6 +306,11 @@ async def _get_table_state(
     """
     from sqlalchemy import select  # noqa: PLC0415
     from backend.models import CasinoTable, TableSeat, GameSession, Hand, User  # noqa: PLC0415
+    from backend.game import state as game_state  # noqa: PLC0415
+
+    # Poll path drives lazy move-timer enforcement: an abandoned turn auto-stands
+    # as soon as ANY player at the table next polls /state.
+    await game_state.enforce_timeout(table_id, db)
 
     # Fetch table
     result = await db.execute(select(CasinoTable).where(CasinoTable.id == table_id))
@@ -396,6 +401,7 @@ async def _get_table_state(
                     status=hand.status,
                     outcome=hand.outcome,
                     payout=hand.payout,
+                    move_deadline_at=hand.move_deadline_at,
                 )
             )
 

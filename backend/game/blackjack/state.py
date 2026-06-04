@@ -114,13 +114,122 @@ async def advance_turn(session_id: uuid.UUID, db: AsyncSession) -> None:
 
     next_player = await get_current_player(session_id, db)
     if next_player is None:
-        # No more active players — trigger dealer turn
+        # No more active players — trigger dealer turn. Nobody is on the clock now.
         result = await db.execute(select(GameSession).where(GameSession.id == session_id))
         game_session = result.scalar_one_or_none()
         if game_session and game_session.status == "playing":
             game_session.status = "dealer_turn"
+            await clear_all_deadlines(session_id, db)
             await db.flush()
             await run_dealer(session_id, db)
+    else:
+        # A new player is on the clock — give them a fresh 30s move deadline.
+        await stamp_current_deadline(session_id, db, force=True)
+
+
+# ─── Move timer (per-player 30s clock) ───────────────────────────────────────
+# The current actor is the lowest-seat `active` hand; only it carries a non-null
+# move_deadline_at. Enforcement is lazy — see enforce_timeout, called from the
+# /action and /state router paths. See backend/game/timer.py for the constant.
+
+
+async def _current_active_hand(session_id: uuid.UUID, db: AsyncSession):
+    """The current actor: the lowest-seat `active` hand, or None. Mirrors
+    get_current_player's seat ordering but returns the Hand, not the User."""
+    from backend.models import GameSession, Hand, TableSeat  # noqa: PLC0415
+
+    game_session = (await db.execute(
+        select(GameSession).where(GameSession.id == session_id)
+    )).scalar_one_or_none()
+    if not game_session:
+        return None
+    stmt = (
+        select(Hand)
+        .outerjoin(
+            TableSeat,
+            (TableSeat.user_id == Hand.user_id) & (TableSeat.table_id == game_session.table_id),
+        )
+        .where(Hand.session_id == session_id)
+        .where(Hand.status == "active")
+        .order_by(TableSeat.seat_number.asc().nullslast())
+    )
+    return (await db.execute(stmt)).scalars().first()
+
+
+async def stamp_current_deadline(session_id: uuid.UUID, db: AsyncSession, force: bool = False) -> None:
+    """Put the current actor on a 30s clock and clear everyone else's.
+
+    The deadline-iff-actor invariant: `move_deadline_at` is non-null only on the
+    lowest-seat active hand. With force=False an existing deadline on the current
+    actor is preserved (so a co-player dealing in doesn't restart your clock);
+    force=True resets it (the per-decision reset after a hit, or when the turn
+    advances to a new actor)."""
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    from backend.game.timer import move_deadline  # noqa: PLC0415
+    from backend.models import Hand  # noqa: PLC0415
+
+    current = await _current_active_hand(session_id, db)
+    hands = (await db.execute(select(Hand).where(Hand.session_id == session_id))).scalars().all()
+    now = datetime.now(timezone.utc)
+    for h in hands:
+        if current is not None and h.id == current.id:
+            if force or h.move_deadline_at is None:
+                h.move_deadline_at = move_deadline(now)
+        elif h.move_deadline_at is not None:
+            h.move_deadline_at = None
+    await db.flush()
+
+
+async def clear_all_deadlines(session_id: uuid.UUID, db: AsyncSession) -> None:
+    """Clear the move deadline on every hand in a session (nobody on the clock)."""
+    from backend.models import Hand  # noqa: PLC0415
+
+    hands = (await db.execute(select(Hand).where(Hand.session_id == session_id))).scalars().all()
+    for h in hands:
+        h.move_deadline_at = None
+    await db.flush()
+
+
+async def enforce_timeout(table_id: uuid.UUID, db: AsyncSession) -> bool:
+    """Lazily auto-STAND the current actor if their move clock has expired.
+
+    Double-checked locking: a cheap unlocked read short-circuits the common
+    (not-expired) case; only on an actually-expired deadline do we lock the
+    session row, re-validate, and resolve — so two concurrent /state polls can't
+    both fire. Auto-stand is the only chip-safe blackjack timeout (an auto-hit
+    could bust the player). Returns True if a timeout was enforced."""
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    from backend.game.timer import is_expired  # noqa: PLC0415
+    from backend.models import GameSession  # noqa: PLC0415
+
+    session = (await db.execute(
+        select(GameSession).where(
+            (GameSession.table_id == table_id) & (GameSession.status == "playing")
+        )
+    )).scalar_one_or_none()
+    if session is None:
+        return False
+    current = await _current_active_hand(session.id, db)
+    if current is None or not is_expired(current.move_deadline_at, datetime.now(timezone.utc)):
+        return False
+
+    # Expired — lock the session row and re-validate before mutating.
+    session = (await db.execute(
+        select(GameSession).where(GameSession.id == session.id).with_for_update()
+    )).scalar_one_or_none()
+    if session is None or session.status != "playing":
+        return False
+    current = await _current_active_hand(session.id, db)
+    if current is None or not is_expired(current.move_deadline_at, datetime.now(timezone.utc)):
+        return False  # a concurrent request already resolved it
+
+    current.status = "standing"
+    current.move_deadline_at = None
+    await db.flush()
+    await advance_turn(session.id, db)
+    return True
 
 
 async def run_dealer(session_id: uuid.UUID, db: AsyncSession) -> None:
