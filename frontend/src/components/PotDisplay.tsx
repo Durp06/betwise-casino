@@ -5,6 +5,8 @@
  * each pot with its amount and the seat-number eligibility set.
  */
 import { t } from "../i18n";
+import AnimatedCounter from "./AnimatedCounter";
+import { useDeckContext } from "../motion/DeckProvider";
 
 interface SidePot {
   amount: number;
@@ -17,12 +19,18 @@ interface PotDisplayProps {
 }
 
 export default function PotDisplay({ potTotal, sidePots }: PotDisplayProps) {
+  const ctx = useDeckContext();
   // Hide structured side pots once the hand is settled (potTotal == 0)
   const showSidePots = sidePots && sidePots.length > 1;
   return (
     <div className="flex flex-col items-center gap-1" data-testid="pot-display">
-      <div className="text-xl font-ui text-cream bg-ink px-3 py-1 rounded">
-        {t("Pot")}: {potTotal}
+      <div
+        ref={(el) => {
+          if (ctx) ctx.potRef.current = el;
+        }}
+        className="text-xl font-ui text-cream bg-ink px-3 py-1 rounded"
+      >
+        {t("Pot")}: <AnimatedCounter value={potTotal} />
       </div>
       {showSidePots && (
         <div className="flex flex-col gap-0.5 text-xs font-mono text-cream">
