@@ -306,6 +306,17 @@ async def _get_table_state(
     """
     from sqlalchemy import select  # noqa: PLC0415
     from backend.models import CasinoTable, TableSeat, GameSession, Hand, User  # noqa: PLC0415
+    from backend.game import state as game_state  # noqa: PLC0415
+
+    # Poll path drives lazy move-timer enforcement — but ONLY for a SEATED caller.
+    # /state is viewable by spectators; a non-seated viewer must not be able to
+    # mutate (drive) the game by polling it. A seated player's poll resolves an
+    # abandoned turn (auto-stand).
+    caller_seated = (await db.execute(
+        select(TableSeat.id).where(TableSeat.table_id == table_id, TableSeat.user_id == current_user_id)
+    )).scalar_one_or_none() is not None
+    if caller_seated:
+        await game_state.enforce_timeout(table_id, db)
 
     # Fetch table
     result = await db.execute(select(CasinoTable).where(CasinoTable.id == table_id))
@@ -396,6 +407,7 @@ async def _get_table_state(
                     status=hand.status,
                     outcome=hand.outcome,
                     payout=hand.payout,
+                    move_deadline_at=hand.move_deadline_at,
                 )
             )
 

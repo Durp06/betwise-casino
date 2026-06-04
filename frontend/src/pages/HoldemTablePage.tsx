@@ -247,6 +247,7 @@ export default function HoldemTablePage() {
                 isCurrentToAct={isCurrentToAct}
                 isButton={isButton}
                 isYou={isYou}
+                moveDeadlineAt={isCurrentToAct ? hand?.move_deadline_at ?? null : null}
                 lastAction={handSeat ? lastActionBySeat[handSeat.seat_number]?.action ?? null : null}
                 lastActionAmount={handSeat ? lastActionBySeat[handSeat.seat_number]?.amount ?? 0 : 0}
               />
