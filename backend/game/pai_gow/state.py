@@ -243,11 +243,38 @@ async def _select_active_round(
     db: AsyncSession,
     table_id: uuid.UUID,
 ) -> Optional[PaiGowRound]:
-    """§9.2 step 4a — SELECT the highest-numbered active round on this table."""
+    """§9.2 step 4a — SELECT the highest-numbered active round on this table.
+
+    "Active" means a round still accepting deals or in mid-play, i.e. status
+    in (`betting`, `playing`). Used by the deal-flow to decide whether to
+    attach to an open round or create round N+1. Display callers want a
+    broader view — use `_select_most_recent_round` instead.
+    """
     result = await db.execute(
         select(PaiGowRound)
         .where(PaiGowRound.table_id == table_id)
         .where(PaiGowRound.status.in_(("betting", "playing")))
+        .order_by(PaiGowRound.round_number.desc())
+        .limit(1)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _select_most_recent_round(
+    db: AsyncSession,
+    table_id: uuid.UUID,
+) -> Optional[PaiGowRound]:
+    """Return the highest-numbered round regardless of status.
+
+    Used by the polling state endpoint so the just-finished round (with
+    dealer reveal + win/loss + payout) stays visible to seated players until
+    someone deals round N+1. The next `deal` creates a higher-numbered round
+    that naturally supersedes the finished one via `ORDER BY round_number
+    DESC LIMIT 1`, swapping the result UI back to the fresh betting screen.
+    """
+    result = await db.execute(
+        select(PaiGowRound)
+        .where(PaiGowRound.table_id == table_id)
         .order_by(PaiGowRound.round_number.desc())
         .limit(1)
     )
@@ -747,7 +774,13 @@ async def auto_set_round_if_timed_out(db: AsyncSession, round_id: uuid.UUID) -> 
     if rnd.status != "playing" or rnd.playing_started_at is None:
         return False
 
-    age = (datetime.now(timezone.utc) - rnd.playing_started_at).total_seconds()
+    # Defensive: `DateTime(timezone=True)` round-trips as aware on Postgres
+    # but the SQLite test backend can return naive — normalize to UTC so the
+    # subtraction below doesn't TypeError. Stored values are always UTC.
+    started = rnd.playing_started_at
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - started).total_seconds()
     if age <= ROUND_PLAYING_TIMEOUT_SECONDS:
         return False
 
@@ -856,19 +889,21 @@ async def get_active_round_state(
     table_id: uuid.UUID,
     viewer_user_id: Optional[uuid.UUID] = None,
 ) -> Optional[PaiGowRound]:
-    """Return the active round for a table (or None) for the `state` endpoint.
+    """Return the round to display on the polling `/state` endpoint.
 
-    Triggers a lazy timeout check (§9.4) before returning. Callers should
-    handle card-visibility masking based on `round.status` and the viewer's
-    seat (spec §13).
+    Includes finished rounds so the player sees the dealer reveal + win/loss
+    + payout after resolve, until a new `deal` opens round N+1 (which then
+    supersedes the finished one via higher round_number). Triggers a lazy
+    timeout check (§9.4) only for rounds that are actually mid-flow —
+    finished rounds need no timeout handling. Callers handle card-visibility
+    masking based on `round.status` per spec §13.
     """
-    rnd = await _select_active_round(db, table_id)
+    rnd = await _select_most_recent_round(db, table_id)
     if rnd is None:
         return None
-    # Lazy timeout check.
-    await auto_set_round_if_timed_out(db, rnd.id)
-    # Reload to pick up any status changes.
-    await db.refresh(rnd)
+    if rnd.status in ("betting", "playing"):
+        await auto_set_round_if_timed_out(db, rnd.id)
+        await db.refresh(rnd)
     return rnd
 
 

@@ -285,6 +285,153 @@ async def test_state_endpoint_masks_other_players_cards_during_play(other_client
     assert state["round"]["dealer_dealt_cards"] is None  # masked during 'playing'
 
 
+@pytest.mark.asyncio
+async def test_state_shows_finished_round_until_next_deal(client, db):
+    """After resolve, `/state` must keep returning the finished round (with
+    dealer reveal + hand_result populated) until a new round is dealt.
+
+    Without this contract the polling response goes round=null the instant
+    the round resolves, so the frontend never gets to render the win/loss +
+    payout result UI — the player sees only the next betting prompt. The
+    fix is in `_select_most_recent_round`; this test locks in the shape so
+    a future "active-only" reflex can't reintroduce the regression.
+    """
+    from backend.game.pai_gow.house_way import foxwoods  # noqa: PLC0415
+
+    await seed_user(db, TEST_USER_ID, "alice", chip_balance=100_000)
+    table_id = await _create_table_and_sit(client)
+
+    deal_resp = (await client.post(
+        f"/api/pai-gow/tables/{table_id}/deal",
+        json={"bet_cents": 1_000, "fortune_bet_cents": 0},
+    )).json()
+    hand_id = deal_resp["id"]
+    front, back = foxwoods(deal_resp["dealt_cards"])
+
+    set_resp = (await client.post(
+        f"/api/pai-gow/hands/{hand_id}/set",
+        json={"front": front, "back": back},
+    )).json()
+    assert set_resp["hand_result"] in ("win", "push", "lose")
+
+    # After resolve — `/state` must still return the finished round.
+    state = (await client.get(f"/api/pai-gow/tables/{table_id}/state")).json()
+    assert state["round"] is not None, (
+        "Polling `/state` after resolve returned round=null — the frontend "
+        "result UI gates on `tableState.round` and `myHand.hand_result`, both "
+        "of which depend on this round being present in the response."
+    )
+    assert state["round"]["status"] == "finished"
+    assert state["round"]["dealer_dealt_cards"] is not None  # revealed at 'finished'
+
+    alice_hand = next(
+        (h for h in state["hands"] if h["user_id"] == str(TEST_USER_ID)),
+        None,
+    )
+    assert alice_hand is not None
+    assert alice_hand["hand_result"] in ("win", "push", "lose")
+    assert alice_hand["front_cards"] is not None
+    assert alice_hand["back_cards"] is not None
+
+    # Now deal again — the new round (higher round_number) supersedes via
+    # `ORDER BY round_number DESC LIMIT 1`, and the prior result vanishes.
+    deal2_resp = (await client.post(
+        f"/api/pai-gow/tables/{table_id}/deal",
+        json={"bet_cents": 1_000, "fortune_bet_cents": 0},
+    )).json()
+    state2 = (await client.get(f"/api/pai-gow/tables/{table_id}/state")).json()
+    assert state2["round"] is not None
+    assert state2["round"]["status"] in ("betting", "playing"), (
+        "After dealing round N+1, `/state` must return that fresh round, "
+        f"not the prior finished round. Got status={state2['round']['status']}."
+    )
+    alice_hand2 = next(
+        (h for h in state2["hands"] if h["user_id"] == str(TEST_USER_ID)),
+        None,
+    )
+    assert alice_hand2 is not None
+    assert alice_hand2["id"] == deal2_resp["id"]
+    assert alice_hand2["id"] != hand_id
+    assert alice_hand2["hand_result"] is None  # fresh hand, not yet resolved
+
+
+@pytest.mark.asyncio
+async def test_state_finished_round_to_late_joiner_has_no_my_hand(other_client, db):
+    """A user who joins after a round finishes sees the dealer reveal as
+    table context, but has no hand in that round — so on the client
+    `state.hands.find(user)` is null, `myHand` is null, and `showResult`
+    does not fire (no false "you won/lost" banner for the late joiner).
+
+    Uses `other_client` alone per the fixture-collision constraint
+    documented on `test_state_endpoint_masks_other_players_cards_during_play`
+    — Alice's seat, hand, and the finished round are seeded directly.
+    """
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    await seed_user(db, TEST_USER_ID, "alice", chip_balance=100_000)
+    await seed_user(db, OTHER_USER_ID, "bob", chip_balance=100_000)
+    table = await seed_pai_gow_table(db)
+
+    await seed_pai_gow_seat(db, table.id, TEST_USER_ID, seat_number=1)
+    rnd = await seed_pai_gow_round(
+        db, table.id, status="finished",
+        dealer_dealt_cards=[
+            {"suit": "spades", "value": str(v)} for v in (2, 3, 4, 5, 6, 7, 8)
+        ],
+    )
+    rnd.dealer_front = [
+        {"suit": "spades", "value": "2"},
+        {"suit": "spades", "value": "3"},
+    ]
+    rnd.dealer_back = [
+        {"suit": "spades", "value": "4"},
+        {"suit": "spades", "value": "5"},
+        {"suit": "spades", "value": "6"},
+        {"suit": "spades", "value": "7"},
+        {"suit": "spades", "value": "8"},
+    ]
+    rnd.resolved_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    alice_hand = await seed_pai_gow_player_hand(
+        db, rnd.id, TEST_USER_ID, action_status="resolved",
+    )
+    alice_hand.hand_result = "win"
+    alice_hand.ante_payout_cents = 1_000
+    alice_hand.front_cards = [
+        {"suit": "hearts", "value": "A"},
+        {"suit": "hearts", "value": "K"},
+    ]
+    alice_hand.back_cards = [
+        {"suit": "hearts", "value": "Q"},
+        {"suit": "hearts", "value": "J"},
+        {"suit": "hearts", "value": "10"},
+        {"suit": "diamonds", "value": "A"},
+        {"suit": "diamonds", "value": "K"},
+    ]
+    alice_hand.resolved_at = datetime.now(timezone.utc)
+    await db.flush()
+
+    # Bob joins the table now (post-resolve) and polls.
+    await other_client.post(f"/api/pai-gow/tables/{table.id}/join")
+    state_resp = await other_client.get(f"/api/pai-gow/tables/{table.id}/state")
+    assert state_resp.status_code == 200
+    state = state_resp.json()
+
+    # Round + dealer reveal are present — Bob sees the table context.
+    assert state["round"] is not None
+    assert state["round"]["status"] == "finished"
+    assert state["round"]["dealer_dealt_cards"] is not None  # revealed at 'finished'
+
+    # Bob has no hand on this finished round → frontend's `myHand` will be
+    # null → showResult is false → no result UI for the late joiner.
+    bob_hand = next(
+        (h for h in state["hands"] if h["user_id"] == str(OTHER_USER_ID)),
+        None,
+    )
+    assert bob_hand is None
+
+
 # ─── Advice endpoints (SSE) ─────────────────────────────────────────────────
 
 
