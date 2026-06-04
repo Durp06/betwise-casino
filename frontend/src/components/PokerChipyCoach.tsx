@@ -10,8 +10,10 @@
 import { useState } from "react";
 import { streamPokerAdvice } from "../api/client";
 import { useGameStore } from "../store/gameStore";
+import type { PokerOdds } from "../types";
 import { t } from "../i18n";
 import Chipy from "./Chipy";
+import PokerOddsGraphic from "./PokerOddsGraphic";
 
 interface PokerChipyCoachProps {
   handId: string | null;
@@ -45,6 +47,7 @@ export default function PokerChipyCoach({ handId }: PokerChipyCoachProps) {
     pokerCoachStreaming,
     pokerCoachConfidenceTier,
     pokerCoachRecommendedAction,
+    pokerCoachOdds,
     beginPokerCoachStream,
     appendPokerCoachChunk,
     endPokerCoachStream,
@@ -62,15 +65,17 @@ export default function PokerChipyCoach({ handId }: PokerChipyCoachProps) {
         const f = (final ?? {}) as {
           confidence_tier?: "DETERMINISTIC" | "HEURISTIC";
           recommended_action?: string | null;
+          odds?: PokerOdds | null;
         };
         endPokerCoachStream(
           f.confidence_tier ?? null,
           f.recommended_action ?? null,
+          f.odds ?? null,
         );
       },
       (msg) => {
         setError(msg);
-        endPokerCoachStream(null, null);
+        endPokerCoachStream(null, null, null);
       },
     );
   }
@@ -168,6 +173,7 @@ export default function PokerChipyCoach({ handId }: PokerChipyCoachProps) {
             {t("Push 'Ask Chipy' when it's your turn for a read.")}
           </p>
         )}
+        {pokerCoachOdds && <PokerOddsGraphic odds={pokerCoachOdds} />}
       </div>
     </aside>
   );

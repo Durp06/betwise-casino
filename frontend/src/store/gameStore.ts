@@ -6,7 +6,7 @@
  *               an optimistic update that's already been sent to the server.
  */
 import { create } from "zustand";
-import type { Card, Hand, TableState, PokerTournamentState, HoldemTableState } from "../types";
+import type { Card, Hand, TableState, PokerTournamentState, HoldemTableState, PokerOdds } from "../types";
 
 const COACH_MODE_STORAGE_KEY = "betwise.coachMode";
 const POKER_COACH_MODE_STORAGE_KEY = "betwise.pokerCoachMode";
@@ -88,6 +88,8 @@ interface GameState {
   /** Last final SSE event from poker advice — drives the confidence badge. */
   pokerCoachConfidenceTier: "DETERMINISTIC" | "HEURISTIC" | null;
   pokerCoachRecommendedAction: string | null;
+  /** Structured hand odds from the last advice (powers the odds graphic). */
+  pokerCoachOdds: PokerOdds | null;
 
   // ─── Multiplayer Hold'em (cash ring game) ─────────────────────────────────
   /** Last polled state from /api/holdem/tables/{id}/state. */
@@ -145,6 +147,7 @@ interface GameActions {
   endPokerCoachStream: (
     confidenceTier: "DETERMINISTIC" | "HEURISTIC" | null,
     recommendedAction: string | null,
+    odds: PokerOdds | null,
   ) => void;
   resetPokerCoach: () => void;
 
@@ -177,6 +180,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
   pokerCoachStreaming: false,
   pokerCoachConfidenceTier: null,
   pokerCoachRecommendedAction: null,
+  pokerCoachOdds: null,
   holdemTableState: null,
 
   setTableState: (newState: TableState) => {
@@ -330,16 +334,19 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       pokerCoachStreaming: true,
       pokerCoachConfidenceTier: null,
       pokerCoachRecommendedAction: null,
+      pokerCoachOdds: null,
     });
   },
   endPokerCoachStream: (
     confidenceTier: "DETERMINISTIC" | "HEURISTIC" | null,
     recommendedAction: string | null,
+    odds: PokerOdds | null,
   ) => {
     set({
       pokerCoachStreaming: false,
       pokerCoachConfidenceTier: confidenceTier,
       pokerCoachRecommendedAction: recommendedAction,
+      pokerCoachOdds: odds,
     });
   },
   resetPokerCoach: () => {
@@ -348,6 +355,7 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       pokerCoachStreaming: false,
       pokerCoachConfidenceTier: null,
       pokerCoachRecommendedAction: null,
+      pokerCoachOdds: null,
     });
   },
 

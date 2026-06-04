@@ -55,6 +55,7 @@ from backend.schemas import (
     HoldemTableListOut,
     HoldemTableOut,
     HoldemTableStateOut,
+    PokerOddsOut,
 )
 
 logger = logging.getLogger(__name__)
@@ -165,6 +166,52 @@ async def use_time_card(
     turn, only while your clock is still live, only if you have a card left."""
     request.state.user_id = str(current_user)
     return await _use_time_card(table_id, current_user, db)
+
+
+@router.post("/tables/{table_id}/odds", response_model=PokerOddsOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
+async def hand_odds_endpoint(
+    request: Request,
+    table_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> PokerOddsOut:
+    """Chipy's hand odds for the requester's CURRENT hand — win/tie/lose
+    equity, pot odds, and the made hand. Computed only from the caller's own
+    hole cards + the public board (no opponent cards used), so it leaks nothing."""
+    request.state.user_id = str(current_user)
+    return await _hand_odds(table_id, current_user, db)
+
+
+async def _hand_odds(table_id: uuid.UUID, current_user: uuid.UUID, db: AsyncSession) -> PokerOddsOut:
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from backend.game.poker.equity import hand_odds  # noqa: PLC0415
+    from backend.models import HoldemHand, HoldemHandSeat  # noqa: PLC0415
+
+    hand = (await db.execute(
+        select(HoldemHand).where(HoldemHand.table_id == table_id, HoldemHand.status == "active")
+    )).scalar_one_or_none()
+    if hand is None:
+        raise HTTPException(status_code=400, detail="No active hand")
+
+    seats = (await db.execute(
+        select(HoldemHandSeat).where(HoldemHandSeat.hand_id == hand.id)
+    )).scalars().all()
+    me = next((hs for hs in seats if hs.user_id == current_user), None)
+    if me is None or len(me.hole_cards) != 2:
+        raise HTTPException(status_code=403, detail="You are not holding cards in this hand")
+
+    n_opp = sum(
+        1
+        for hs in seats
+        if hs.user_id != current_user and not hs.is_folded and len(hs.hole_cards) == 2
+    )
+    to_call = max(0, hand.current_bet_to_match - me.current_bet)
+    payload = hand_odds(
+        list(me.hole_cards), list(hand.board), hand.pot_total, to_call, max(1, n_opp), hand.street
+    )
+    return PokerOddsOut(**payload)
 
 
 # ─── Pure state↔DB bridge ─────────────────────────────────────────────────────

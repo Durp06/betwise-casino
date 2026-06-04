@@ -149,7 +149,7 @@ async def stream_poker_advice(
     """Stream Chipy's coaching explanation for the hand in progress."""
     request.state.user_id = str(current_user)
 
-    snapshot, mode, archetypes_by_seat, classification = await _build_advice_payload(
+    snapshot, mode, archetypes_by_seat, classification, odds = await _build_advice_payload(
         hand_id, current_user, db
     )
 
@@ -188,6 +188,7 @@ async def stream_poker_advice(
             "verdict": classification.verdict,
             "ev_loss_chips": classification.ev_loss_chips,
             "principle_note": classification.principle_note,
+            "odds": odds,
         }
         yield f"data: {json.dumps(final)}\n\n".encode("utf-8")
 
@@ -207,6 +208,7 @@ async def _build_advice_payload(
     from sqlalchemy import select  # noqa: PLC0415
 
     from backend.game.poker.archetypes import ARCHETYPE_REGISTRY  # noqa: PLC0415
+    from backend.game.poker.equity import hand_odds  # noqa: PLC0415
     from backend.game.poker.oracle import DecisionSnapshot, classify_decision  # noqa: PLC0415
     from backend.game.poker.ranges import hand_str  # noqa: PLC0415
     from backend.game.poker.tournament import (  # noqa: PLC0415
@@ -257,6 +259,25 @@ async def _build_advice_payload(
     live_seats = [s for s in seats if not s.is_bust]
     is_bubble = len(live_seats) == n_paid + 1
 
+    # Opponents still CONTESTING this hand (dealt in, not folded) — drives the
+    # Monte-Carlo equity behind the odds graphic.
+    all_hand_seats = (await db.execute(
+        select(PokerHandSeat).where(PokerHandSeat.hand_id == hand_id)
+    )).scalars().all()
+    n_opp_in_hand = sum(
+        1
+        for hs in all_hand_seats
+        if hs.seat_number != user_seat.seat_number and not hs.is_folded and len(hs.hole_cards) == 2
+    )
+
+    pot_bb = hand.pot_total / hand.big_blind if hand.big_blind else 0
+    to_call_bb = (
+        (hand.current_bet_to_match - user_hand_seat.current_bet) / hand.big_blind if hand.big_blind else 0
+    )
+    odds = hand_odds(
+        list(hole), list(hand.board), pot_bb, to_call_bb, max(1, n_opp_in_hand), cast("any", hand.street)
+    )
+
     snapshot = DecisionSnapshot(
         hole=hole,
         board=tuple(hand.board),
@@ -264,12 +285,12 @@ async def _build_advice_payload(
         position=seat_position_label(user_seat.seat_number, hand.button_seat, len(seats)),
         hand_str=h_str,
         stack_bb=user_hand_seat.final_stack / hand.big_blind if hand.big_blind else 0,
-        pot_bb=hand.pot_total / hand.big_blind if hand.big_blind else 0,
-        to_call_bb=(hand.current_bet_to_match - user_hand_seat.current_bet) / hand.big_blind if hand.big_blind else 0,
+        pot_bb=pot_bb,
+        to_call_bb=to_call_bb,
         n_live_opponents=max(0, len(live_seats) - 1),
         seats_remaining=len(live_seats),
         is_bubble=is_bubble,
-        live_equity=None,
+        live_equity=odds["win_pct"],
     )
 
     # Classify hypothetical "call" for the recommended_action surface — the
@@ -282,7 +303,7 @@ async def _build_advice_payload(
         if s.archetype_name and s.archetype_name in ARCHETYPE_REGISTRY:
             archetypes_by_seat[s.seat_number] = ARCHETYPE_REGISTRY[s.archetype_name]
 
-    return snapshot, tournament.advice_mode, archetypes_by_seat, classification
+    return snapshot, tournament.advice_mode, archetypes_by_seat, classification, odds
 
 
 __all__ = ["router", "_stream_anthropic_poker"]

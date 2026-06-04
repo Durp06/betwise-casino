@@ -23,6 +23,7 @@ import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
 import TimeCardControl from "../components/TimeCardControl";
+import HoldemOddsCoach from "../components/HoldemOddsCoach";
 import WaitingForPlayers from "../components/WaitingForPlayers";
 import ChatPanel from "../components/ChatPanel";
 import HoldemRulesModal from "../components/HoldemRulesModal";
@@ -330,6 +331,11 @@ export default function HoldemTablePage() {
               yourSeat={yourHandSeat}
               onActed={() => void refresh()}
             />
+          )}
+
+          {/* Chipy hand-odds — ask anytime you're holding cards this hand. */}
+          {isHandActive && yourHandSeat && (
+            <HoldemOddsCoach tableId={tableId} enabled />
           )}
         </div>
 

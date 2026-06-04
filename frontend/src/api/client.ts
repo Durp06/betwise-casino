@@ -24,6 +24,7 @@ import type {
   PokerTournament,
   PokerTournamentState,
   PokerActionType,
+  PokerOdds,
   HoldemTableListRow,
   HoldemTable,
   HoldemTableState,
@@ -429,6 +430,15 @@ export async function useHoldemTimeCard(
   tableId: string,
 ): Promise<ApiResult<HoldemTableState>> {
   return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/use-time-card`, {
+    method: "POST",
+  });
+}
+
+/** Chipy's hand odds for the requester's current multiplayer Hold'em hand. */
+export async function getHoldemOdds(
+  tableId: string,
+): Promise<ApiResult<PokerOdds>> {
+  return apiFetch<PokerOdds>(`/api/holdem/tables/${tableId}/odds`, {
     method: "POST",
   });
 }

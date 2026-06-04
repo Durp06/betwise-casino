@@ -379,6 +379,21 @@ class PokerAdviceIn(BaseModel):
     mode: PokerAdviceMode = "odds"
 
 
+class PokerOddsOut(BaseModel):
+    """Hand-odds payload for the on-felt odds graphic (Texas Hold'em, both the
+    solo trainer and multiplayer). All probabilities are 0..1 fractions."""
+
+    win_pct: float
+    tie_pct: float
+    lose_pct: float
+    # Equity required to make a break-even call (pot odds). 0 when nothing is
+    # owed to the pot (you can check).
+    pot_odds_pct: float
+    made_hand: Optional[str] = None  # current best 5-card hand, e.g. "two pair" (None preflop)
+    n_opponents: int
+    street: str
+
+
 class PokerAdviceOut(BaseModel):
     """Final SSE event payload for /api/poker/hands/{hand_id}/advice."""
 
@@ -387,6 +402,7 @@ class PokerAdviceOut(BaseModel):
     verdict: PokerVerdict
     ev_loss_chips: Optional[int] = None
     principle_note: Optional[str] = None
+    odds: Optional[PokerOddsOut] = None
 
 
 # ─── Replay + review ─────────────────────────────────────────────────────────

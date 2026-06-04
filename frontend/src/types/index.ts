@@ -208,6 +208,18 @@ export type PokerVerdict =
   | "no_verdict";
 export type PokerStreet = "preflop" | "flop" | "turn" | "river" | "complete";
 
+/** Hand-odds payload for the on-felt odds graphic (solo + multiplayer poker).
+ *  All *_pct values are 0..1 fractions. */
+export interface PokerOdds {
+  win_pct: number;
+  tie_pct: number;
+  lose_pct: number;
+  pot_odds_pct: number; // equity required to call; 0 when nothing to call
+  made_hand: string | null; // current best hand, e.g. "two pair" (null preflop)
+  n_opponents: number;
+  street: string;
+}
+
 export interface PokerCard {
   suit: Suit;
   value: Value;
