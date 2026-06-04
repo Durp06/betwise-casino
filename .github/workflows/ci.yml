@@ -119,3 +119,56 @@ jobs:
           name: playwright-report
           path: frontend/playwright-report/
           retention-days: 7
+
+  migrations:
+    # Verify the real Postgres DDL in backend/migrations/*.sql actually applies on
+    # a managed-Postgres-equivalent. The pytest suite builds the schema from the
+    # ORM on in-memory SQLite, so the hand-written .sql (JSONB, BIGINT,
+    # gen_random_uuid(), DO $$ blocks, CHECK/UNIQUE constraints, the FK to
+    # auth.users) was previously only exercised at deploy time. This catches DDL
+    # drift before it reaches prod.
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: betwise
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - name: Bootstrap the Supabase-managed auth schema
+        # migration 001 FKs users.id -> auth.users(id), a table Supabase provides
+        # but a vanilla Postgres does not. Stub it so the DDL applies; the FK
+        # constraint itself is still created and verified.
+        env:
+          PGPASSWORD: postgres
+        run: |
+          psql -h localhost -U postgres -d betwise -v ON_ERROR_STOP=1 -c "CREATE SCHEMA IF NOT EXISTS auth;" -c "CREATE TABLE IF NOT EXISTS auth.users (id uuid PRIMARY KEY);"
+
+      - name: Apply migrations against Postgres
+        env:
+          DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/betwise"
+        run: python -m backend.migrate
+
+      - name: Re-run migrations (idempotency — must be a no-op)
+        env:
+          DATABASE_URL: "postgresql+asyncpg://postgres:postgres@localhost:5432/betwise"
+        run: python -m backend.migrate
