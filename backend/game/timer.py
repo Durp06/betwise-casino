@@ -19,6 +19,11 @@ from datetime import datetime, timedelta
 # Seconds a player has to act before the server auto-resolves their turn.
 MOVE_TIMER_SECONDS: int = 30
 
+# Hold'em time cards: each player is granted this many on taking a seat, and using
+# one extends the current move clock by TIME_CARD_BONUS_SECONDS. Cards do not
+# regenerate during play (see routers/holdem.py::_use_time_card).
+STARTING_TIME_CARDS: int = 5
+TIME_CARD_BONUS_SECONDS: int = 15
 
 def move_deadline(now: datetime) -> datetime:
     """The absolute instant a turn that begins at `now` expires."""

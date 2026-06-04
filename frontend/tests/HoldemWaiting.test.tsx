@@ -66,6 +66,7 @@ function seatedState(seatCount: number): HoldemTableState {
     seats,
     current_hand: null,
     your_seat_number: null,
+    your_time_cards_remaining: 5,
   };
 }
 

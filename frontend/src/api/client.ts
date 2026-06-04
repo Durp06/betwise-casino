@@ -425,6 +425,14 @@ export async function actHoldem(
   });
 }
 
+export async function useHoldemTimeCard(
+  tableId: string,
+): Promise<ApiResult<HoldemTableState>> {
+  return apiFetch<HoldemTableState>(`/api/holdem/tables/${tableId}/use-time-card`, {
+    method: "POST",
+  });
+}
+
 // ─── In-game chat (both multiplayer games) ───────────────────────────────────
 
 export async function getChatMessages(

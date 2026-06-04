@@ -388,6 +388,9 @@ export interface HoldemTableState {
   seats: HoldemSeat[];
   current_hand: HoldemHandState | null;
   your_seat_number: number | null; // engine index in the current hand, or null
+  /** The requesting user's remaining time cards (0 if not seated). Each spends to
+   *  extend the current move clock by +15s. */
+  your_time_cards_remaining: number;
 }
 
 export interface HoldemCreateTablePayload {

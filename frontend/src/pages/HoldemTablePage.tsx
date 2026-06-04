@@ -16,11 +16,13 @@ import {
   dealHoldemHand,
   getHoldemTableState,
   leaveHoldemTable,
+  useHoldemTimeCard,
 } from "../api/client";
 import Board from "../components/Board";
 import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
+import TimeCardControl from "../components/TimeCardControl";
 import WaitingForPlayers from "../components/WaitingForPlayers";
 import ChatPanel from "../components/ChatPanel";
 import HoldemRulesModal from "../components/HoldemRulesModal";
@@ -41,6 +43,7 @@ export default function HoldemTablePage() {
   const setHoldemTableState = useGameStore((s) => s.setHoldemTableState);
 
   const [busy, setBusy] = useState(false);
+  const [usingCard, setUsingCard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
@@ -122,6 +125,20 @@ export default function HoldemTablePage() {
     setBusy(false);
     if (result.error) setError(result.error);
     else setHoldemTableState(result.data);
+  }
+
+  async function handleUseCard(): Promise<void> {
+    if (!tableId) return;
+    setUsingCard(true);
+    setError(null);
+    const result = await useHoldemTimeCard(tableId);
+    // Apply the fresh card count BEFORE clearing busy so the button re-enables
+    // in the same render as the decremented count (await breaks React's auto-
+    // batching, so ordering matters — otherwise there's a frame where the button
+    // is clickable but still shows the stale count).
+    if (result.error) setError(result.error);
+    else setHoldemTableState(result.data);
+    setUsingCard(false);
   }
 
   if (!tableId) {
@@ -294,6 +311,14 @@ export default function HoldemTablePage() {
             <p className="font-flavor text-cream/70 text-sm italic" data-testid="holdem-waiting">
               {t("Waiting for other players…")}
             </p>
+          )}
+
+          {isMyTurn && (
+            <TimeCardControl
+              remaining={holdemTableState.your_time_cards_remaining}
+              onUse={() => void handleUseCard()}
+              busy={usingCard}
+            />
           )}
 
           {isMyTurn && yourHandSeat && (

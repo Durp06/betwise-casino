@@ -459,6 +459,12 @@ class HoldemSeat(Base):
     seat_number: Mapped[int] = mapped_column(Integer, nullable=False)  # physical chair, 0-based
     stack: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    # Time cards granted on taking this seat. Each use extends the current move
+    # clock by +15s (game/timer.py::TIME_CARD_BONUS_SECONDS); decremented on use,
+    # no regeneration during play. A fresh 5 is granted each time a player sits,
+    # because the count lives on the seat row (a leave deletes it). See
+    # routers/holdem.py::_use_time_card.
+    time_cards_remaining: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     table: Mapped["HoldemTable"] = relationship("HoldemTable", back_populates="seats")
@@ -466,6 +472,7 @@ class HoldemSeat(Base):
     __table_args__ = (
         CheckConstraint("seat_number >= 0", name="holdem_seat_number_nonneg"),
         CheckConstraint("stack >= 0", name="holdem_seat_stack_nonneg"),
+        CheckConstraint("time_cards_remaining >= 0", name="holdem_seat_time_cards_nonneg"),
         CheckConstraint("status IN ('active','sitting_out')", name="holdem_seat_status_check"),
         UniqueConstraint("table_id", "seat_number", name="uq_holdem_seat_number"),
         UniqueConstraint("table_id", "user_id", name="uq_holdem_seat_user"),
