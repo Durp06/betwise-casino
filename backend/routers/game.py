@@ -247,7 +247,7 @@ async def _take_action(
     """Validate and apply a game action. Record to player_actions."""
     from datetime import datetime, timezone  # noqa: PLC0415
     from sqlalchemy import select  # noqa: PLC0415
-    from backend.models import GameSession, Hand, PlayerAction  # noqa: PLC0415
+    from backend.models import GameSession, Hand, PlayerAction, TableSeat  # noqa: PLC0415
     from backend.game import engine as eng  # noqa: PLC0415
     from backend.game import strategy  # noqa: PLC0415
     from backend.game import state as game_state  # noqa: PLC0415
@@ -263,11 +263,17 @@ async def _take_action(
     if session is None:
         raise HTTPException(status_code=404, detail="No active game session for this table")
 
-    # Lazily resolve an expired turn before processing this action. If the caller
-    # is themselves the timed-out actor they're auto-stood first; the turn guard
-    # below then rejects their late action. Expiry is final. Re-load the session
-    # afterwards — enforcement may have advanced it to the dealer turn.
-    await game_state.enforce_timeout(table_id, db)
+    # Lazily resolve an expired turn before processing this action — but only when
+    # the caller is SEATED, so a non-participant can't drive the game by POSTing.
+    # If the caller is themselves the timed-out actor they're auto-stood first;
+    # the turn guard below then rejects their late action (expiry is final).
+    # Re-load the session afterwards — enforcement may have advanced it to the
+    # dealer turn.
+    caller_seated = (await db.execute(
+        select(TableSeat.id).where(TableSeat.table_id == table_id, TableSeat.user_id == user_id)
+    )).scalar_one_or_none() is not None
+    if caller_seated:
+        await game_state.enforce_timeout(table_id, db)
     result = await db.execute(
         select(GameSession).where(
             (GameSession.table_id == table_id)

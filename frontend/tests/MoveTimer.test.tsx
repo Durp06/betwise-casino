@@ -40,4 +40,23 @@ describe("MoveTimer", () => {
     render(<MoveTimer deadlineAt={deadline} />);
     expect(screen.getByTestId("move-timer").className).toContain("text-action-hit");
   });
+
+  it("clears its interval on unmount (StrictMode-safe cleanup)", () => {
+    const clearSpy = vi.spyOn(globalThis, "clearInterval");
+    const deadline = new Date("2026-06-03T12:00:20Z").toISOString();
+    const { unmount } = render(<MoveTimer deadlineAt={deadline} />);
+    unmount();
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  });
+
+  it("clears the old interval when the deadline changes", () => {
+    const clearSpy = vi.spyOn(globalThis, "clearInterval");
+    const { rerender } = render(
+      <MoveTimer deadlineAt={new Date("2026-06-03T12:00:20Z").toISOString()} />,
+    );
+    rerender(<MoveTimer deadlineAt={new Date("2026-06-03T12:00:40Z").toISOString()} />);
+    expect(clearSpy).toHaveBeenCalled();
+    clearSpy.mockRestore();
+  });
 });

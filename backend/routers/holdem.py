@@ -619,11 +619,6 @@ async def _act(
     from backend.game.poker.state import apply_action, next_to_act  # noqa: PLC0415
     from backend.models import HoldemHand, HoldemHandSeat, HoldemSeat, HoldemTable  # noqa: PLC0415
 
-    # Resolve an expired turn first (the actor may be THIS caller acting late, in
-    # which case they're auto-folded/checked before their action is considered and
-    # the turn guard below cleanly rejects it). Expiry is final.
-    await _enforce_move_timeout(table_id, db)
-
     # Lock the TABLE row first — it is the per-table serializer. Every mutating
     # holdem handler (deal/act/join/leave) locks the table row before any other,
     # so concurrent mutations on one table run strictly one-at-a-time (table →
@@ -639,6 +634,12 @@ async def _act(
         select(HoldemSeat.id).where(HoldemSeat.table_id == table_id, HoldemSeat.user_id == current_user)
     )).scalar_one_or_none():
         raise HTTPException(status_code=403, detail="You are not seated at this table")
+
+    # Now that the caller is confirmed seated, resolve an expired turn first (the
+    # timed-out actor may be THIS caller acting late, in which case they're
+    # auto-folded/checked before their action is considered and the turn guard
+    # below cleanly rejects it). Expiry is final.
+    await _enforce_move_timeout(table_id, db)
 
     # Lock the active hand row for the transaction so two overlapping requests
     # (a double-submitted /act, or an /act racing a /leave) can't both pass the
@@ -931,9 +932,15 @@ async def _build_state_payload(
         HoldemTableOut,
     )
 
-    # Poll path also drives lazy timeout enforcement — an abandoned turn resolves
-    # as soon as ANY player at the table next polls /state.
-    await _enforce_move_timeout(table_id, db)
+    # Poll path drives lazy timeout enforcement — but ONLY for a SEATED caller.
+    # /state is viewable by spectators ("you're watching"); a non-seated viewer
+    # must not be able to mutate (drive) another table's game by polling it. A
+    # seated player's poll resolves an abandoned turn.
+    caller_seated = (await db.execute(
+        select(HoldemSeat.id).where(HoldemSeat.table_id == table_id, HoldemSeat.user_id == current_user)
+    )).scalar_one_or_none() is not None
+    if caller_seated:
+        await _enforce_move_timeout(table_id, db)
 
     table = (await db.execute(select(HoldemTable).where(HoldemTable.id == table_id))).scalar_one_or_none()
     if table is None:

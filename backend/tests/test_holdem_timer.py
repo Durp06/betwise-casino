@@ -255,3 +255,78 @@ async def test_acting_after_expiry_is_rejected_as_not_your_turn(multi, db):
     # their own action no longer applies.
     r = await _act(ac, as_user, timed_out, table_id, "call")
     assert r.status_code == 400, r.text
+
+
+async def _fold_action_count(db, table_id: str, user_id: uuid.UUID) -> int:
+    from sqlalchemy import func  # noqa: PLC0415
+
+    from backend.models import HoldemAction, HoldemHand  # noqa: PLC0415
+
+    hand_ids = (await db.execute(
+        select(HoldemHand.id).where(HoldemHand.table_id == uuid.UUID(table_id))
+    )).scalars().all()
+    if not hand_ids:
+        return 0
+    return int((await db.execute(
+        select(func.count(HoldemAction.id)).where(
+            HoldemAction.hand_id.in_(hand_ids),
+            HoldemAction.user_id == user_id,
+            HoldemAction.action == "fold",
+        )
+    )).scalar_one())
+
+
+@pytest.mark.asyncio
+async def test_spectator_poll_does_not_enforce_timeout(multi, db):
+    """A non-seated viewer polling /state must NOT drive another table's game —
+    enforcement (a state mutation) is gated on the caller being seated."""
+    ac, as_user = multi
+    table_id = await _two_player_table(ac, as_user, db)
+    await seed_user(db, THIRD_USER_ID, "carol")  # a spectator, never seated
+    await _deal(ac, as_user, TEST_USER_ID, table_id)
+
+    st = await _state(ac, as_user, TEST_USER_ID, table_id)
+    timed_out = _actor_uid(st)
+    await _expire_deadline(db, table_id)
+
+    # The spectator's poll must leave the timed-out player untouched.
+    st_spec = await _state(ac, as_user, THIRD_USER_ID, table_id)
+    spec_seat = next(s for s in st_spec["current_hand"]["seats"] if uuid.UUID(s["user_id"]) == timed_out)
+    assert spec_seat["is_folded"] is False
+
+    # A SEATED player's poll resolves it.
+    other = OTHER_USER_ID if timed_out == TEST_USER_ID else TEST_USER_ID
+    st_seated = await _state(ac, as_user, other, table_id)
+    seated_seat = next(s for s in st_seated["current_hand"]["seats"] if uuid.UUID(s["user_id"]) == timed_out)
+    assert seated_seat["is_folded"] is True
+
+
+@pytest.mark.asyncio
+async def test_deal_response_carries_move_deadline(multi, db):
+    """The /deal response body itself must include the fresh deadline so the
+    client can render the countdown immediately (not only on the next poll)."""
+    ac, as_user = multi
+    table_id = await _two_player_table(ac, as_user, db)
+    deal_body = await _deal(ac, as_user, TEST_USER_ID, table_id)
+    assert deal_body["current_hand"]["move_deadline_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_timeout_logs_exactly_one_fold_action(multi, db):
+    """The forced fold is written to the action log once (for replay/audit), and
+    repeated polls do not double-resolve it."""
+    ac, as_user = multi
+    table_id = await _two_player_table(ac, as_user, db)
+    await _deal(ac, as_user, TEST_USER_ID, table_id)
+
+    st = await _state(ac, as_user, TEST_USER_ID, table_id)
+    assert _actor_to_call(st) > 0  # first actor faces the blind → fold on timeout
+    timed_out = _actor_uid(st)
+    assert await _fold_action_count(db, table_id, timed_out) == 0
+    await _expire_deadline(db, table_id)
+
+    other = OTHER_USER_ID if timed_out == TEST_USER_ID else TEST_USER_ID
+    await _state(ac, as_user, other, table_id)
+    await _state(ac, as_user, other, table_id)  # poll again — must not re-fire
+
+    assert await _fold_action_count(db, table_id, timed_out) == 1

@@ -26,6 +26,8 @@ from tests.conftest import (
     seed_user,
 )
 
+THIRD_USER_ID = uuid.UUID("cccccccc-cccc-cccc-cccc-cccccccccccc")
+
 
 @pytest_asyncio.fixture
 async def multi(db):
@@ -215,3 +217,109 @@ async def test_advance_to_dealer_turn_clears_deadline(db):
 
     hb = await _hand_by_user(db, session.id, TEST_USER_ID)
     assert hb.move_deadline_at is None
+
+
+@pytest.mark.asyncio
+async def test_spectator_poll_does_not_enforce_timeout(multi, db):
+    """A non-seated viewer's /state poll must NOT auto-stand a seated player —
+    enforcement is gated on the caller being seated at the table."""
+    ac, as_user = multi
+    await seed_user(db, TEST_USER_ID, "alice")
+    await seed_user(db, OTHER_USER_ID, "bob")
+    await seed_user(db, THIRD_USER_ID, "carol")  # spectator, never seated
+    table = await seed_table(db)
+    await _seed_seat(db, table.id, TEST_USER_ID, 1)
+    await _seed_seat(db, table.id, OTHER_USER_ID, 2)
+    session = await seed_session(
+        db, table.id, status="playing",
+        dealer_cards=[_card("6", "hearts"), _card("10", "clubs")],
+        deck_state=[_card("5") for _ in range(10)],
+    )
+    await seed_hand(db, session.id, TEST_USER_ID, cards=[_card("10"), _card("6")], status="active")
+    await seed_hand(db, session.id, OTHER_USER_ID, cards=[_card("10", "diamonds"), _card("5")], status="active")
+    h1 = await _hand_by_user(db, session.id, TEST_USER_ID)
+    h1.move_deadline_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    await db.flush()
+
+    # Spectator poll — must NOT enforce.
+    as_user(THIRD_USER_ID)
+    assert (await ac.get(f"/api/tables/{table.id}/state")).status_code == 200
+    assert (await _hand_by_user(db, session.id, TEST_USER_ID)).status == "active"
+
+    # Seated player poll — enforces.
+    as_user(OTHER_USER_ID)
+    assert (await ac.get(f"/api/tables/{table.id}/state")).status_code == 200
+    assert (await _hand_by_user(db, session.id, TEST_USER_ID)).status == "standing"
+
+
+@pytest.mark.asyncio
+async def test_deal_response_carries_move_deadline(multi, db):
+    """The /deal response body itself carries the fresh deadline (not only /state)."""
+    ac, as_user = multi
+    await seed_user(db, TEST_USER_ID, "alice")
+    as_user(TEST_USER_ID)
+    table_id = (await ac.post("/api/tables", json={"name": "T", "min_bet": 500, "max_bet": 50_000})).json()["id"]
+    await ac.post(f"/api/tables/{table_id}/join")
+    r = await ac.post(f"/api/tables/{table_id}/deal", json={"bet": 1_000})
+    assert r.status_code == 200, r.text
+    body = r.json()
+    if body["status"] == "active":  # a natural blackjack is already terminal
+        assert body["move_deadline_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_three_player_middle_timeout_advances_to_third(multi, db):
+    ac, as_user = multi
+    await seed_user(db, TEST_USER_ID, "alice")
+    await seed_user(db, OTHER_USER_ID, "bob")
+    await seed_user(db, THIRD_USER_ID, "carol")
+    table = await seed_table(db, max_seats=3)
+    await _seed_seat(db, table.id, TEST_USER_ID, 1)
+    await _seed_seat(db, table.id, OTHER_USER_ID, 2)
+    await _seed_seat(db, table.id, THIRD_USER_ID, 3)
+    session = await seed_session(
+        db, table.id, status="playing",
+        dealer_cards=[_card("6", "hearts"), _card("10", "clubs")],
+        deck_state=[_card("5") for _ in range(10)],
+    )
+    await seed_hand(db, session.id, TEST_USER_ID, cards=[_card("10"), _card("9")], status="standing")
+    await seed_hand(db, session.id, OTHER_USER_ID, cards=[_card("9"), _card("7")], status="active")
+    await seed_hand(db, session.id, THIRD_USER_ID, cards=[_card("10", "diamonds"), _card("4")], status="active")
+    # Seat 2 is the current actor (seat 1 already standing); expire its clock.
+    h2 = await _hand_by_user(db, session.id, OTHER_USER_ID)
+    h2.move_deadline_at = datetime.now(timezone.utc) - timedelta(seconds=1)
+    await db.flush()
+
+    as_user(TEST_USER_ID)  # any seated player's poll resolves it
+    assert (await ac.get(f"/api/tables/{table.id}/state")).status_code == 200
+
+    assert (await _hand_by_user(db, session.id, OTHER_USER_ID)).status == "standing"  # seat 2 auto-stood
+    assert (await _hand_by_user(db, session.id, THIRD_USER_ID)).move_deadline_at is not None  # seat 3 now up
+
+
+@pytest.mark.asyncio
+async def test_stamp_preserves_existing_deadline_unless_forced(db):
+    """force=False keeps an existing actor's clock (a co-player dealing in must
+    not restart it); force=True resets it (per-decision reset on a hit)."""
+    from backend.game.blackjack import state as gs  # noqa: PLC0415
+
+    await seed_user(db, TEST_USER_ID, "alice")
+    await seed_user(db, OTHER_USER_ID, "bob")
+    table = await seed_table(db)
+    await _seed_seat(db, table.id, TEST_USER_ID, 1)
+    await _seed_seat(db, table.id, OTHER_USER_ID, 2)
+    session = await seed_session(db, table.id, status="playing")
+    h1 = await seed_hand(db, session.id, TEST_USER_ID, cards=[_card("10"), _card("6")], status="active")
+    await seed_hand(db, session.id, OTHER_USER_ID, cards=[_card("10"), _card("5")], status="active")
+
+    original = datetime.now(timezone.utc) + timedelta(seconds=20)
+    h1.move_deadline_at = original
+    await db.flush()
+
+    await gs.stamp_current_deadline(session.id, db, force=False)
+    assert (await _hand_by_user(db, session.id, TEST_USER_ID)).move_deadline_at == original
+
+    await gs.stamp_current_deadline(session.id, db, force=True)
+    refreshed = (await _hand_by_user(db, session.id, TEST_USER_ID)).move_deadline_at
+    assert refreshed is not None and refreshed != original
+    assert (refreshed - datetime.now(timezone.utc)).total_seconds() > 20

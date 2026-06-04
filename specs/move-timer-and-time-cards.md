@@ -170,3 +170,28 @@ shared poker engine. Depends on PR1.
 - **Parallel-session hazard** — this work is built in an isolated worktree
   (`betwise-casino-move-timer`) because a concurrent session sharing the main
   checkout switched branches out from under it and ate untracked files. Commit early.
+
+## As-built notes / adversarial-review remediation (PR1, 2026-06-03)
+
+A multi-agent adversarial review (22 agents, 11 confirmed findings) drove these
+as-built deltas vs. the design above:
+
+- **Enforcement is gated on the caller being SEATED.** `GET /state` is viewable by
+  spectators, so running enforcement (a mutation) on every poll let a non-seated
+  user drive another table's game (IDOR). Fixed: `_build_state_payload` (holdem) /
+  `_get_table_state` (blackjack) only call enforcement when the caller has a seat;
+  the holdem `/act` enforcement was moved *after* its seat check; the blackjack
+  `/action` enforcement is gated on the caller's `TableSeat`. Tests:
+  `test_spectator_poll_does_not_enforce_timeout` (both games).
+- **Blackjack enforcement function is `state.py::enforce_timeout(table_id, db)`**
+  (not the spec's tentative `_enforce_blackjack_timeout(session, db)`) — it mirrors
+  holdem's `table_id`-keyed `_enforce_move_timeout` and looks the session up itself.
+- **GET-mutates-state is an intentional design choice** (the Pai Gow precedent;
+  `get_db` commits on GET). Documented; mitigated by the seating gate + the
+  double-checked lock. Not a background worker.
+- **Refuted finding:** the `/deal` response already carries `move_deadline_at`
+  correctly (the SQLAlchemy identity map updates the router's `hand` ref); no
+  defensive `refresh` needed. Locked in by `test_deal_response_carries_move_deadline`.
+- **Out of scope / follow-up:** `HoldemHand.created_at` uses `DateTime` rather than
+  the `TzDateTime` used elsewhere — a pre-existing inconsistency, NOT touched here
+  (the new `move_deadline_at` columns correctly use `TzDateTime`).
