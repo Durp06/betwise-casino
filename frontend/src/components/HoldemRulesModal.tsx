@@ -6,6 +6,7 @@
  * button, the "Got it" button, a backdrop click, or the Escape key.
  */
 import { useEffect } from "react";
+import ModalShell from "../motion/presence/ModalShell";
 import { t } from "../i18n";
 
 interface HoldemRulesModalProps {
@@ -22,19 +23,11 @@ export default function HoldemRulesModal({ onClose }: HoldemRulesModalProps) {
   }, [onClose]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/70"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("How to Play Multiplayer Hold'em")}
-      onClick={onClose}
+    <ModalShell
+      onClose={onClose}
+      ariaLabel={t("How to Play Multiplayer Hold'em")}
+      panelClassName="ink-outline-thick paper-grain rounded-2xl bg-cream text-ink w-full max-w-md max-h-[85vh] overflow-y-auto p-6 flex flex-col gap-4 shadow-[6px_6px_0_0_#1A0A00]"
     >
-      <div
-        className="ink-outline-thick paper-grain rounded-2xl bg-cream text-ink
-          w-full max-w-md max-h-[85vh] overflow-y-auto p-6 flex flex-col gap-4"
-        style={{ boxShadow: "6px 6px 0 0 #1A0A00" }}
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <h2 className="font-display text-3xl tracking-wider text-ink leading-none">
@@ -133,7 +126,6 @@ export default function HoldemRulesModal({ onClose }: HoldemRulesModalProps) {
         >
           {t("Got it")}
         </button>
-      </div>
-    </div>
+    </ModalShell>
   );
 }

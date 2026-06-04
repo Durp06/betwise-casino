@@ -7,12 +7,14 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import type { HoldemTableListRow } from "../types";
 import { listHoldemTables, createHoldemTable, joinHoldemTable } from "../api/client";
 import { t } from "../i18n";
 import { formatMoney as money } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
 import HoldemRulesModal from "../components/HoldemRulesModal";
+import { StaggerList, StaggerItem } from "../motion/presence/StaggerList";
 
 export default function HoldemLobby() {
   const navigate = useNavigate();
@@ -137,13 +139,13 @@ export default function HoldemLobby() {
       )}
 
       {!loading && !error && tables !== null && tables.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <StaggerList className="flex flex-col gap-4">
           {tables.map((table) => {
             const isFull = table.seats_taken >= table.max_seats;
             const buyIn = buyIns[table.id] ?? table.min_buy_in;
             return (
+              <StaggerItem key={table.id}>
               <div
-                key={table.id}
                 className="ink-outline-thick paper-grain rounded-md p-5 flex flex-col sm:flex-row items-start sm:items-center gap-3"
                 style={{ backgroundColor: "#F5F0E8", boxShadow: "5px 5px 0 0 #1A0A00" }}
                 data-testid={`holdem-table-row-${table.id}`}
@@ -187,12 +189,15 @@ export default function HoldemLobby() {
                   </button>
                 </div>
               </div>
+              </StaggerItem>
             );
           })}
-        </div>
+        </StaggerList>
       )}
 
-      {showRules && <HoldemRulesModal onClose={() => setShowRules(false)} />}
+      <AnimatePresence>
+        {showRules && <HoldemRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </GameLobbyShell>
   );
 }

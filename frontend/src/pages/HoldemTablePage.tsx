@@ -21,8 +21,14 @@ import Board from "../components/Board";
 import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
+import WaitingForPlayers from "../components/WaitingForPlayers";
 import ChatPanel from "../components/ChatPanel";
 import HoldemRulesModal from "../components/HoldemRulesModal";
+import { DeckProvider } from "../motion/DeckProvider";
+import DeckStack from "../components/DeckStack";
+import ChipFly from "../components/ChipFly";
+import { useTableActionFeed } from "../motion/useTableActionFeed";
+import { AnimatePresence } from "framer-motion";
 import { t } from "../i18n";
 
 export default function HoldemTablePage() {
@@ -40,6 +46,39 @@ export default function HoldemTablePage() {
   const [showRules, setShowRules] = useState(false);
 
   useHoldemPoll(tableId ?? "", setPollError);
+
+  // Multiplayer presence: per-seat badges + chips-to-pot flies from the action log.
+  const currentHand = holdemTableState?.current_hand ?? null;
+  const actionEvents = useTableActionFeed(currentHand);
+  const [lastActionBySeat, setLastActionBySeat] = useState<
+    Record<number, { action: string; amount: number; key: number }>
+  >({});
+  const [flies, setFlies] = useState<{ id: number; seat: number; amount: number }[]>([]);
+  useEffect(() => {
+    if (actionEvents.length === 0) return;
+    const timers: number[] = [];
+    for (const ev of actionEvents) {
+      setLastActionBySeat((prev) => ({
+        ...prev,
+        [ev.seatNumber]: { action: ev.action, amount: ev.amount, key: ev.actionIndex },
+      }));
+      if (["bet", "raise", "call", "all_in"].includes(ev.action)) {
+        setFlies((prev) => [...prev, { id: ev.actionIndex, seat: ev.seatNumber, amount: ev.amount }]);
+      }
+      const seatNum = ev.seatNumber;
+      const idx = ev.actionIndex;
+      const tid = window.setTimeout(() => {
+        setLastActionBySeat((prev) => {
+          if (prev[seatNum]?.key !== idx) return prev;
+          const next = { ...prev };
+          delete next[seatNum];
+          return next;
+        });
+      }, 1800);
+      timers.push(tid);
+    }
+    return () => timers.forEach((id) => window.clearTimeout(id));
+  }, [actionEvents]);
 
   const refresh = useCallback(async () => {
     if (!tableId) return;
@@ -144,6 +183,7 @@ export default function HoldemTablePage() {
   const chairs = Array.from({ length: table.max_seats }, (_, i) => i);
 
   return (
+    <DeckProvider>
     <div className="min-h-screen bg-felt-green flex flex-col">
       <header className="flex items-center justify-between px-4 py-3 border-b-[3px] border-ink bg-ink/80">
         <h1 className="font-display text-cream text-2xl">
@@ -172,7 +212,8 @@ export default function HoldemTablePage() {
         </p>
       )}
 
-      <main className="flex-1 flex flex-col items-center gap-6 p-6">
+      <main className="flex-1 flex flex-col items-center gap-6 p-6 relative">
+        <DeckStack className="absolute top-4 right-4 scale-[0.7] origin-top-right opacity-90 pointer-events-none" />
         {/* Board + pot */}
         <div className="flex flex-col items-center gap-3 mt-4">
           <PotDisplay
@@ -206,10 +247,22 @@ export default function HoldemTablePage() {
                 isCurrentToAct={isCurrentToAct}
                 isButton={isButton}
                 isYou={isYou}
+                lastAction={handSeat ? lastActionBySeat[handSeat.seat_number]?.action ?? null : null}
+                lastActionAmount={handSeat ? lastActionBySeat[handSeat.seat_number]?.amount ?? 0 : 0}
               />
             );
           })}
         </div>
+
+        {/* Chips arcing to the pot when a seat bets/raises/calls */}
+        {flies.map((f) => (
+          <ChipFly
+            key={f.id}
+            seatNumber={f.seat}
+            amount={f.amount}
+            onDone={() => setFlies((prev) => prev.filter((x) => x.id !== f.id))}
+          />
+        ))}
 
         {/* Controls */}
         <div className="w-full max-w-md flex flex-col items-center gap-3">
@@ -222,6 +275,12 @@ export default function HoldemTablePage() {
             >
               {busy ? t("Dealing…") : t("Deal Hand")}
             </button>
+          )}
+
+          {/* Seated, but not enough players to deal yet — keep the felt alive
+              instead of showing a dead table (Hold'em needs ≥2 humans). */}
+          {seated && !isHandActive && seats.length < 2 && (
+            <WaitingForPlayers seated={seats.length} needed={2} />
           )}
 
           {!seated && (
@@ -250,7 +309,10 @@ export default function HoldemTablePage() {
         <ChatPanel tableKind="holdem" tableId={tableId} />
       </main>
 
-      {showRules && <HoldemRulesModal onClose={() => setShowRules(false)} />}
+      <AnimatePresence>
+        {showRules && <HoldemRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </div>
+    </DeckProvider>
   );
 }

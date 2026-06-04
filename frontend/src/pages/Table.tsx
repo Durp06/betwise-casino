@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useTablePoll } from "../hooks/useTablePoll";
 import { useSession } from "../auth/supabase";
@@ -23,6 +24,8 @@ import Chipy from "../components/Chipy";
 import type { ChipyExpression, ChipyAnimation, ChipyPose } from "../components/Chipy";
 import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
+import { DeckProvider } from "../motion/DeckProvider";
+import DeckStack from "../components/DeckStack";
 
 // Maps a hand outcome (or status fallback) to Chipy's reaction state.
 // Backend doesn't always set hand.outcome — a bust during the player's turn
@@ -291,6 +294,7 @@ export default function Table() {
   const chipyMood = chipyForOutcome(myHand?.outcome, myHand?.status);
 
   return (
+    <DeckProvider>
     <div className="table-surface min-h-screen flex flex-col">
       {/* Header */}
       <header
@@ -329,12 +333,13 @@ export default function Table() {
         {/* Felt table inset — dealer at top, then every seated player's hand */}
         {tableState.session && (
           <div
-            className="ink-outline rounded-2xl p-5 flex flex-col gap-5"
+            className="ink-outline rounded-2xl p-5 flex flex-col gap-5 relative"
             style={{
               backgroundColor: "#145A32",
               boxShadow: "4px 4px 0 0 #1A0A00, inset 0 0 60px rgba(0,0,0,0.45)",
             }}
           >
+            <DeckStack className="absolute top-3 right-3 scale-[0.7] origin-top-right opacity-90 pointer-events-none" />
             <CardHand
               cards={dealerCards}
               handValue={handValueDisplay(dealerCards) ?? undefined}
@@ -529,16 +534,22 @@ export default function Table() {
         </div>
       </main>
 
-      {replayHandId && (
-        <ReplayModal handId={replayHandId} onClose={() => setReplayHandId(null)} />
-      )}
-      {reviewState && (
-        <SessionReviewModal
-          sessionId={reviewState.sessionId}
-          handId={reviewState.handId}
-          onClose={handleReviewClose}
-        />
-      )}
+      <AnimatePresence>
+        {replayHandId && (
+          <ReplayModal key="replay" handId={replayHandId} onClose={() => setReplayHandId(null)} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {reviewState && (
+          <SessionReviewModal
+            key="review"
+            sessionId={reviewState.sessionId}
+            handId={reviewState.handId}
+            onClose={handleReviewClose}
+          />
+        )}
+      </AnimatePresence>
     </div>
+    </DeckProvider>
   );
 }
