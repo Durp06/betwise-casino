@@ -104,7 +104,7 @@ export default function BlackjackRulesModal({ onClose }: BlackjackRulesModalProp
         {/* Chipy's tip */}
         <p className="font-flavor text-sm leading-relaxed bg-ink/5 ink-outline rounded-lg p-3">
           <span className="font-ui uppercase text-xs tracking-widest text-ink/70">{t("Chipy's tip")}: </span>
-          {t("When the dealer shows a weak upcard (2–6), stand on stiff totals (12–16) and let them risk the bust.")}
+          {t("When the dealer shows a weak upcard (2–6), stand on stiff totals (13–16) and let them risk the bust.")}
         </p>
 
         <button
