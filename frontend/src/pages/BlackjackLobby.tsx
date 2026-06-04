@@ -14,6 +14,7 @@ import { generateTableName } from "../utils/tableName";
 import { formatMoney } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
 import Chipy from "../components/Chipy";
+import { StaggerList, StaggerItem } from "../motion/presence/StaggerList";
 
 const STATUS_LABELS: Record<string, string> = {
   waiting:  "Open",
@@ -151,13 +152,13 @@ export default function BlackjackLobby() {
 
       {/* Table list */}
       {!loading && !error && tables !== null && tables.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <StaggerList className="flex flex-col gap-4">
           {tables.map((table, index) => {
             const isFull = table.seats_taken >= table.max_seats;
             const statusKey = table.status as keyof typeof STATUS_LABELS;
             return (
+              <StaggerItem key={table.id}>
               <div
-                key={table.id}
                 className="ink-outline-thick paper-grain rounded-md p-5
                   flex flex-col sm:flex-row items-start sm:items-center gap-3 wobble"
                 style={{
@@ -201,9 +202,10 @@ export default function BlackjackLobby() {
                     : t("Take Seat")}
                 </button>
               </div>
+              </StaggerItem>
             );
           })}
-        </div>
+        </StaggerList>
       )}
     </GameLobbyShell>
   );

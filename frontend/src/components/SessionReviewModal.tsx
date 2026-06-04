@@ -18,6 +18,7 @@ import { getSessionReview } from "../api/client";
 import PlayingCard from "./PlayingCard";
 import EvalBar from "./EvalBar";
 import RetrySpot from "./RetrySpot";
+import ModalShell from "../motion/presence/ModalShell";
 import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
 
@@ -164,13 +165,11 @@ export default function SessionReviewModal({
       : null;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("Hand Review")}
+    <ModalShell
+      onClose={onClose}
+      ariaLabel={t("Hand Review")}
+      panelClassName="bg-chipy-dark rounded-2xl w-full max-w-lg p-6 flex flex-col gap-4 max-h-[90vh]"
     >
-      <div className="bg-chipy-dark rounded-2xl w-full max-w-lg p-6 flex flex-col gap-4 max-h-[90vh]">
         {/* Header */}
         <div className="flex items-center justify-between flex-shrink-0">
           <h2 className="font-display text-chip-gold font-bold text-xl">
@@ -265,7 +264,6 @@ export default function SessionReviewModal({
             )}
           </>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 }

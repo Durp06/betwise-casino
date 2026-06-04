@@ -12,6 +12,7 @@ import BlackjackLobbyCard from "../components/BlackjackLobbyCard";
 import HoldemLobbyCard from "../components/HoldemLobbyCard";
 import PokerLobbyCard from "../components/PokerLobbyCard";
 import PaiGowLobbyCard from "../components/PaiGowLobbyCard";
+import { StaggerList, StaggerItem } from "../motion/presence/StaggerList";
 
 export default function Lobby() {
   const navigate = useNavigate();
@@ -61,12 +62,12 @@ export default function Lobby() {
           {t("Four ways to play — pick your poison.")}
         </span>
 
-        <div className="flex flex-col gap-3 mt-4">
-          <BlackjackLobbyCard />
-          <HoldemLobbyCard />
-          <PokerLobbyCard />
-          <PaiGowLobbyCard />
-        </div>
+        <StaggerList className="flex flex-col gap-3 mt-4">
+          <StaggerItem><BlackjackLobbyCard /></StaggerItem>
+          <StaggerItem><HoldemLobbyCard /></StaggerItem>
+          <StaggerItem><PokerLobbyCard /></StaggerItem>
+          <StaggerItem><PaiGowLobbyCard /></StaggerItem>
+        </StaggerList>
       </main>
     </div>
   );
