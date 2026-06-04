@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,7 +40,12 @@ if TYPE_CHECKING:
 
 from backend.auth import CurrentUser
 from backend.database import get_db
-from backend.game.timer import is_expired, move_deadline
+from backend.game.timer import (
+    STARTING_TIME_CARDS,
+    TIME_CARD_BONUS_SECONDS,
+    is_expired,
+    move_deadline,
+)
 from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import (
     HoldemActIn,
@@ -146,6 +151,20 @@ async def act(
     """Submit your action (fold/check/call/raise/all_in). Turn-guarded."""
     request.state.user_id = str(current_user)
     return await _act(table_id, current_user, body, db)
+
+
+@router.post("/tables/{table_id}/use-time-card", response_model=HoldemTableStateOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
+async def use_time_card(
+    request: Request,
+    table_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> HoldemTableStateOut:
+    """Spend one time card to extend your move clock by +15s. Only on your own
+    turn, only while your clock is still live, only if you have a card left."""
+    request.state.user_id = str(current_user)
+    return await _use_time_card(table_id, current_user, db)
 
 
 # ─── Pure state↔DB bridge ─────────────────────────────────────────────────────
@@ -374,6 +393,7 @@ async def _join_seat(
         seat_number=open_seat,
         stack=buy_in,
         status="active",
+        time_cards_remaining=STARTING_TIME_CARDS,  # fresh 5 each time you sit
         joined_at=datetime.now(timezone.utc),
     )
     db.add(seat)
@@ -695,6 +715,57 @@ async def _act(
 
     await _advance_until_human_or_complete(state, hand, hand_seats, table, db)
 
+    await db.commit()
+    return await _build_state_payload(table_id, current_user, db)
+
+
+async def _use_time_card(
+    table_id: uuid.UUID,
+    current_user: uuid.UUID,
+    db: AsyncSession,
+) -> HoldemTableStateOut:
+    """Spend one time card → +15s on the current move clock. Guards: caller is
+    seated, it is the caller's turn, the clock has not already expired, and a card
+    remains. The per-table lock serializes this against /act so two requests can't
+    both spend the last card or both extend a stale deadline."""
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from backend.models import HoldemHand, HoldemHandSeat, HoldemSeat, HoldemTable  # noqa: PLC0415
+
+    table = (await db.execute(
+        select(HoldemTable).where(HoldemTable.id == table_id).with_for_update()
+    )).scalar_one_or_none()
+    if table is None:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    seat = (await db.execute(
+        select(HoldemSeat).where(HoldemSeat.table_id == table_id, HoldemSeat.user_id == current_user)
+    )).scalar_one_or_none()
+    if seat is None:
+        raise HTTPException(status_code=403, detail="You are not seated at this table")
+
+    hand = (await db.execute(
+        select(HoldemHand)
+        .where(HoldemHand.table_id == table_id, HoldemHand.status == "active")
+        .with_for_update()
+    )).scalar_one_or_none()
+    if hand is None:
+        raise HTTPException(status_code=400, detail="No active hand")
+
+    my_hs = (await db.execute(
+        select(HoldemHandSeat).where(HoldemHandSeat.hand_id == hand.id, HoldemHandSeat.user_id == current_user)
+    )).scalar_one_or_none()
+    if my_hs is None or hand.current_to_act_seat != my_hs.seat_number:
+        raise HTTPException(status_code=400, detail="Not your turn")
+
+    if seat.time_cards_remaining <= 0:
+        raise HTTPException(status_code=400, detail="No time cards left")
+
+    if hand.move_deadline_at is None or is_expired(hand.move_deadline_at, datetime.now(timezone.utc)):
+        raise HTTPException(status_code=400, detail="Your move clock has already expired")
+
+    seat.time_cards_remaining -= 1
+    hand.move_deadline_at = hand.move_deadline_at + timedelta(seconds=TIME_CARD_BONUS_SECONDS)
     await db.commit()
     return await _build_state_payload(table_id, current_user, db)
 
@@ -1037,9 +1108,13 @@ async def _build_state_payload(
             actions=[HoldemActionOut.model_validate(a) for a in actions],
         )
 
+    your_time_cards = next(
+        (s.time_cards_remaining for s in seats if s.user_id == current_user), 0
+    )
     return HoldemTableStateOut(
         table=HoldemTableOut.model_validate(table),
         seats=seats_out,
         current_hand=current_hand_payload,
         your_seat_number=your_seat_number,
+        your_time_cards_remaining=your_time_cards,
     )

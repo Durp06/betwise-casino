@@ -16,11 +16,13 @@ import {
   dealHoldemHand,
   getHoldemTableState,
   leaveHoldemTable,
+  useHoldemTimeCard,
 } from "../api/client";
 import Board from "../components/Board";
 import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
+import TimeCardControl from "../components/TimeCardControl";
 import ChatPanel from "../components/ChatPanel";
 import { t } from "../i18n";
 
@@ -34,6 +36,7 @@ export default function HoldemTablePage() {
   const setHoldemTableState = useGameStore((s) => s.setHoldemTableState);
 
   const [busy, setBusy] = useState(false);
+  const [usingCard, setUsingCard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
 
@@ -79,6 +82,16 @@ export default function HoldemTablePage() {
     setError(null);
     const result = await dealHoldemHand(tableId);
     setBusy(false);
+    if (result.error) setError(result.error);
+    else setHoldemTableState(result.data);
+  }
+
+  async function handleUseCard(): Promise<void> {
+    if (!tableId) return;
+    setUsingCard(true);
+    setError(null);
+    const result = await useHoldemTimeCard(tableId);
+    setUsingCard(false);
     if (result.error) setError(result.error);
     else setHoldemTableState(result.data);
   }
@@ -224,6 +237,14 @@ export default function HoldemTablePage() {
             <p className="font-flavor text-cream/70 text-sm italic" data-testid="holdem-waiting">
               {t("Waiting for other players…")}
             </p>
+          )}
+
+          {isMyTurn && (
+            <TimeCardControl
+              remaining={holdemTableState.your_time_cards_remaining}
+              onUse={() => void handleUseCard()}
+              busy={usingCard}
+            />
           )}
 
           {isMyTurn && yourHandSeat && (

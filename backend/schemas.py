@@ -554,6 +554,9 @@ class HoldemTableStateOut(BaseModel):
     seats: list[HoldemSeatOut]
     current_hand: Optional[HoldemHandStateOut] = None
     your_seat_number: Optional[int] = None
+    # The requesting user's remaining Hold'em time cards (0 if not seated). Each
+    # extends the current move clock by +15s. See routers/holdem.py.
+    your_time_cards_remaining: int = 0
 
 
 # ─── In-game chat (both multiplayer games) ───────────────────────────────────
