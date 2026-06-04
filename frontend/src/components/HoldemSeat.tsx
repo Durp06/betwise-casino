@@ -5,6 +5,7 @@
  * the deck, masked for opponents until showdown. SeatMotion dims folded players
  * and pulses the seat on the clock; ActionBadge shows what they just did.
  */
+import { motion } from "framer-motion";
 import type { HoldemHandSeatState, HoldemSeat as HoldemSeatType, Card } from "../types";
 import AnimatedCardRow from "./AnimatedCardRow";
 import SeatMotion from "./SeatMotion";
@@ -49,13 +50,17 @@ export default function HoldemSeat({
     : "border-ink";
 
   if (empty) {
+    // Open chairs gently breathe (staggered) so an unfilled felt feels alive and
+    // inviting rather than dead. Opacity-only so it survives reduced-motion.
     return (
-      <div
+      <motion.div
         className="flex flex-col items-center justify-center gap-1 p-2 rounded-xl border-[3px] border-dashed border-ink/30 bg-cream/40 min-h-[96px]"
         data-testid={`holdem-seat-${chairNumber}`}
+        animate={{ opacity: [0.55, 0.9, 0.55] }}
+        transition={{ repeat: Infinity, duration: 2.6, delay: (chairNumber % 6) * 0.18, ease: "easeInOut" }}
       >
         <span className="text-ink/40 text-xs italic">{t("Empty seat")}</span>
-      </div>
+      </motion.div>
     );
   }
 

@@ -5,7 +5,6 @@
  */
 import { AnimatePresence, motion } from "framer-motion";
 import { BADGE_POP } from "../motion/tokens";
-import { formatMoney } from "../utils/money";
 import { t } from "../i18n";
 
 const STYLE: Record<string, string> = {
@@ -22,9 +21,9 @@ function label(action: string, amount: number): string {
   switch (action) {
     case "fold": return t("Fold");
     case "check": return t("Check");
-    case "call": return amount > 0 ? `${t("Call")} ${formatMoney(amount)}` : t("Call");
-    case "bet": return amount > 0 ? `${t("Bet")} ${formatMoney(amount)}` : t("Bet");
-    case "raise": return amount > 0 ? `${t("Raise")} ${formatMoney(amount)}` : t("Raise");
+    case "call": return amount > 0 ? `${t("Call")} ${amount}` : t("Call");
+    case "bet": return amount > 0 ? `${t("Bet")} ${amount}` : t("Bet");
+    case "raise": return amount > 0 ? `${t("Raise")} ${amount}` : t("Raise");
     case "all_in": return t("All-in");
     case "turn": return t("To act");
     default: return action.toUpperCase();

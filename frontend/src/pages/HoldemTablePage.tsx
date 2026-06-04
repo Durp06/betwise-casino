@@ -21,6 +21,7 @@ import Board from "../components/Board";
 import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
+import WaitingForPlayers from "../components/WaitingForPlayers";
 import ChatPanel from "../components/ChatPanel";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
@@ -262,6 +263,12 @@ export default function HoldemTablePage() {
             >
               {busy ? t("Dealing…") : t("Deal Hand")}
             </button>
+          )}
+
+          {/* Seated, but not enough players to deal yet — keep the felt alive
+              instead of showing a dead table (Hold'em needs ≥2 humans). */}
+          {seated && !isHandActive && seats.length < 2 && (
+            <WaitingForPlayers seated={seats.length} needed={2} />
           )}
 
           {!seated && (
