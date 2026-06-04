@@ -24,3 +24,17 @@ export const BADGE_POP: Transition = { duration: 0.22, ease: "easeOut" };
 
 /** Per-item stagger step (seconds) — matches the legacy 110ms deal-stagger. */
 export const STAGGER_STEP = 0.11;
+
+// ── Site-wide presence (P7): modals, route changes, lists, banners ──────────
+
+/** Route crossfade — fast so navigation feels instant, not sluggish. */
+export const ROUTE_FADE: Transition = { duration: 0.18, ease: "easeOut" };
+
+/** Modal backdrop fade. */
+export const BACKDROP_FADE: Transition = { duration: 0.16, ease: "easeOut" };
+
+/** Modal panel pop (scale + slide). */
+export const MODAL_POP: Transition = { type: "spring", stiffness: 460, damping: 32, mass: 0.8 };
+
+/** Generic enter for banners / chat messages / outcome reveals. */
+export const FADE_SLIDE: Transition = { duration: 0.24, ease: "easeOut" };

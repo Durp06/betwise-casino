@@ -6,10 +6,11 @@
  * AuthGate: redirects to /login when session === null.
  */
 import { useEffect } from "react";
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MotionConfig } from "framer-motion";
 import { DEAL_SPRING } from "./motion/tokens";
+import RouteFade from "./motion/presence/RouteFade";
 import { useSession } from "./auth/supabase";
 import Login from "./pages/Login";
 import Lobby from "./pages/Lobby";
@@ -74,13 +75,14 @@ function AuthGate({ children }: AuthGateProps) {
 
 // ─── Router ───────────────────────────────────────────────────────────────────
 
-export default function App() {
+/** Routes split into their own component so useLocation runs inside the router;
+ *  RouteFade crossfades page content as the pathname changes. */
+function AnimatedRoutes() {
+  const location = useLocation();
   return (
-    <QueryClientProvider client={queryClient}>
-      <MotionConfig reducedMotion="user" transition={DEAL_SPRING}>
-      <BrowserRouter>
-        <Routes>
-          {/* Public */}
+    <RouteFade pathname={location.pathname}>
+      <Routes location={location}>
+        {/* Public */}
           <Route path="/login" element={<Login />} />
 
           {/* Protected */}
@@ -191,8 +193,18 @@ export default function App() {
           {/* Default redirect */}
           <Route path="/" element={<Navigate to="/lobby" replace />} />
           <Route path="*" element={<Navigate to="/lobby" replace />} />
-        </Routes>
-      </BrowserRouter>
+      </Routes>
+    </RouteFade>
+  );
+}
+
+export default function App() {
+  return (
+    <QueryClientProvider client={queryClient}>
+      <MotionConfig reducedMotion="user" transition={DEAL_SPRING}>
+        <BrowserRouter>
+          <AnimatedRoutes />
+        </BrowserRouter>
       </MotionConfig>
     </QueryClientProvider>
   );

@@ -6,6 +6,7 @@
  */
 import { useState, useEffect, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import { useGameStore } from "../store/gameStore";
 import { useTablePoll } from "../hooks/useTablePoll";
 import { useSession } from "../auth/supabase";
@@ -533,16 +534,21 @@ export default function Table() {
         </div>
       </main>
 
-      {replayHandId && (
-        <ReplayModal handId={replayHandId} onClose={() => setReplayHandId(null)} />
-      )}
-      {reviewState && (
-        <SessionReviewModal
-          sessionId={reviewState.sessionId}
-          handId={reviewState.handId}
-          onClose={handleReviewClose}
-        />
-      )}
+      <AnimatePresence>
+        {replayHandId && (
+          <ReplayModal key="replay" handId={replayHandId} onClose={() => setReplayHandId(null)} />
+        )}
+      </AnimatePresence>
+      <AnimatePresence>
+        {reviewState && (
+          <SessionReviewModal
+            key="review"
+            sessionId={reviewState.sessionId}
+            handId={reviewState.handId}
+            onClose={handleReviewClose}
+          />
+        )}
+      </AnimatePresence>
     </div>
     </DeckProvider>
   );
