@@ -14,6 +14,7 @@ import { generateTableName } from "../utils/tableName";
 import { formatMoney } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
 import Chipy from "../components/Chipy";
+import BlackjackRulesModal from "../components/BlackjackRulesModal";
 
 const STATUS_LABELS: Record<string, string> = {
   waiting:  "Open",
@@ -35,6 +36,7 @@ export default function BlackjackLobby() {
   const [creating, setCreating] = useState(false);
   const [joining, setJoining] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
 
   const fetchTables = useCallback(async () => {
     const result = await listTables();
@@ -84,25 +86,35 @@ export default function BlackjackLobby() {
     else void navigate(`/table/${tableId}`);
   }
 
-  const newTableButton = (
-    <button
-      onClick={() => void handleCreateTable()}
-      disabled={creating}
-      className="ink-outline-thick ink-shadow font-display tracking-wider
-        px-5 py-3 rounded-md text-cream text-lg uppercase
-        disabled:opacity-40 min-h-[52px]"
-      style={{ backgroundColor: "#C0392B" }}
-      aria-busy={creating}
-    >
-      {creating ? t("Dealing…") : t("Open Table")}
-    </button>
+  const headerActions = (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => setShowRules(true)}
+        className="ink-outline ink-shadow-sm font-ui uppercase tracking-wider
+          text-xs sm:text-sm px-4 py-3 rounded-md bg-cream text-ink min-h-[52px]"
+      >
+        {t("How to Play")}
+      </button>
+      <button
+        onClick={() => void handleCreateTable()}
+        disabled={creating}
+        className="ink-outline-thick ink-shadow font-display tracking-wider
+          px-5 py-3 rounded-md text-cream text-lg uppercase
+          disabled:opacity-40 min-h-[52px]"
+        style={{ backgroundColor: "#C0392B" }}
+        aria-busy={creating}
+      >
+        {creating ? t("Dealing…") : t("Open Table")}
+      </button>
+    </div>
   );
 
   return (
     <GameLobbyShell
       title={t("Blackjack")}
       subtitle={t("Beat the dealer to 21 — Chipy coaches every hand.")}
-      action={newTableButton}
+      action={headerActions}
     >
       {actionError && (
         <p role="alert" className="font-flavor text-action-hit text-sm mb-3 italic">
@@ -205,6 +217,8 @@ export default function BlackjackLobby() {
           })}
         </div>
       )}
+
+      {showRules && <BlackjackRulesModal onClose={() => setShowRules(false)} />}
     </GameLobbyShell>
   );
 }

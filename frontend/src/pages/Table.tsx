@@ -18,6 +18,7 @@ import ActionBar from "../components/ActionBar";
 import ChipyCoach from "../components/ChipyCoach";
 import ReplayModal from "../components/ReplayModal";
 import SessionReviewModal from "../components/SessionReviewModal";
+import BlackjackRulesModal from "../components/BlackjackRulesModal";
 import ChatPanel from "../components/ChatPanel";
 import Chipy from "../components/Chipy";
 import type { ChipyExpression, ChipyAnimation, ChipyPose } from "../components/Chipy";
@@ -94,6 +95,7 @@ export default function Table() {
   } = useGameStore();
 
   const [replayHandId, setReplayHandId] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
   const [leaveLoading, setLeaveLoading] = useState(false);
   const [reviewIsLeaveFlow, setReviewIsLeaveFlow] = useState(false);
   const [reviewState, setReviewState] = useState<{
@@ -301,6 +303,13 @@ export default function Table() {
           {tableState.name}
         </h1>
         <div className="flex gap-3 font-ui uppercase tracking-wider text-xs text-cream">
+          <button
+            type="button"
+            onClick={() => setShowRules(true)}
+            className="hover:text-gold-bright"
+          >
+            {t("How to Play")}
+          </button>
           <button
             onClick={goToLobby}
             className="hover:text-gold-bright"
@@ -539,6 +548,7 @@ export default function Table() {
           onClose={handleReviewClose}
         />
       )}
+      {showRules && <BlackjackRulesModal onClose={() => setShowRules(false)} />}
     </div>
   );
 }
