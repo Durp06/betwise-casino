@@ -40,20 +40,31 @@ export default function Login() {
         setLoading(false);
         return;
       }
-      const { error: authError } = await supabase.auth.signUp({ email, password });
+      const { data, error: authError } = await supabase.auth.signUp({ email, password });
       if (authError) {
         setError(authError.message);
         setLoading(false);
         return;
       }
+      // With email confirmation on (Supabase's default), signUp returns no
+      // session yet — the user has no token until they verify. Calling the
+      // authed createMe here would 401 and surface a misleading "session
+      // expired", so instead tell them to verify their email, then switch to
+      // Sign In. Their profile row is provisioned on first successful sign-in.
+      if (!data.session) {
+        setMessage(t("Account created! Check your email to verify your address, then sign in."));
+        setMode("sign-in");
+        setLoading(false);
+        return;
+      }
+      // Email confirmation disabled — a session already exists, so provision now.
       const result = await createMe(username);
       if (result.error) {
         setError(result.error);
         setLoading(false);
         return;
       }
-      setMessage(t("Account created! Check your email to confirm."));
-      setLoading(false);
+      void navigate("/lobby");
     } else {
       const { error: authError } = await supabase.auth.signInWithPassword({ email, password });
       if (authError) {
