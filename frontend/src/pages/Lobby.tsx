@@ -22,7 +22,7 @@ export default function Lobby() {
     <div className="min-h-screen flex flex-col" style={{ backgroundColor: "#1A0A00" }}>
       {/* Header */}
       <header
-        className="flex items-center justify-between px-4 py-4 border-b-[3px] border-ink"
+        className="flex flex-wrap items-center justify-between gap-y-2 px-4 py-4 border-b-[3px] border-ink"
         style={{ backgroundColor: "#0D3B1F" }}
       >
         <div className="flex items-center gap-3">
@@ -33,7 +33,7 @@ export default function Lobby() {
             CASINO
           </span>
         </div>
-        <nav className="flex items-center gap-4">
+        <nav className="flex flex-wrap items-center justify-end gap-3">
           <BalanceHeader />
           <button
             onClick={() => void navigate("/profile")}
