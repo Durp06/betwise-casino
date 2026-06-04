@@ -77,16 +77,20 @@ async def test_upsert_me_new_user_gets_starting_balance(client) -> None:
 
 def test_no_old_literal_in_starting_balance_paths() -> None:
     """AC-B6: The three files that define/set the starting balance must reference
-    STARTING_BALANCE_CENTS and must NOT contain the old literal 100_000 or 100000
-    in the starting-balance code paths.
+    STARTING_BALANCE_CENTS, and no *starting-balance* assignment may use the old
+    raw literal (100_000 / 100000) instead of the constant.
 
-    We check each file for the presence of 'STARTING_BALANCE_CENTS' and the
-    absence of '100_000' and '100000' anywhere in the file (these files should
-    contain no other occurrence of these literals; the only legitimate occurrence
-    in the whole BetWise codebase of '100_000' is as an explicit fixture override
-    in test files, which are different files).
+    Originally this scanned each whole file for the literal, on the assumption that
+    the only other occurrence in the repo was a test-fixture override. That
+    assumption no longer holds: the Pai Gow Fortune pool
+    (models.FortunePool.amount_cents / seed_cents) legitimately defaults to
+    100_000 (a $1,000 progressive-pool seed floor) — an unrelated literal that
+    landed on main and is not a starting-balance path. So we scope the guard to
+    lines that actually assign a user chip balance, which is what AC-B6 cares
+    about: a regression would reintroduce 100_000 on a `chip_balance` line.
     """
     import pathlib  # noqa: PLC0415
+    import re  # noqa: PLC0415
 
     repo_root = pathlib.Path(__file__).parent.parent.parent  # betwise-casino/
 
@@ -95,6 +99,7 @@ def test_no_old_literal_in_starting_balance_paths() -> None:
         repo_root / "backend" / "routers" / "users.py",
         repo_root / "backend" / "dev_seed.py",
     ]
+    old_literal = re.compile(r"\b100_?000\b")
 
     for path in files_to_check:
         source = path.read_text(encoding="utf-8")
@@ -102,11 +107,10 @@ def test_no_old_literal_in_starting_balance_paths() -> None:
             f"{path.name}: expected 'STARTING_BALANCE_CENTS' to appear "
             "(starting-balance paths must reference the constant)"
         )
-        assert "100_000" not in source, (
-            f"{path.name}: found forbidden literal '100_000' — "
-            "starting-balance assignments must use STARTING_BALANCE_CENTS, not a raw literal"
-        )
-        assert "100000" not in source, (
-            f"{path.name}: found forbidden literal '100000' — "
-            "starting-balance assignments must use STARTING_BALANCE_CENTS, not a raw literal"
-        )
+        for lineno, line in enumerate(source.splitlines(), start=1):
+            if "chip_balance" not in line:
+                continue
+            assert not old_literal.search(line), (
+                f"{path.name}:{lineno}: a chip_balance (starting-balance) line uses the "
+                f"old raw literal instead of STARTING_BALANCE_CENTS: {line.strip()!r}"
+            )

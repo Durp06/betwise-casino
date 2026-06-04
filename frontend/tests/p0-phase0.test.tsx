@@ -48,6 +48,15 @@ vi.mock("../src/api/client", () => ({
   listTables: listTablesMock,
   createTable: createTableMock,
   joinTable: joinTableMock,
+  // BalanceHeader (mounted in Lobby / Table headers) fetches the bankroll on mount.
+  getMe: vi.fn().mockResolvedValue({
+    data: {
+      id: "u", username: "tester", chip_balance: 5_000_000, total_hands: 0,
+      correct_decisions: 0, accuracy: 0, current_streak: 0, best_streak: 0,
+      created_at: "2026-06-03T00:00:00Z",
+    },
+    error: null,
+  }),
   // Stubs for other imports inside Lobby/Table subcomponents
   leaveTable: vi.fn().mockResolvedValue({ data: { message: "left" }, error: null }),
   getTableState: vi.fn().mockResolvedValue({ data: null, error: null }),

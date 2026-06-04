@@ -17,6 +17,7 @@ import PokerActionBar from "../components/PokerActionBar";
 import PokerChipyCoach from "../components/PokerChipyCoach";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
+import BalanceHeader from "../components/BalanceHeader";
 import ChipFly from "../components/ChipFly";
 import { useTableActionFeed } from "../motion/useTableActionFeed";
 import { t } from "../i18n";
@@ -212,14 +213,17 @@ export default function PokerTablePage() {
           <h1 className="font-display text-2xl tracking-wider">
             {t("Hold'em Tournament")} #{tournament.current_hand_number}
           </h1>
-          <button
-            type="button"
-            onClick={() => void navigate("/lobby")}
-            className="text-xs font-ui underline"
-            data-testid="poker-table-leave"
-          >
-            {t("Lobby")}
-          </button>
+          <div className="flex items-center gap-3">
+            <BalanceHeader />
+            <button
+              type="button"
+              onClick={() => void navigate("/lobby")}
+              className="text-xs font-ui underline"
+              data-testid="poker-table-leave"
+            >
+              {t("Lobby")}
+            </button>
+          </div>
         </header>
 
         {/* Felt — seats around the board */}

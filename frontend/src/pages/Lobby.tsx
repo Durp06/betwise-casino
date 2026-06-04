@@ -13,6 +13,7 @@ import HoldemLobbyCard from "../components/HoldemLobbyCard";
 import PokerLobbyCard from "../components/PokerLobbyCard";
 import PaiGowLobbyCard from "../components/PaiGowLobbyCard";
 import { StaggerList, StaggerItem } from "../motion/presence/StaggerList";
+import BalanceHeader from "../components/BalanceHeader";
 
 export default function Lobby() {
   const navigate = useNavigate();
@@ -33,6 +34,7 @@ export default function Lobby() {
           </span>
         </div>
         <nav className="flex items-center gap-4">
+          <BalanceHeader />
           <button
             onClick={() => void navigate("/profile")}
             className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"

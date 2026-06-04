@@ -11,7 +11,7 @@
  * Failure mode (pre-fix): waitFor times out — the poll errors are silently
  * discarded so the page never transitions from its initial rendered state.
  */
-import { render, screen, waitFor, act } from "@testing-library/react";
+import { render, screen, waitFor, within, act } from "@testing-library/react";
 import { MemoryRouter, Routes, Route } from "react-router-dom";
 import { afterEach, describe, it, expect, vi } from "vitest";
 
@@ -56,6 +56,18 @@ vi.mock("../src/api/client", async (importOriginal) => {
     pokerAction: vi.fn().mockResolvedValue({ data: null, error: null }),
     getChatMessages: vi.fn().mockResolvedValue({ data: [], error: null }),
     postChatMessage: vi.fn().mockResolvedValue({ data: null, error: null }),
+    // BalanceHeader mounts in the page header and calls getMe on mount.
+    // Return a success so it renders the balance (not a role="alert" error span)
+    // which would otherwise satisfy the waitFor check before the poll-error
+    // panel appears — causing queryByRole("button") to find multiple buttons.
+    getMe: vi.fn().mockResolvedValue({
+      data: {
+        id: "u", username: "tester", chip_balance: 5_000_000, total_hands: 0,
+        correct_decisions: 0, accuracy: 0, current_streak: 0, best_streak: 0,
+        created_at: "2026-06-03T00:00:00Z",
+      },
+      error: null,
+    }),
   };
 });
 
@@ -101,25 +113,25 @@ describe("PokerTablePage — poll failure surface (AC-6.3)", () => {
         await new Promise((r) => setTimeout(r, 200));
       });
 
-      // After N consecutive poll failures the hook must call onError;
-      // PokerTablePage must render role="alert".  Pre-fix: stays on static state.
+      // After N consecutive poll failures the hook must call onError; PokerTablePage
+      // must render a role="alert" panel that itself contains a recovery control
+      // (a Retry button / Back-to-lobby link) — NOT a permanent spinner. We assert
+      // the alert and its recovery control together, scoped with within(), so the
+      // query stays robust to the rest of the page rendering its own buttons (the
+      // persistent balance header added by the money system). Pre-fix: the page
+      // stays on its static state and no alert ever appears.
       await waitFor(
         () => {
-          const alert = screen.queryByRole("alert");
-          expect(alert).not.toBeNull();
+          const alert = screen.getByRole("alert");
+          const recovery =
+            within(alert).queryByRole("button") ?? within(alert).queryByRole("link");
+          expect(recovery).not.toBeNull();
         },
         { timeout: 11_000 },
       );
 
-      const spinner = document.querySelector("[aria-busy='true']");
-      if (spinner) {
-        expect(screen.queryByRole("alert")).not.toBeNull();
-      }
-
-      const control =
-        screen.queryByRole("button") ??
-        screen.queryByRole("link");
-      expect(control).not.toBeNull();
+      // It must be the error panel, not a bare spinner: no aria-busy node remains.
+      expect(document.querySelector("[aria-busy='true']")).toBeNull();
     },
     14_000,
   );

@@ -28,6 +28,7 @@ import DeckStack from "../components/DeckStack";
 import ChipFly from "../components/ChipFly";
 import { useTableActionFeed } from "../motion/useTableActionFeed";
 import { t } from "../i18n";
+import BalanceHeader from "../components/BalanceHeader";
 
 export default function HoldemTablePage() {
   const { id: tableId } = useParams<{ id: string }>();
@@ -186,12 +187,15 @@ export default function HoldemTablePage() {
         <h1 className="font-display text-cream text-2xl">
           {table.name} · {t("Hold'em")}
         </h1>
-        <button
-          onClick={() => void navigate("/holdem")}
-          className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
-        >
-          {t("Leave Table")}
-        </button>
+        <div className="flex items-center gap-3">
+          <BalanceHeader />
+          <button
+            onClick={() => void navigate("/holdem")}
+            className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
+          >
+            {t("Leave Table")}
+          </button>
+        </div>
       </header>
 
       {error && (
