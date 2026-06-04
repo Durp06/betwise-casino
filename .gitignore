@@ -12,6 +12,13 @@ __pycache__/
 *.sqlite
 *.sqlite-journal
 
+# Playwright e2e artifacts
+playwright-report/
+test-results/
+/frontend/playwright-report/
+/frontend/test-results/
+/playwright/.cache/
+
 # Local browser/tooling artifacts
 .playwright-mcp/
 

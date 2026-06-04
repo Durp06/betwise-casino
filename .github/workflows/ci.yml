@@ -68,3 +68,54 @@ jobs:
       - name: Build frontend
         working-directory: frontend
         run: npm run build
+
+  e2e:
+    # Gold "pick one": a real end-to-end suite covering three distinct flows
+    # (landing/onboarding, the main sit-bet-deal-play action, and an
+    # unauthorized 401 edge). Playwright's webServer array boots the real
+    # FastAPI backend (+ a no-bypass instance for the auth check) and the vite
+    # dev frontend, then drives them in a headless browser. Runs alongside the
+    # backend/frontend jobs so the whole pipeline must go green before deploy.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Install Playwright browser
+        working-directory: frontend
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e suite
+        working-directory: frontend
+        env:
+          # CI=true makes playwright.config start fresh servers (no reuse) and
+          # retry flaky specs. The dev-auth bypass env the servers need is set
+          # inside playwright.config.ts's webServer blocks, not here.
+          CI: "true"
+        run: npx playwright test
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: frontend/playwright-report/
+          retention-days: 7

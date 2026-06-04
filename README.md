@@ -7,7 +7,7 @@ A fake-money casino **trainer** for three table games — **Blackjack**, **Texas
 
 ## Tier targeted
 
-**Gold.** Three games live and deployed, real-time-ish multiplayer (the gold "pick one"), phone-friendly, a visual design with a point of view, and well more than two custom nontrivial features. Details below.
+**Gold.** Three games live and deployed, real-time-ish multiplayer **and** an end-to-end test suite (two of the gold "pick one" options), phone-friendly, a visual design with a point of view, and well more than two custom nontrivial features. Details below.
 
 ## Team members
 
@@ -51,6 +51,11 @@ cd ../frontend && npm install
 npx tsc --noEmit && npm test -- --run # typecheck + Vitest component tests
 npm run build                         # emits frontend/dist/
 
+# End-to-end (Playwright drives a headless browser; its config boots the
+# backend + a no-bypass backend + the vite dev server automatically)
+npx playwright install chromium
+npm run e2e                           # frontend/e2e/*.e2e.ts — 3 flows
+
 # Run the whole app (one service: FastAPI serves the built React bundle at / and /api/*)
 cd .. && uvicorn backend.main:app --reload --port 8000   # -> http://localhost:8000
 ```
@@ -59,7 +64,8 @@ The app boots with no env vars (tests use in-memory SQLite). For an end-to-end c
 
 ## Gold: the "pick one" and the custom features
 
-- **Pick one → real-time-ish multiplayer (polling).** Other players' actions, seats, and the dealer/board appear in your open view within ~3s, no manual refresh, across all three games. Polling fits because turn cadence (≥5s) is slower than the poll interval — see Design Decision #2.
+- **Pick one (we ship two of the three) → real-time-ish multiplayer (polling).** Other players' actions, seats, and the dealer/board appear in your open view within ~3s, no manual refresh, across all three games. Polling fits because turn cadence (≥5s) is slower than the poll interval — see Design Decision #2.
+- **Pick one (also) → an end-to-end test suite (Playwright).** Specs in `frontend/e2e/` cover three distinct flows — authenticated landing/onboarding, the full sit → bet → deal → play blackjack action, and an unauthorized-401 edge — each driving the real React app against a live FastAPI backend in a headless browser. `frontend/playwright.config.ts` boots the backend (plus a no-bypass instance so the auth check can't be masked) and the vite frontend, and the suite runs in CI (the `e2e` job in `.github/workflows/ci.yml`) alongside pytest + Vitest, so the whole pipeline must go green before deploy. The browser flows authenticate through the same `BETWISE_DEV_USER_ID` / `VITE_DEV_USER_ID` bypass the pytest suite uses (deterministic, no Supabase round-trip); real Supabase email sign-up is verified manually.
 - **Custom feature — chess.com-style Hand Review (blackjack).** Every decision in a session is graded Best/Good/Inaccuracy/Mistake/Blunder with the real EV cost in chips and a "what-if" line, plus a "retry this spot" drill. `backend/routers/sessions.py` + `backend/game/blackjack/review.py`.
 - **Custom feature — Pai Gow Fortune side-bet pool.** A shared, progressive bonus pool that every Fortune bet contributes to and that pays out (with a seeded floor + ledgered draws) when a player hits a qualifying hand — real shared state across players. `backend/game/pai_gow/fortune.py`.
 - **Custom feature — in-game chat + multiplayer presence.** A polymorphic chat table shared across blackjack and Hold'em tables, server-validated and rendered as inert text (stored-XSS-safe). `backend/routers/chat.py`.
