@@ -13,6 +13,7 @@ import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
 import PokerRulesModal from "../components/PokerRulesModal";
+import { AnimatePresence } from "framer-motion";
 
 export default function PokerSetup() {
   const navigate = useNavigate();
@@ -158,7 +159,9 @@ export default function PokerSetup() {
         </button>
       </form>
 
-      {showRules && <PokerRulesModal onClose={() => setShowRules(false)} />}
+      <AnimatePresence>
+        {showRules && <PokerRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </GameLobbyShell>
   );
 }

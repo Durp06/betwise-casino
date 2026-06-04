@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import type { HandReplayAction, Card } from "../types";
 import { getHandActions } from "../api/client";
 import PlayingCard from "./PlayingCard";
+import ModalShell from "../motion/presence/ModalShell";
 import { t } from "../i18n";
 
 interface ReplayModalProps {
@@ -37,13 +38,11 @@ export default function ReplayModal({ handId, onClose }: ReplayModalProps) {
   }, [handId]);
 
   return (
-    <div
-      className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-label={t("Hand Replay")}
+    <ModalShell
+      onClose={onClose}
+      ariaLabel={t("Hand Replay")}
+      panelClassName="bg-chipy-dark rounded-2xl w-full max-w-md p-6 flex flex-col gap-4"
     >
-      <div className="bg-chipy-dark rounded-2xl w-full max-w-md p-6 flex flex-col gap-4">
         {/* Header */}
         <div className="flex items-center justify-between">
           <h2 className="font-display text-chip-gold font-bold text-xl">
@@ -160,7 +159,6 @@ export default function ReplayModal({ handId, onClose }: ReplayModalProps) {
             </div>
           </>
         )}
-      </div>
-    </div>
+    </ModalShell>
   );
 }
