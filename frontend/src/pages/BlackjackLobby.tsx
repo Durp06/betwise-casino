@@ -7,6 +7,7 @@
  */
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import type { TableListRow } from "../types";
 import { listTables, createTable, joinTable } from "../api/client";
 import { t } from "../i18n";
@@ -15,6 +16,7 @@ import { formatMoney } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
 import Chipy from "../components/Chipy";
 import BlackjackRulesModal from "../components/BlackjackRulesModal";
+import { StaggerList, StaggerItem } from "../motion/presence/StaggerList";
 
 const STATUS_LABELS: Record<string, string> = {
   waiting:  "Open",
@@ -163,13 +165,13 @@ export default function BlackjackLobby() {
 
       {/* Table list */}
       {!loading && !error && tables !== null && tables.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <StaggerList className="flex flex-col gap-4">
           {tables.map((table, index) => {
             const isFull = table.seats_taken >= table.max_seats;
             const statusKey = table.status as keyof typeof STATUS_LABELS;
             return (
+              <StaggerItem key={table.id}>
               <div
-                key={table.id}
                 className="ink-outline-thick paper-grain rounded-md p-5
                   flex flex-col sm:flex-row items-start sm:items-center gap-3 wobble"
                 style={{
@@ -213,12 +215,15 @@ export default function BlackjackLobby() {
                     : t("Take Seat")}
                 </button>
               </div>
+              </StaggerItem>
             );
           })}
-        </div>
+        </StaggerList>
       )}
 
-      {showRules && <BlackjackRulesModal onClose={() => setShowRules(false)} />}
+      <AnimatePresence>
+        {showRules && <BlackjackRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </GameLobbyShell>
   );
 }

@@ -1,18 +1,18 @@
 /**
  * Board.tsx — community cards row (flop 3 / turn 4 / river 5).
  *
- * Renders 0, 3, 4, or 5 cards. Empty placeholders indicate where cards will
- * appear. Reuses PlayingCard so visual consistency with hole cards.
+ * Empty slots are dashed placeholders; as each street is dealt the new card
+ * flies in from the deck (DealtCard). Placeholders match card size so the row
+ * doesn't jump when a card lands.
  */
-import type { PokerCard } from "../types";
-import PlayingCard from "./PlayingCard";
+import type { PokerCard, Card } from "../types";
+import DealtCard from "./DealtCard";
 
 interface BoardProps {
   cards: PokerCard[];
 }
 
 export default function Board({ cards }: BoardProps) {
-  // Render up to 5 slots, filled with cards then empty placeholders.
   const slots: (PokerCard | null)[] = [];
   for (let i = 0; i < 5; i++) {
     slots.push(i < cards.length ? cards[i] : null);
@@ -23,12 +23,12 @@ export default function Board({ cards }: BoardProps) {
       {slots.map((c, idx) =>
         c === null ? (
           <div
-            key={idx}
-            className="w-12 h-16 rounded border-2 border-dashed border-ink/30"
+            key={`empty-${idx}`}
+            className="w-16 h-24 sm:w-20 sm:h-28 rounded-md border-2 border-dashed border-cream/25"
             data-testid="board-empty-slot"
           />
         ) : (
-          <PlayingCard key={idx} card={c} index={idx} noAnimate />
+          <DealtCard key={`${c.suit}-${c.value}-${idx}`} card={c as Card} index={idx} faceUp />
         ),
       )}
     </div>
