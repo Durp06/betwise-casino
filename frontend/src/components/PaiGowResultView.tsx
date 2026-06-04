@@ -84,8 +84,13 @@ export default function PaiGowResultView({ round, myHand }: Props) {
         </p>
       </div>
 
-      {/* Side-by-side comparison */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      {/* Side-by-side comparison.
+          `md:` (≥768px) — not `sm:` (≥640px) — so the two columns stack
+          vertically on phones. A side-by-side grid at 640px squeezes the
+          5-card back row below the available width (~311px usable on
+          iPhone SE, ~326px on iPhone 13) and forces a 3+2 wrap. Stacked
+          single-column gives each row the full phone width. */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* DEALER column */}
         <div className="space-y-3" data-testid="result-dealer-column">
           <h4 className="font-display text-sm tracking-widest uppercase text-ink/70">
