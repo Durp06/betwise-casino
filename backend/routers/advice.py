@@ -25,7 +25,7 @@ from starlette.requests import Request
 from backend.auth import CurrentUser
 from backend.database import get_db
 from backend.ratelimit import ADVICE_RATE_LIMIT, limiter
-from backend.schemas import AdviceIn
+from backend.schemas import AdviceIn, BlackjackActionEv, BlackjackOddsOut
 
 router = APIRouter(prefix="/advice", tags=["advice"])
 
@@ -327,4 +327,60 @@ async def get_pre_advice(
     return StreamingResponse(
         _sse_stream(),
         media_type="text/event-stream",
+    )
+
+
+@router.post("/{hand_id}/odds", response_model=BlackjackOddsOut)
+@limiter.limit(ADVICE_RATE_LIMIT)
+async def get_blackjack_odds(
+    request: Request,
+    hand_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> BlackjackOddsOut:
+    """Chipy's odds readout for the player's current hand: the dealer-bust %
+    for the shown upcard (hole card stays hidden) + the EV of each legal play."""
+    request.state.user_id = str(current_user)
+
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from backend.game import engine as eng  # noqa: PLC0415
+    from backend.game.blackjack.engine import hand_value, is_soft  # noqa: PLC0415
+    from backend.game.blackjack.ev import action_evs, best_action_ev  # noqa: PLC0415
+    from backend.game.blackjack.odds import dealer_bust_pct  # noqa: PLC0415
+    from backend.models import GameSession, Hand  # noqa: PLC0415
+
+    hand = (await db.execute(select(Hand).where(Hand.id == hand_id))).scalar_one_or_none()
+    if hand is None:
+        raise HTTPException(status_code=404, detail="Hand not found")
+    if hand.user_id != current_user:
+        raise HTTPException(status_code=403, detail="Cannot request odds for another player's hand")
+
+    session = (await db.execute(
+        select(GameSession).where(GameSession.id == hand.session_id)
+    )).scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    cards = list(hand.cards)
+    if len(cards) < 2:
+        raise HTTPException(status_code=400, detail="Hand not dealt yet")
+    dealer_cards = list(session.dealer_cards)
+    upcard = dealer_cards[0] if dealer_cards else {"suit": "spades", "value": "2"}
+
+    can_double = eng.can_double(cards)
+    can_split = eng.can_split(cards)
+    evs = action_evs(cards, upcard, can_double, can_split)
+    best, _ = best_action_ev(cards, upcard, can_double, can_split)
+    actions = [
+        BlackjackActionEv(action=a, ev=round(evs[a], 4))
+        for a in ("stand", "hit", "double")
+        if a in evs
+    ]
+    return BlackjackOddsOut(
+        dealer_bust_pct=round(dealer_bust_pct(upcard), 4),
+        player_total=hand_value(cards),
+        player_is_soft=is_soft(cards),
+        actions=actions,
+        best_action=best,
     )

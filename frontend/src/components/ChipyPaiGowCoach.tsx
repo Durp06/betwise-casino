@@ -4,8 +4,12 @@
  * Mirrors blackjack's ChipyCoach minus blackjack-specific bits. Shows the
  * streaming text + the post-set evaluation banner (was_optimal + ev_loss).
  */
+import { useState, useEffect } from "react";
 import { usePaiGowStore } from "../store/paiGowStore";
+import { getPaiGowOdds } from "../api/client";
+import type { PaiGowOdds } from "../types";
 import Chipy from "./Chipy";
+import PaiGowOddsGraphic from "./PaiGowOddsGraphic";
 import { t } from "../i18n";
 
 function stripMarkdown(text: string): string {
@@ -19,8 +23,22 @@ function stripMarkdown(text: string): string {
 }
 
 export default function ChipyPaiGowCoach() {
-  const { chipyText, chipyStreaming, chipyPhase, postEvaluation } = usePaiGowStore();
+  const { chipyText, chipyStreaming, chipyPhase, postEvaluation, myHand } = usePaiGowStore();
   const text = stripMarkdown(chipyText);
+
+  // On-demand Fortune-bonus readout — fetched when you ask Chipy.
+  const [pgOdds, setPgOdds] = useState<PaiGowOdds | null>(null);
+  const [oddsLoading, setOddsLoading] = useState(false);
+  const handId = myHand?.id ?? null;
+  useEffect(() => setPgOdds(null), [handId]);
+
+  async function askOdds(): Promise<void> {
+    if (!handId) return;
+    setOddsLoading(true);
+    const res = await getPaiGowOdds(handId);
+    setOddsLoading(false);
+    if (!res.error) setPgOdds(res.data);
+  }
 
   let banner = t("Watchin' the table");
   let expression: "idle" | "thinking" | "happy" = "idle";
@@ -83,6 +101,18 @@ export default function ChipyPaiGowCoach() {
               : `${t("Sub-optimal")} — ${t("EV loss")} ${postEvaluation.ev_loss_unit_cents}¢/unit`}
           </p>
         )}
+        {handId && (
+          <button
+            type="button"
+            onClick={() => void askOdds()}
+            disabled={oddsLoading}
+            className="px-2 py-1 text-xs font-ui rounded border-2 border-ink bg-gold-bright text-ink disabled:opacity-40"
+            data-testid="paigow-odds-ask"
+          >
+            {oddsLoading ? t("Reading…") : t("Ask Chipy: Fortune odds")}
+          </button>
+        )}
+        {pgOdds && <PaiGowOddsGraphic odds={pgOdds} />}
       </div>
     </aside>
   );

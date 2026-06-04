@@ -25,6 +25,8 @@ import type {
   PokerTournamentState,
   PokerActionType,
   PokerOdds,
+  BlackjackOdds,
+  PaiGowOdds,
   HoldemTableListRow,
   HoldemTable,
   HoldemTableState,
@@ -469,6 +471,20 @@ export async function getHoldemOdds(
   return apiFetch<PokerOdds>(`/api/holdem/tables/${tableId}/odds`, {
     method: "POST",
   });
+}
+
+/** Chipy's odds for the current blackjack hand (dealer bust % + per-action EV). */
+export async function getBlackjackOdds(
+  handId: string,
+): Promise<ApiResult<BlackjackOdds>> {
+  return apiFetch<BlackjackOdds>(`/api/advice/${handId}/odds`, { method: "POST" });
+}
+
+/** Chipy's Fortune-bonus readout for the current Pai Gow hand. */
+export async function getPaiGowOdds(
+  handId: string,
+): Promise<ApiResult<PaiGowOdds>> {
+  return apiFetch<PaiGowOdds>(`/api/pai-gow/advice/${handId}/odds`, { method: "POST" });
 }
 
 // ─── In-game chat (both multiplayer games) ───────────────────────────────────

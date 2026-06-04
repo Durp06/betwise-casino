@@ -208,6 +208,25 @@ export type PokerVerdict =
   | "no_verdict";
 export type PokerStreet = "preflop" | "flop" | "turn" | "river" | "complete";
 
+/** Blackjack odds graphic payload — dealer bust % + per-action EV. */
+export interface BlackjackActionEv {
+  action: string; // "stand" | "hit" | "double"
+  ev: number; // expected value in units of the bet
+}
+export interface BlackjackOdds {
+  dealer_bust_pct: number; // 0..1
+  player_total: number;
+  player_is_soft: boolean;
+  actions: BlackjackActionEv[];
+  best_action: string;
+}
+
+/** Pai Gow odds graphic payload — the dealt hand's Fortune-bonus tier. */
+export interface PaiGowOdds {
+  fortune_category: string | null; // "flush" | "straight_flush" | "royal_flush" | "seven_card_sf" | ...
+  placed_fortune_bet: boolean;
+}
+
 /** Hand-odds payload for the on-felt odds graphic (solo + multiplayer poker).
  *  All *_pct values are 0..1 fractions. */
 export interface PokerOdds {

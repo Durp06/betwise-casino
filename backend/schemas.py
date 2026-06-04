@@ -394,6 +394,29 @@ class PokerOddsOut(BaseModel):
     street: str
 
 
+class BlackjackActionEv(BaseModel):
+    action: str  # "stand" | "hit" | "double"
+    ev: float    # expected value in units of the bet (positive = profitable)
+
+
+class BlackjackOddsOut(BaseModel):
+    """Odds graphic payload for blackjack — dealer bust % + per-action EV."""
+
+    dealer_bust_pct: float       # 0..1 chance the dealer busts on this upcard
+    player_total: int
+    player_is_soft: bool
+    actions: list[BlackjackActionEv]
+    best_action: str
+
+
+class PaiGowOddsOut(BaseModel):
+    """Odds graphic payload for Pai Gow — which Fortune-bonus tier the dealt 7
+    cards qualify for (None = below the trips floor / no Fortune hand)."""
+
+    fortune_category: Optional[str] = None  # e.g. "flush", "straight_flush", "royal_flush", "seven_card_sf"
+    placed_fortune_bet: bool = False
+
+
 class PokerAdviceOut(BaseModel):
     """Final SSE event payload for /api/poker/hands/{hand_id}/advice."""
 

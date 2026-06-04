@@ -19,9 +19,13 @@
  * "Drill" = Chipy holds back the recommendation and surfaces a static quiz
  * prompt instead; post-play stream still fires with the answer.
  */
+import { useState, useEffect } from "react";
 import { useGameStore } from "../store/gameStore";
+import { getBlackjackOdds } from "../api/client";
+import type { BlackjackOdds } from "../types";
 import Chipy from "./Chipy";
 import type { ChipyExpression, ChipyAnimation, ChipyPose } from "./Chipy";
+import BlackjackOddsGraphic from "./BlackjackOddsGraphic";
 import { t } from "../i18n";
 
 function stripMarkdown(text: string): string {
@@ -42,8 +46,24 @@ export default function ChipyCoach() {
     coachMode,
     setCoachMode,
     chipyDrillPrompt,
+    myHand,
   } = useGameStore();
   const text = stripMarkdown(chipyText);
+
+  // On-demand odds (dealer bust % + per-action EV) — fetched when you ask.
+  const [bjOdds, setBjOdds] = useState<BlackjackOdds | null>(null);
+  const [oddsLoading, setOddsLoading] = useState(false);
+  const handId = myHand?.id ?? null;
+  // Clear the snapshot when a new hand is dealt so stale numbers don't linger.
+  useEffect(() => setBjOdds(null), [handId]);
+
+  async function askOdds(): Promise<void> {
+    if (!handId) return;
+    setOddsLoading(true);
+    const res = await getBlackjackOdds(handId);
+    setOddsLoading(false);
+    if (!res.error) setBjOdds(res.data);
+  }
 
   let expression: ChipyExpression = "idle";
   let animation: ChipyAnimation = "idle";
@@ -127,7 +147,7 @@ export default function ChipyCoach() {
         </div>
       </header>
       <div
-        className="paper-grain p-3 min-h-[120px] flex items-start"
+        className="paper-grain p-3 min-h-[120px] flex flex-col items-start gap-2"
         style={{ backgroundColor: "#F5F0E8" }}
       >
         {bodyText ? (
@@ -139,6 +159,18 @@ export default function ChipyCoach() {
             {t("Howdy. I'll chime in when there's a play to make.")}
           </p>
         )}
+        {handId && (
+          <button
+            type="button"
+            onClick={() => void askOdds()}
+            disabled={oddsLoading}
+            className="px-2 py-1 text-xs font-ui rounded border-2 border-ink bg-gold-bright text-ink disabled:opacity-40"
+            data-testid="blackjack-odds-ask"
+          >
+            {oddsLoading ? t("Reading…") : t("Ask Chipy: odds")}
+          </button>
+        )}
+        {bjOdds && <BlackjackOddsGraphic odds={bjOdds} />}
       </div>
     </aside>
   );
