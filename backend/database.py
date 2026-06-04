@@ -49,6 +49,18 @@ def get_engine() -> AsyncEngine:
             or os.environ.get("DATABASE_URL")
             or "sqlite+aiosqlite:///:memory:"
         )
+        # Fail loudly in production rather than silently serving an in-memory
+        # SQLite DB. Without this, a missing DATABASE_URL would boot a working-
+        # looking app backed by a throwaway database — data vanishes on every
+        # restart and the deploy "succeeds." Crash at engine creation instead.
+        if (
+            url.startswith("sqlite")
+            and os.environ.get("ENVIRONMENT", "").lower() == "production"
+        ):
+            raise RuntimeError(
+                "DATABASE_URL is not set in production — refusing to fall back "
+                "to in-memory SQLite. Set DATABASE_URL to the cloud Postgres URL."
+            )
         # Strip query params that asyncpg doesn't understand (sslmode=, pgbouncer=…)
         # — these come from psycopg2-style URLs people often paste from Supabase docs.
         if "+asyncpg" in url and "?" in url:

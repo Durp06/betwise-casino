@@ -29,7 +29,7 @@ Every game contributes a genuinely-designed piece — none of these are CRUD-fro
 
 ## Design decisions
 
-1. **Supabase Auth, not our own JWT.** Real identity that survives refresh (email/password + OAuth), verified in `backend/auth.py` with `python-jose` against Supabase's JWKS. A `BETWISE_DEV_USER_ID` bypass keeps the test suite off Supabase's critical path. Rolling our own would have burned a week on the login page.
+1. **Supabase Auth, not our own JWT.** Real identity that survives refresh (email/password), verified in `backend/auth.py` with `python-jose` against Supabase's JWKS. A `BETWISE_DEV_USER_ID` bypass keeps the test suite off Supabase's critical path. Rolling our own would have burned a week on the login page.
 2. **Polling, not WebSockets (the gold real-time pick).** A 3-second `setInterval` against each game's `/state` endpoint (`useTablePoll`, `usePokerPoll`, `useHoldemPoll`, `usePaiGowPoll`). Table turns last ≥5s, so worst-case staleness is ~3s — well inside the rubric's 5s bar — without a reconnect state machine, session pinning, or deploy-time connection draining.
 3. **Money is integer fake-cents, everywhere.** `chip_balance`, `bet`, `payout`, pots, and the Fortune pool are all integers ($50.00 = `5000`); floating-point money never enters the system. Payout math (blackjack 3:2, side pots, Pai Gow commission) is all integer division with documented rounding.
 4. **Migrations auto-apply on deploy.** The Dockerfile runs `python -m backend.migrate` before uvicorn — it discovers `backend/migrations/*.sql`, applies pending files once (tracked in a `schema_migrations` ledger), and **fails the deploy** if a migration errors. We added this after poker's tables shipped in code but 500'd in prod because a hand-run migration step got forgotten.
