@@ -11,6 +11,7 @@ import type { PaiGowTableListItem } from "../types";
 import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
+import PaiGowRulesModal from "../components/PaiGowRulesModal";
 
 export default function PaiGowLobby() {
   const navigate = useNavigate();
@@ -22,6 +23,7 @@ export default function PaiGowLobby() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
+  const [showRules, setShowRules] = useState(false);
 
   const fetchTables = useCallback(async () => {
     const res = await listPaiGowTables();
@@ -68,23 +70,33 @@ export default function PaiGowLobby() {
     void navigate(`/pai-gow/table/${tableId}`);
   }
 
-  const newTableButton = (
-    <button
-      type="button"
-      onClick={() => setShowCreate((v) => !v)}
-      className="ink-outline-thick ink-shadow font-display tracking-wider
-        px-5 py-3 rounded-md text-cream text-lg uppercase min-h-[52px]"
-      style={{ backgroundColor: "#C0392B" }}
-    >
-      {t("New Table")}
-    </button>
+  const headerActions = (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => setShowRules(true)}
+        className="ink-outline ink-shadow-sm font-ui uppercase tracking-wider
+          text-xs sm:text-sm px-4 py-3 rounded-md bg-cream text-ink min-h-[52px]"
+      >
+        {t("How to Play")}
+      </button>
+      <button
+        type="button"
+        onClick={() => setShowCreate((v) => !v)}
+        className="ink-outline-thick ink-shadow font-display tracking-wider
+          px-5 py-3 rounded-md text-cream text-lg uppercase min-h-[52px]"
+        style={{ backgroundColor: "#C0392B" }}
+      >
+        {t("New Table")}
+      </button>
+    </div>
   );
 
   return (
     <GameLobbyShell
       title={t("Pai Gow Poker")}
       subtitle={t("House-banked. Split 7 cards into front + back. Beat the dealer.")}
-      action={newTableButton}
+      action={headerActions}
     >
       {actionError !== null && (
         <p role="alert" className="font-flavor text-action-hit text-sm mb-3 italic">
@@ -209,6 +221,8 @@ export default function PaiGowLobby() {
           })}
         </div>
       )}
+
+      {showRules && <PaiGowRulesModal onClose={() => setShowRules(false)} />}
     </GameLobbyShell>
   );
 }
