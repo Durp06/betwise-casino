@@ -111,9 +111,16 @@ interface GameActions {
   optimisticHit: (actionId: string) => void;
   /**
    * rollbackOptimistic — clears placeholders and pendingActionId.
-   * Called by client.ts on error.
+   * Called by the action handler when the request fails.
    */
   rollbackOptimistic: () => void;
+  /**
+   * settleOptimistic — replace the optimistic hand with the server's
+   * authoritative hand and clear the pending bookkeeping. Called by the action
+   * handler on a successful response (the snappy path, instead of waiting for
+   * the next poll's reconcileFromPoll to swap the placeholder for the real card).
+   */
+  settleOptimistic: (hand: Hand | null) => void;
   /**
    * reconcileFromPoll — pure reducer applied on every polling response.
    * Replaces placeholder cards with real cards from the server when the
@@ -224,6 +231,10 @@ export const useGameStore = create<GameState & GameActions>((set, get) => ({
       pendingOptimisticCards: [],
       myHand: { ...myHand, cards: realCards },
     });
+  },
+
+  settleOptimistic: (hand: Hand | null) => {
+    set({ myHand: hand, pendingActionId: null, pendingOptimisticCards: [] });
   },
 
   reconcileFromPoll: (newState: TableState, currentUserId: string) => {

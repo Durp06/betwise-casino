@@ -51,6 +51,9 @@ export default function ActionBar({
   const [error, setError] = useState<string | null>(null);
   const {
     setMyHand,
+    optimisticHit,
+    rollbackOptimistic,
+    settleOptimistic,
     beginChipyStream,
     appendChipyChunk,
     endChipyStream,
@@ -62,18 +65,33 @@ export default function ActionBar({
   async function handleAction(action: Action): Promise<void> {
     setError(null);
     setLoading(action);
+
+    // Optimistic update (silver): a Hit shows a face-down placeholder card
+    // immediately — before the server confirms — so the table moves the instant
+    // you click. Rolled back if the request fails. Stand/Double stay pessimistic:
+    // their result replaces the whole hand and there's nothing useful to show
+    // mid-flight.
+    const optimistic = action === "hit";
+    if (optimistic) optimisticHit(crypto.randomUUID());
+
     const result = await takeAction(tableId, action);
     setLoading(null);
     if (result.error) {
+      if (optimistic) rollbackOptimistic();
       setError(result.error);
       return;
     }
 
-    // Push the server's updated hand straight into the store so the new card
+    // Push the server's updated hand straight into the store so the real card
     // (and any status change) appears instantly instead of waiting up to 3s
     // for the next poll. Users were clicking Hit and seeing nothing move,
     // then clicking Stand by mistake and ending the round prematurely.
-    setMyHand(result.data);
+    // settleOptimistic also clears the pending placeholder bookkeeping.
+    if (optimistic) {
+      settleOptimistic(result.data);
+    } else {
+      setMyHand(result.data);
+    }
     // If the action terminated the hand (bust/blackjack/standing/finished),
     // record its id so Table.tsx knows to show the celebratory outcome banner
     // for THIS hand. Stale finished hands from a prior session won't match.

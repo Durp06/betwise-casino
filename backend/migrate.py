@@ -106,10 +106,19 @@ async def _applied_set(conn) -> set[str]:
 async def run_migrations(dry_run: bool = False) -> int:
     import os  # noqa: PLC0415
 
-    # No real database configured (e.g. a health-only boot, or local `docker run`
-    # without DATABASE_URL): skip silently so the app can still start. We only
-    # auto-migrate when pointed at a real DATABASE_URL/BETWISE_TEST_DB_URL.
+    # No real database configured. In production this is a misconfiguration:
+    # fail the deploy loudly (non-zero exit aborts the Dockerfile CMD before
+    # uvicorn starts) rather than booting on a throwaway in-memory SQLite — which
+    # the database.py guard would refuse at first request anyway. Outside
+    # production (a local `docker run` without DATABASE_URL, a health-only boot)
+    # skip silently so the app can still start. We only auto-migrate when pointed
+    # at a real DATABASE_URL/BETWISE_TEST_DB_URL.
     if not (os.environ.get("DATABASE_URL") or os.environ.get("BETWISE_TEST_DB_URL")):
+        if os.environ.get("ENVIRONMENT", "").lower() == "production":
+            raise RuntimeError(
+                "migrate: DATABASE_URL is not set in production — refusing to start. "
+                "Set DATABASE_URL to the cloud Postgres URL."
+            )
         logger.info("migrate: no DATABASE_URL/BETWISE_TEST_DB_URL set — skipping (nothing to migrate).")
         return 0
 
