@@ -431,7 +431,7 @@ describe("P0-4a: ink-shadow on HoldemActionBar buttons", () => {
       id: "h1", hand_number: 1, button_seat: 0, small_blind: 50, big_blind: 100,
       board: [], pot_total: 150, side_pots: [], street: "preflop" as const,
       current_bet_to_match: 0, current_to_act_seat: 0, last_aggressor_seat: null,
-      min_raise_increment: 100, status: "active", result: null, seats: [], actions: [],
+      min_raise_increment: 100, move_deadline_at: null, status: "active", result: null, seats: [], actions: [],
     };
     const seat = {
       seat_number: 0, table_seat_number: 0, user_id: "u1", username: "alice",
@@ -452,7 +452,7 @@ describe("P0-4a: ink-shadow on HoldemActionBar buttons", () => {
       id: "h1", hand_number: 1, button_seat: 0, small_blind: 50, big_blind: 100,
       board: [], pot_total: 150, side_pots: [], street: "preflop" as const,
       current_bet_to_match: 0, current_to_act_seat: 0, last_aggressor_seat: null,
-      min_raise_increment: 100, status: "active", result: null, seats: [], actions: [],
+      min_raise_increment: 100, move_deadline_at: null, status: "active", result: null, seats: [], actions: [],
     };
     const seat = {
       seat_number: 0, table_seat_number: 0, user_id: "u1", username: "alice",
@@ -522,7 +522,7 @@ describe("P0-4b: HoldemActionBar — busy state on fold while submitting", () =>
       id: "h1", hand_number: 1, button_seat: 0, small_blind: 50, big_blind: 100,
       board: [], pot_total: 150, side_pots: [], street: "preflop" as const,
       current_bet_to_match: 0, current_to_act_seat: 0, last_aggressor_seat: null,
-      min_raise_increment: 100, status: "active", result: null, seats: [], actions: [],
+      min_raise_increment: 100, move_deadline_at: null, status: "active", result: null, seats: [], actions: [],
     };
     const seat = {
       seat_number: 0, table_seat_number: 0, user_id: "u1", username: "alice",
@@ -598,6 +598,7 @@ describe("P0-6a: Table.tsx — win outcome banner has banner-pulse + sparkle", (
       status: "blackjack",
       outcome: "blackjack",
       payout: 2500,
+      move_deadline_at: null,
     };
 
     const tableStateWin = {
@@ -668,6 +669,7 @@ describe("P0-6b: Table.tsx — loss/bust banner has banner-pulse but NOT sparkle
       status: "bust",
       outcome: null,
       payout: 0,
+      move_deadline_at: null,
     };
 
     const tableStateBust = {

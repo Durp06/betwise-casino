@@ -172,6 +172,7 @@ async def _deal_hand(
             status=existing_hand.status,
             outcome=existing_hand.outcome,
             payout=existing_hand.payout,
+            move_deadline_at=existing_hand.move_deadline_at,
         )
 
     # Deal 2 cards to caller
@@ -218,6 +219,12 @@ async def _deal_hand(
     await db.flush()
     await db.refresh(hand)
 
+    # Put the current actor on the 30s move clock (force=False so a co-player
+    # dealing into the round doesn't restart an existing actor's clock).
+    from backend.game import state as game_state  # noqa: PLC0415
+
+    await game_state.stamp_current_deadline(session.id, db)
+
     return HandOut(
         id=hand.id,
         session_id=hand.session_id,
@@ -227,6 +234,7 @@ async def _deal_hand(
         status=hand.status,
         outcome=hand.outcome,
         payout=hand.payout,
+        move_deadline_at=hand.move_deadline_at,
     )
 
 
@@ -239,12 +247,33 @@ async def _take_action(
     """Validate and apply a game action. Record to player_actions."""
     from datetime import datetime, timezone  # noqa: PLC0415
     from sqlalchemy import select  # noqa: PLC0415
-    from backend.models import GameSession, Hand, PlayerAction  # noqa: PLC0415
+    from backend.models import GameSession, Hand, PlayerAction, TableSeat  # noqa: PLC0415
     from backend.game import engine as eng  # noqa: PLC0415
     from backend.game import strategy  # noqa: PLC0415
     from backend.game import state as game_state  # noqa: PLC0415
 
     # Find active session for this table
+    result = await db.execute(
+        select(GameSession).where(
+            (GameSession.table_id == table_id)
+            & (GameSession.status == "playing")
+        )
+    )
+    session = result.scalar_one_or_none()
+    if session is None:
+        raise HTTPException(status_code=404, detail="No active game session for this table")
+
+    # Lazily resolve an expired turn before processing this action — but only when
+    # the caller is SEATED, so a non-participant can't drive the game by POSTing.
+    # If the caller is themselves the timed-out actor they're auto-stood first;
+    # the turn guard below then rejects their late action (expiry is final).
+    # Re-load the session afterwards — enforcement may have advanced it to the
+    # dealer turn.
+    caller_seated = (await db.execute(
+        select(TableSeat.id).where(TableSeat.table_id == table_id, TableSeat.user_id == user_id)
+    )).scalar_one_or_none() is not None
+    if caller_seated:
+        await game_state.enforce_timeout(table_id, db)
     result = await db.execute(
         select(GameSession).where(
             (GameSession.table_id == table_id)
@@ -384,9 +413,12 @@ async def _take_action(
     await db.flush()
     await db.refresh(hand)
 
-    # Advance turn if hand is no longer active
+    # Advance turn if hand is no longer active; otherwise the player hit and is
+    # still on the clock — reset their 30s deadline for the next decision.
     if hand.status != "active":
         await game_state.advance_turn(session.id, db)
+    else:
+        await game_state.stamp_current_deadline(session.id, db, force=True)
 
     return HandOut(
         id=hand.id,
@@ -397,6 +429,7 @@ async def _take_action(
         status=hand.status,
         outcome=hand.outcome,
         payout=hand.payout,
+        move_deadline_at=hand.move_deadline_at,
     )
 
 

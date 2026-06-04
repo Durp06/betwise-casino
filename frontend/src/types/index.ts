@@ -90,6 +90,9 @@ export interface Hand {
   status: string;
   outcome: string | null;
   payout: number | null;
+  /** Absolute UTC instant (ISO-8601) this hand's move clock expires, or null
+   *  when it is not the current actor. Drives the per-seat countdown. */
+  move_deadline_at: string | null;
 }
 
 export interface Session {
@@ -371,6 +374,9 @@ export interface HoldemHandState {
   current_to_act_seat: number | null;
   last_aggressor_seat: number | null;
   min_raise_increment: number;
+  /** Absolute UTC instant (ISO-8601) the current actor's move clock expires, or
+   *  null when nobody is on the clock. Drives the per-seat countdown. */
+  move_deadline_at: string | null;
   status: string;
   result: Record<string, unknown> | null;
   seats: HoldemHandSeatState[];
@@ -382,6 +388,9 @@ export interface HoldemTableState {
   seats: HoldemSeat[];
   current_hand: HoldemHandState | null;
   your_seat_number: number | null; // engine index in the current hand, or null
+  /** The requesting user's remaining time cards (0 if not seated). Each spends to
+   *  extend the current move clock by +15s. */
+  your_time_cards_remaining: number;
 }
 
 export interface HoldemCreateTablePayload {

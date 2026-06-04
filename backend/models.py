@@ -174,6 +174,10 @@ class Hand(Base):
     # A replay (same hand_id, same card count) is detected and skipped so the user
     # cannot pump their streak by re-requesting advice without taking an action first.
     advice_graded_card_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True, default=None)
+    # Absolute UTC instant this hand's 30s move clock expires, set only while it is
+    # the current actor (the lowest-seat active hand). Non-null IFF on the clock;
+    # enforced lazily — see game/blackjack/state.py::enforce_timeout.
+    move_deadline_at: Mapped[Optional[datetime]] = mapped_column(TzDateTime(timezone=True), nullable=True, default=None)
     # created_at: used for newest-first ordering in _get_user_hands (AC-M-HIST1).
     # Uses TzDateTime to ensure tz-aware datetimes survive SQLite readback (AC-R-HIST2).
     created_at: Mapped[datetime] = mapped_column(TzDateTime(timezone=True), nullable=False, default=_now)
@@ -459,6 +463,12 @@ class HoldemSeat(Base):
     seat_number: Mapped[int] = mapped_column(Integer, nullable=False)  # physical chair, 0-based
     stack: Mapped[int] = mapped_column(Integer, nullable=False)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
+    # Time cards granted on taking this seat. Each use extends the current move
+    # clock by +15s (game/timer.py::TIME_CARD_BONUS_SECONDS); decremented on use,
+    # no regeneration during play. A fresh 5 is granted each time a player sits,
+    # because the count lives on the seat row (a leave deletes it). See
+    # routers/holdem.py::_use_time_card.
+    time_cards_remaining: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
     joined_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)
 
     table: Mapped["HoldemTable"] = relationship("HoldemTable", back_populates="seats")
@@ -466,6 +476,7 @@ class HoldemSeat(Base):
     __table_args__ = (
         CheckConstraint("seat_number >= 0", name="holdem_seat_number_nonneg"),
         CheckConstraint("stack >= 0", name="holdem_seat_stack_nonneg"),
+        CheckConstraint("time_cards_remaining >= 0", name="holdem_seat_time_cards_nonneg"),
         CheckConstraint("status IN ('active','sitting_out')", name="holdem_seat_status_check"),
         UniqueConstraint("table_id", "seat_number", name="uq_holdem_seat_number"),
         UniqueConstraint("table_id", "user_id", name="uq_holdem_seat_user"),
@@ -495,6 +506,10 @@ class HoldemHand(Base):
     current_to_act_seat: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     last_aggressor_seat: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     min_raise_increment: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Absolute UTC instant the current actor's move clock expires. Non-null IFF a
+    # human is on the clock (current_to_act_seat is not None). Enforced lazily on
+    # the next /state poll or /act — see routers/holdem.py::_enforce_move_timeout.
+    move_deadline_at: Mapped[Optional[datetime]] = mapped_column(TzDateTime(timezone=True), nullable=True, default=None)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active")
     result: Mapped[Optional[dict]] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=_now)

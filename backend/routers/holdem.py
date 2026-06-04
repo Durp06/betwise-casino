@@ -25,7 +25,7 @@ from __future__ import annotations
 
 import logging
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -40,6 +40,12 @@ if TYPE_CHECKING:
 
 from backend.auth import CurrentUser
 from backend.database import get_db
+from backend.game.timer import (
+    STARTING_TIME_CARDS,
+    TIME_CARD_BONUS_SECONDS,
+    is_expired,
+    move_deadline,
+)
 from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import (
     HoldemActIn,
@@ -147,6 +153,20 @@ async def act(
     return await _act(table_id, current_user, body, db)
 
 
+@router.post("/tables/{table_id}/use-time-card", response_model=HoldemTableStateOut)
+@limiter.limit(MUTATION_RATE_LIMIT)
+async def use_time_card(
+    request: Request,
+    table_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> HoldemTableStateOut:
+    """Spend one time card to extend your move clock by +15s. Only on your own
+    turn, only while your clock is still live, only if you have a card left."""
+    request.state.user_id = str(current_user)
+    return await _use_time_card(table_id, current_user, db)
+
+
 # ─── Pure state↔DB bridge ─────────────────────────────────────────────────────
 
 
@@ -204,6 +224,20 @@ def _persist_state_to_hand(state: BettingState, hand: HoldemHand, hand_seats: Se
         hs.is_folded = s.is_folded
         hs.is_all_in = s.is_all_in
         hs.has_acted_this_street = s.has_acted_this_street
+
+
+def _set_move_deadline(hand: HoldemHand) -> None:
+    """Keep `move_deadline_at` in lockstep with the turn pointer.
+
+    Called immediately after every write to `current_to_act_seat`: a human on the
+    clock gets a fresh 30s deadline; otherwise (all-in run-out, hand complete) the
+    deadline is cleared. This is the load-bearing *deadline-iff-actor* invariant —
+    a stale clock must never auto-act for a player who has no decision to make.
+    """
+    if hand.current_to_act_seat is not None:
+        hand.move_deadline_at = move_deadline(datetime.now(timezone.utc))
+    else:
+        hand.move_deadline_at = None
 
 
 def _deal_community_cards(state: BettingState, hand: HoldemHand, hand_seats: Sequence[HoldemHandSeat]) -> None:
@@ -359,6 +393,7 @@ async def _join_seat(
         seat_number=open_seat,
         stack=buy_in,
         status="active",
+        time_cards_remaining=STARTING_TIME_CARDS,  # fresh 5 each time you sit
         joined_at=datetime.now(timezone.utc),
     )
     db.add(seat)
@@ -620,6 +655,12 @@ async def _act(
     )).scalar_one_or_none():
         raise HTTPException(status_code=403, detail="You are not seated at this table")
 
+    # Now that the caller is confirmed seated, resolve an expired turn first (the
+    # timed-out actor may be THIS caller acting late, in which case they're
+    # auto-folded/checked before their action is considered and the turn guard
+    # below cleanly rejects it). Expiry is final.
+    await _enforce_move_timeout(table_id, db)
+
     # Lock the active hand row for the transaction so two overlapping requests
     # (a double-submitted /act, or an /act racing a /leave) can't both pass the
     # turn guard against a stale snapshot and double-mutate. Mirrors the
@@ -678,6 +719,131 @@ async def _act(
     return await _build_state_payload(table_id, current_user, db)
 
 
+async def _use_time_card(
+    table_id: uuid.UUID,
+    current_user: uuid.UUID,
+    db: AsyncSession,
+) -> HoldemTableStateOut:
+    """Spend one time card → +15s on the current move clock. Guards: caller is
+    seated, it is the caller's turn, the clock has not already expired, and a card
+    remains. The per-table lock serializes this against /act so two requests can't
+    both spend the last card or both extend a stale deadline."""
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from backend.models import HoldemHand, HoldemHandSeat, HoldemSeat, HoldemTable  # noqa: PLC0415
+
+    table = (await db.execute(
+        select(HoldemTable).where(HoldemTable.id == table_id).with_for_update()
+    )).scalar_one_or_none()
+    if table is None:
+        raise HTTPException(status_code=404, detail="Table not found")
+
+    seat = (await db.execute(
+        select(HoldemSeat).where(HoldemSeat.table_id == table_id, HoldemSeat.user_id == current_user)
+    )).scalar_one_or_none()
+    if seat is None:
+        raise HTTPException(status_code=403, detail="You are not seated at this table")
+
+    hand = (await db.execute(
+        select(HoldemHand)
+        .where(HoldemHand.table_id == table_id, HoldemHand.status == "active")
+        .with_for_update()
+    )).scalar_one_or_none()
+    if hand is None:
+        raise HTTPException(status_code=400, detail="No active hand")
+
+    my_hs = (await db.execute(
+        select(HoldemHandSeat).where(HoldemHandSeat.hand_id == hand.id, HoldemHandSeat.user_id == current_user)
+    )).scalar_one_or_none()
+    if my_hs is None or hand.current_to_act_seat != my_hs.seat_number:
+        raise HTTPException(status_code=400, detail="Not your turn")
+
+    if seat.time_cards_remaining <= 0:
+        raise HTTPException(status_code=400, detail="No time cards left")
+
+    if hand.move_deadline_at is None or is_expired(hand.move_deadline_at, datetime.now(timezone.utc)):
+        raise HTTPException(status_code=400, detail="Your move clock has already expired")
+
+    seat.time_cards_remaining -= 1
+    hand.move_deadline_at = hand.move_deadline_at + timedelta(seconds=TIME_CARD_BONUS_SECONDS)
+    await db.commit()
+    return await _build_state_payload(table_id, current_user, db)
+
+
+async def _enforce_move_timeout(table_id: uuid.UUID, db: AsyncSession) -> bool:
+    """Lazily resolve an abandoned turn whose move clock has expired.
+
+    Auto-action = the safest legal move: check if the actor faces no outstanding
+    bet, otherwise fold. Returns True if a timeout fired. Double-checked locking:
+    a cheap unlocked read short-circuits the common (not-expired) case; only when
+    a deadline has actually passed do we take the per-table lock and re-validate,
+    so two concurrent /state polls can't both resolve the same turn.
+    """
+    from sqlalchemy import select  # noqa: PLC0415
+
+    from backend.game.poker.state import apply_action  # noqa: PLC0415
+    from backend.models import HoldemAction, HoldemHand, HoldemHandSeat, HoldemTable  # noqa: PLC0415
+
+    # Cheap, unlocked pre-check.
+    hand = (await db.execute(
+        select(HoldemHand).where(HoldemHand.table_id == table_id, HoldemHand.status == "active")
+    )).scalar_one_or_none()
+    if hand is None or hand.current_to_act_seat is None:
+        return False
+    if not is_expired(hand.move_deadline_at, datetime.now(timezone.utc)):
+        return False
+
+    # Expired — take the per-table serializer and re-validate under the lock.
+    table = (await db.execute(
+        select(HoldemTable).where(HoldemTable.id == table_id).with_for_update()
+    )).scalar_one_or_none()
+    if table is None:
+        return False
+    hand = (await db.execute(
+        select(HoldemHand)
+        .where(HoldemHand.table_id == table_id, HoldemHand.status == "active")
+        .with_for_update()
+    )).scalar_one_or_none()
+    if hand is None or hand.current_to_act_seat is None:
+        return False
+    if not is_expired(hand.move_deadline_at, datetime.now(timezone.utc)):
+        return False  # a concurrent request already resolved it
+
+    hand_seats = (await db.execute(
+        select(HoldemHandSeat).where(HoldemHandSeat.hand_id == hand.id).order_by(HoldemHandSeat.seat_number)
+    )).scalars().all()
+    seat_num = hand.current_to_act_seat
+    state = _reconstruct_betting_state(hand, hand_seats)
+    seat = next((s for s in state.seats if s.seat_number == seat_num), None)
+    if seat is None:
+        return False
+
+    action = "check" if state.current_bet_to_match <= seat.current_bet else "fold"
+    state = apply_action(state, seat_num, action, 0)
+    _persist_state_to_hand(state, hand, hand_seats)
+
+    # Log the forced action so the replay/action-log stays complete. It is the
+    # player's (involuntary) action, so it carries their user_id; the chips paid
+    # (a fold/check pays 0) come from the engine's action_log for replay sums.
+    last_idx = await _last_action_index(hand.id, db)
+    last_rec = state.action_log[-1] if state.action_log else None
+    actor_user_id = next((hs.user_id for hs in hand_seats if hs.seat_number == seat_num), None)
+    db.add(HoldemAction(
+        id=uuid.uuid4(),
+        hand_id=hand.id,
+        seat_number=seat_num,
+        user_id=actor_user_id,
+        action_index=last_idx + 1,
+        street=last_rec.street if last_rec else hand.street,
+        action=action,
+        amount=last_rec.amount if last_rec else 0,
+        created_at=datetime.now(timezone.utc),
+    ))
+
+    await _advance_until_human_or_complete(state, hand, hand_seats, table, db)
+    return True
+
+
 async def _advance_until_human_or_complete(
     state: BettingState,
     hand: HoldemHand,
@@ -707,10 +873,12 @@ async def _advance_until_human_or_complete(
         # Next actor is a human — stop and wait for their /act request.
         hand.current_to_act_seat = nxt
         _persist_state_to_hand(state, hand, hand_seats)
+        _set_move_deadline(hand)
         return
 
     _persist_state_to_hand(state, hand, hand_seats)
     hand.current_to_act_seat = next_to_act(state)
+    _set_move_deadline(hand)
 
 
 async def _complete_hand(
@@ -752,6 +920,7 @@ async def _complete_hand(
     hand.status = "complete"
     hand.street = "complete"
     hand.current_to_act_seat = None
+    _set_move_deadline(hand)  # hand over → nobody on the clock
     hand.side_pots = [{"amount": amt, "eligible": list(elig)} for amt, elig in pots]
     hand.result = {
         "winners_per_pot": [list(w) for w in winners_per_pot],
@@ -833,6 +1002,16 @@ async def _build_state_payload(
         HoldemSeatOut,
         HoldemTableOut,
     )
+
+    # Poll path drives lazy timeout enforcement — but ONLY for a SEATED caller.
+    # /state is viewable by spectators ("you're watching"); a non-seated viewer
+    # must not be able to mutate (drive) another table's game by polling it. A
+    # seated player's poll resolves an abandoned turn.
+    caller_seated = (await db.execute(
+        select(HoldemSeat.id).where(HoldemSeat.table_id == table_id, HoldemSeat.user_id == current_user)
+    )).scalar_one_or_none() is not None
+    if caller_seated:
+        await _enforce_move_timeout(table_id, db)
 
     table = (await db.execute(select(HoldemTable).where(HoldemTable.id == table_id))).scalar_one_or_none()
     if table is None:
@@ -922,15 +1101,20 @@ async def _build_state_payload(
             current_to_act_seat=latest.current_to_act_seat,
             last_aggressor_seat=latest.last_aggressor_seat,
             min_raise_increment=latest.min_raise_increment,
+            move_deadline_at=latest.move_deadline_at,
             status=latest.status,
             result=latest.result,
             seats=seat_payload,
             actions=[HoldemActionOut.model_validate(a) for a in actions],
         )
 
+    your_time_cards = next(
+        (s.time_cards_remaining for s in seats if s.user_id == current_user), 0
+    )
     return HoldemTableStateOut(
         table=HoldemTableOut.model_validate(table),
         seats=seats_out,
         current_hand=current_hand_payload,
         your_seat_number=your_seat_number,
+        your_time_cards_remaining=your_time_cards,
     )

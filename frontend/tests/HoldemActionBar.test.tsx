@@ -30,6 +30,7 @@ function makeHand(overrides: Partial<HoldemHandState> = {}): HoldemHandState {
     current_to_act_seat: 0,
     last_aggressor_seat: null,
     min_raise_increment: 100,
+    move_deadline_at: null,
     status: "active",
     result: null,
     seats: [],

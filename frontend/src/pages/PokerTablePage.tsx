@@ -15,6 +15,8 @@ import PotDisplay from "../components/PotDisplay";
 import PokerSeat from "../components/PokerSeat";
 import PokerActionBar from "../components/PokerActionBar";
 import PokerChipyCoach from "../components/PokerChipyCoach";
+import PokerRulesModal from "../components/PokerRulesModal";
+import { AnimatePresence } from "framer-motion";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
 import BalanceHeader from "../components/BalanceHeader";
@@ -34,6 +36,7 @@ export default function PokerTablePage() {
   const [dealing, setDealing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
 
   // Always-on poll while mounted
   usePokerPoll(tournamentId ?? "", setPollError);
@@ -217,6 +220,13 @@ export default function PokerTablePage() {
             <BalanceHeader />
             <button
               type="button"
+              onClick={() => setShowRules(true)}
+              className="text-xs font-ui underline"
+            >
+              {t("How to Play")}
+            </button>
+            <button
+              type="button"
               onClick={() => void navigate("/lobby")}
               className="text-xs font-ui underline"
               data-testid="poker-table-leave"
@@ -324,6 +334,10 @@ export default function PokerTablePage() {
       <section className="lg:w-80">
         <PokerChipyCoach handId={hand?.id ?? null} />
       </section>
+
+      <AnimatePresence>
+        {showRules && <PokerRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </main>
     </DeckProvider>
   );

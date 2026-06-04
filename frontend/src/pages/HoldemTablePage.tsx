@@ -16,17 +16,21 @@ import {
   dealHoldemHand,
   getHoldemTableState,
   leaveHoldemTable,
+  useHoldemTimeCard,
 } from "../api/client";
 import Board from "../components/Board";
 import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
+import TimeCardControl from "../components/TimeCardControl";
 import WaitingForPlayers from "../components/WaitingForPlayers";
 import ChatPanel from "../components/ChatPanel";
+import HoldemRulesModal from "../components/HoldemRulesModal";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
 import ChipFly from "../components/ChipFly";
 import { useTableActionFeed } from "../motion/useTableActionFeed";
+import { AnimatePresence } from "framer-motion";
 import { t } from "../i18n";
 import BalanceHeader from "../components/BalanceHeader";
 
@@ -40,8 +44,10 @@ export default function HoldemTablePage() {
   const setHoldemTableState = useGameStore((s) => s.setHoldemTableState);
 
   const [busy, setBusy] = useState(false);
+  const [usingCard, setUsingCard] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
 
   useHoldemPoll(tableId ?? "", setPollError);
 
@@ -122,6 +128,20 @@ export default function HoldemTablePage() {
     else setHoldemTableState(result.data);
   }
 
+  async function handleUseCard(): Promise<void> {
+    if (!tableId) return;
+    setUsingCard(true);
+    setError(null);
+    const result = await useHoldemTimeCard(tableId);
+    // Apply the fresh card count BEFORE clearing busy so the button re-enables
+    // in the same render as the decremented count (await breaks React's auto-
+    // batching, so ordering matters — otherwise there's a frame where the button
+    // is clickable but still shows the stale count).
+    if (result.error) setError(result.error);
+    else setHoldemTableState(result.data);
+    setUsingCard(false);
+  }
+
   if (!tableId) {
     return (
       <div role="alert" className="min-h-screen bg-felt-green flex items-center justify-center text-cream">
@@ -187,8 +207,15 @@ export default function HoldemTablePage() {
         <h1 className="font-display text-cream text-2xl">
           {table.name} · {t("Hold'em")}
         </h1>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-4">
           <BalanceHeader />
+          <button
+            type="button"
+            onClick={() => setShowRules(true)}
+            className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
+          >
+            {t("How to Play")}
+          </button>
           <button
             onClick={() => void navigate("/holdem")}
             className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
@@ -239,6 +266,7 @@ export default function HoldemTablePage() {
                 isCurrentToAct={isCurrentToAct}
                 isButton={isButton}
                 isYou={isYou}
+                moveDeadlineAt={isCurrentToAct ? hand?.move_deadline_at ?? null : null}
                 lastAction={handSeat ? lastActionBySeat[handSeat.seat_number]?.action ?? null : null}
                 lastActionAmount={handSeat ? lastActionBySeat[handSeat.seat_number]?.amount ?? 0 : 0}
               />
@@ -287,6 +315,14 @@ export default function HoldemTablePage() {
             </p>
           )}
 
+          {isMyTurn && (
+            <TimeCardControl
+              remaining={holdemTableState.your_time_cards_remaining}
+              onUse={() => void handleUseCard()}
+              busy={usingCard}
+            />
+          )}
+
           {isMyTurn && yourHandSeat && (
             <HoldemActionBar
               tableId={tableId}
@@ -300,6 +336,10 @@ export default function HoldemTablePage() {
         {/* In-game chat — unobtrusive panel below the controls. */}
         <ChatPanel tableKind="holdem" tableId={tableId} />
       </main>
+
+      <AnimatePresence>
+        {showRules && <HoldemRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </div>
     </DeckProvider>
   );

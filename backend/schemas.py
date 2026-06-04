@@ -114,6 +114,9 @@ class HandOut(BaseModel):
     status: str
     outcome: Optional[str] = None
     payout: Optional[int] = None
+    # Absolute UTC instant the move clock expires (ISO-8601), or null when this
+    # hand is not the current actor. The client renders a countdown on the seat.
+    move_deadline_at: Optional[datetime] = None
 
 
 class SessionOut(BaseModel):
@@ -533,6 +536,9 @@ class HoldemHandStateOut(BaseModel):
     current_to_act_seat: Optional[int] = None
     last_aggressor_seat: Optional[int] = None
     min_raise_increment: int
+    # Absolute UTC instant the current actor's 30s move clock expires (ISO-8601),
+    # or null when nobody is on the clock. The client renders a countdown.
+    move_deadline_at: Optional[datetime] = None
     status: str
     result: Optional[dict] = None
     seats: list[HoldemHandSeatStateOut]
@@ -548,6 +554,9 @@ class HoldemTableStateOut(BaseModel):
     seats: list[HoldemSeatOut]
     current_hand: Optional[HoldemHandStateOut] = None
     your_seat_number: Optional[int] = None
+    # The requesting user's remaining Hold'em time cards (0 if not seated). Each
+    # extends the current move clock by +15s. See routers/holdem.py.
+    your_time_cards_remaining: int = 0
 
 
 # ─── In-game chat (both multiplayer games) ───────────────────────────────────

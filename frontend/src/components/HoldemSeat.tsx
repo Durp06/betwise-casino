@@ -11,6 +11,7 @@ import AnimatedCardRow from "./AnimatedCardRow";
 import SeatMotion from "./SeatMotion";
 import ActionBadge from "./ActionBadge";
 import AnimatedCounter from "./AnimatedCounter";
+import MoveTimer from "./MoveTimer";
 import { useDeckContext } from "../motion/DeckProvider";
 import { t } from "../i18n";
 
@@ -21,6 +22,9 @@ interface HoldemSeatProps {
   isCurrentToAct: boolean;
   isButton: boolean;
   isYou: boolean;
+  /** The current actor's move deadline (ISO-8601) when this is the seat on the
+   *  clock, else null. Drives the per-seat countdown. */
+  moveDeadlineAt?: string | null;
   lastAction?: string | null;
   lastActionAmount?: number;
 }
@@ -32,6 +36,7 @@ export default function HoldemSeat({
   isCurrentToAct,
   isButton,
   isYou,
+  moveDeadlineAt = null,
   lastAction = null,
   lastActionAmount = 0,
 }: HoldemSeatProps) {
@@ -127,6 +132,9 @@ export default function HoldemSeat({
           </span>
         )}
       </div>
+
+      {/* Move-timer countdown — shown only on the seat that is on the clock. */}
+      {isCurrentToAct && <MoveTimer deadlineAt={moveDeadlineAt} />}
     </SeatMotion>
   );
 }
