@@ -4,8 +4,12 @@
  * The solo poker trainer shows each bot's archetype on the felt. Hovering (or
  * keyboard-focusing) the badge must reveal an accessible tooltip describing how
  * that opponent plays and how to exploit them — see frontend/src/data/archetypes.ts.
+ *
+ * The tooltip mounts via a state update + portal, so "appears" assertions use
+ * findByRole and "disappears" assertions use waitFor — a synchronous getByRole
+ * right after an awaited user-event races the React render on slower CI runners.
  */
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, it, expect, vi } from "vitest";
 import ArchetypeBadge from "../src/components/ArchetypeBadge";
@@ -30,8 +34,7 @@ describe("ArchetypeBadge", () => {
 
     await user.hover(screen.getByTestId("archetype-badge-Nit"));
 
-    const tooltip = screen.getByRole("tooltip");
-    expect(tooltip).toBeInTheDocument();
+    const tooltip = await screen.findByRole("tooltip");
     // The "how they play" description and the exploit tip both surface.
     expect(within(tooltip).getByText(meta!.style)).toBeInTheDocument();
     expect(within(tooltip).getByText(meta!.exploit, { exact: false })).toBeInTheDocument();
@@ -43,7 +46,7 @@ describe("ArchetypeBadge", () => {
 
     await user.hover(screen.getByTestId("archetype-badge-LAG"));
 
-    const tooltip = screen.getByRole("tooltip");
+    const tooltip = await screen.findByRole("tooltip");
     // Scope to the axes region so the assertions don't collide with the
     // archetype's own tagline/description (e.g. LAG → "Loose-Aggressive").
     const axes = within(tooltip).getByTestId("archetype-axes");
@@ -60,7 +63,7 @@ describe("ArchetypeBadge", () => {
 
     await user.hover(trigger);
 
-    const tooltip = screen.getByRole("tooltip");
+    const tooltip = await screen.findByRole("tooltip");
     expect(trigger).toHaveAttribute("aria-describedby", tooltip.id);
     expect(tooltip.id).toBeTruthy();
   });
@@ -72,11 +75,11 @@ describe("ArchetypeBadge", () => {
     // Tab moves focus to the badge (it must be focusable).
     await user.tab();
     expect(screen.getByTestId("archetype-badge-CallingStation")).toHaveFocus();
-    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(await screen.findByRole("tooltip")).toBeInTheDocument();
 
     // Tab away → tooltip closes.
     await user.tab();
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("tooltip")).not.toBeInTheDocument());
   });
 
   it("hides the tooltip again when the pointer leaves", async () => {
@@ -85,10 +88,10 @@ describe("ArchetypeBadge", () => {
     const trigger = screen.getByTestId("archetype-badge-Whale");
 
     await user.hover(trigger);
-    expect(screen.getByRole("tooltip")).toBeInTheDocument();
+    expect(await screen.findByRole("tooltip")).toBeInTheDocument();
 
     await user.unhover(trigger);
-    expect(screen.queryByRole("tooltip")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("tooltip")).not.toBeInTheDocument());
   });
 
   it("does not attach a play-style tooltip to the human 'You' badge", async () => {
@@ -150,7 +153,7 @@ describe("ArchetypeBadge viewport-aware placement", () => {
 
     await user.hover(screen.getByTestId("archetype-badge-TAG"));
 
-    const tooltip = screen.getByRole("tooltip");
+    const tooltip = await screen.findByRole("tooltip");
     // Anchored from its bottom edge so it grows upward into the room above.
     expect(tooltip.style.transform).toBe("translate(-50%, -100%)");
     // Height budget is capped to the available space and never exceeds the viewport.
@@ -167,7 +170,7 @@ describe("ArchetypeBadge viewport-aware placement", () => {
 
     await user.hover(screen.getByTestId("archetype-badge-LAG"));
 
-    const tooltip = screen.getByRole("tooltip");
+    const tooltip = await screen.findByRole("tooltip");
     expect(tooltip.style.transform).toBe("translateX(-50%)");
     const maxH = parseFloat(tooltip.style.maxHeight);
     expect(maxH).toBeGreaterThan(0);
