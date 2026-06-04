@@ -25,7 +25,6 @@ MOVE_TIMER_SECONDS: int = 30
 STARTING_TIME_CARDS: int = 5
 TIME_CARD_BONUS_SECONDS: int = 15
 
-
 def move_deadline(now: datetime) -> datetime:
     """The absolute instant a turn that begins at `now` expires."""
     return now + timedelta(seconds=MOVE_TIMER_SECONDS)

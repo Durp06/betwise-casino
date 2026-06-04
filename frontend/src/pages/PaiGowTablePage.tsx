@@ -25,6 +25,8 @@ import HandSetter from "../components/HandSetter";
 import PaiGowCardComp from "../components/PaiGowCard";
 import PaiGowResultView from "../components/PaiGowResultView";
 import PaiGowSeat from "../components/PaiGowSeat";
+import PaiGowRulesModal from "../components/PaiGowRulesModal";
+import { AnimatePresence } from "framer-motion";
 import { usePaiGowPoll } from "../hooks/usePaiGowPoll";
 import { usePaiGowStore } from "../store/paiGowStore";
 import type { PaiGowCard } from "../types";
@@ -53,6 +55,7 @@ export default function PaiGowTablePage() {
   const [fortuneBet, setFortuneBet] = useState(0);
   const [dealing, setDealing] = useState(false);
   const [dealError, setDealError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
   const preStreamedForHand = useRef<string | null>(null);
   const postStreamedForHand = useRef<string | null>(null);
 
@@ -162,14 +165,24 @@ export default function PaiGowTablePage() {
   return (
     <main className="min-h-screen bg-felt-green p-3 sm:p-6 text-cream">
       <header className="flex items-center justify-between mb-4 max-w-5xl mx-auto">
-        <button
-          type="button"
-          onClick={() => void navigate("/pai-gow/lobby")}
-          className="px-3 py-2 rounded-md border-[3px] border-ink bg-cream text-ink
-            font-ui uppercase text-xs"
-        >
-          {t("← Lobby")}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void navigate("/pai-gow/lobby")}
+            className="px-3 py-2 rounded-md border-[3px] border-ink bg-cream text-ink
+              font-ui uppercase text-xs"
+          >
+            {t("← Lobby")}
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowRules(true)}
+            className="px-3 py-2 rounded-md border-[3px] border-ink bg-cream text-ink
+              font-ui uppercase text-xs"
+          >
+            {t("How to Play")}
+          </button>
+        </div>
         <FortunePoolTicker />
       </header>
 
@@ -268,6 +281,10 @@ export default function PaiGowTablePage() {
 
         <ChipyPaiGowCoach />
       </div>
+
+      <AnimatePresence>
+        {showRules && <PaiGowRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </main>
   );
 }

@@ -7,11 +7,13 @@
  */
 import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { AnimatePresence } from "framer-motion";
 import type { HoldemTableListRow } from "../types";
 import { listHoldemTables, createHoldemTable, joinHoldemTable } from "../api/client";
 import { t } from "../i18n";
 import { formatMoney as money } from "../utils/money";
 import GameLobbyShell from "../components/GameLobbyShell";
+import HoldemRulesModal from "../components/HoldemRulesModal";
 import { StaggerList, StaggerItem } from "../motion/presence/StaggerList";
 
 export default function HoldemLobby() {
@@ -23,6 +25,7 @@ export default function HoldemLobby() {
   const [joining, setJoining] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
   const [buyIns, setBuyIns] = useState<Record<string, number>>({});
+  const [showRules, setShowRules] = useState(false);
 
   const fetchTables = useCallback(async () => {
     const result = await listHoldemTables();
@@ -67,24 +70,34 @@ export default function HoldemLobby() {
     else void navigate(`/holdem/table/${table.id}`);
   }
 
-  const newTableButton = (
-    <button
-      onClick={() => void handleCreate()}
-      disabled={creating}
-      className="ink-outline-thick ink-shadow font-display tracking-wider px-5 py-3 rounded-md text-cream text-lg uppercase disabled:opacity-40 min-h-[52px]"
-      style={{ backgroundColor: "#C0392B" }}
-      aria-busy={creating}
-      data-testid="holdem-create-table"
-    >
-      {creating ? t("Dealing…") : t("New Table")}
-    </button>
+  const headerActions = (
+    <div className="flex gap-2">
+      <button
+        type="button"
+        onClick={() => setShowRules(true)}
+        className="ink-outline ink-shadow-sm font-ui uppercase tracking-wider
+          text-xs sm:text-sm px-4 py-3 rounded-md bg-cream text-ink min-h-[52px]"
+      >
+        {t("How to Play")}
+      </button>
+      <button
+        onClick={() => void handleCreate()}
+        disabled={creating}
+        className="ink-outline-thick ink-shadow font-display tracking-wider px-5 py-3 rounded-md text-cream text-lg uppercase disabled:opacity-40 min-h-[52px]"
+        style={{ backgroundColor: "#C0392B" }}
+        aria-busy={creating}
+        data-testid="holdem-create-table"
+      >
+        {creating ? t("Dealing…") : t("New Table")}
+      </button>
+    </div>
   );
 
   return (
     <GameLobbyShell
       title={t("Multiplayer Hold'em")}
       subtitle={t("Cash ring games — buy in, sit down, play real hands against real people.")}
-      action={newTableButton}
+      action={headerActions}
     >
       {actionError && (
         <p role="alert" className="font-flavor text-action-hit text-sm mb-3 italic">
@@ -181,6 +194,10 @@ export default function HoldemLobby() {
           })}
         </StaggerList>
       )}
+
+      <AnimatePresence>
+        {showRules && <HoldemRulesModal key="rules" onClose={() => setShowRules(false)} />}
+      </AnimatePresence>
     </GameLobbyShell>
   );
 }
