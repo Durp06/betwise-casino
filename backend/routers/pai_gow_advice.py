@@ -31,7 +31,7 @@ from backend.auth import CurrentUser
 from backend.database import get_db
 from backend.game.pai_gow import optimal_set as _optimal_set
 from backend.ratelimit import ADVICE_RATE_LIMIT, limiter
-from backend.schemas import PaiGowAdviceIn
+from backend.schemas import PaiGowAdviceIn, PaiGowOddsOut
 
 logger = logging.getLogger(__name__)
 
@@ -149,6 +149,40 @@ async def get_pre_advice(
         yield f"data: {json.dumps(final)}\n\n".encode()
 
     return StreamingResponse(_sse_stream(), media_type="text/event-stream")
+
+
+@router.post("/{hand_id}/odds", response_model=PaiGowOddsOut)
+@limiter.limit(ADVICE_RATE_LIMIT)
+async def get_pai_gow_odds(
+    request: Request,
+    hand_id: uuid.UUID,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> PaiGowOddsOut:
+    """Which Fortune-bonus tier the player's dealt 7 cards qualify for — Chipy's
+    Fortune readout. Classified on the full 7 cards (independent of the split)."""
+    request.state.user_id = str(current_user)
+    await _assert_hand_owned_by(hand_id, current_user, db)
+
+    from backend.game.pai_gow.fortune import POOL_QUALIFYING_BET_CENTS, classify_fortune  # noqa: PLC0415
+    from backend.models import PaiGowPlayerHand  # noqa: PLC0415
+
+    hand = (await db.execute(
+        select(PaiGowPlayerHand).where(PaiGowPlayerHand.id == hand_id)
+    )).scalar_one_or_none()
+    if hand is None:
+        raise HTTPException(status_code=404, detail="Pai Gow hand not found")
+
+    dealt = list(hand.dealt_cards)
+    if len(dealt) != 7:
+        raise HTTPException(status_code=400, detail="Hand not dealt yet")
+    # Classify with a qualifying bet so the category is revealed even if the
+    # player skipped the Fortune side bet this hand (educational).
+    qual = classify_fortune(dealt, POOL_QUALIFYING_BET_CENTS)
+    return PaiGowOddsOut(
+        fortune_category=qual.category.value if qual else None,
+        placed_fortune_bet=hand.fortune_bet_cents > 0,
+    )
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────

@@ -30,7 +30,9 @@ interface SessionReviewModalProps {
 
 // AC-F-REV2 — classification → Tailwind chip classes
 // "sharp" gets a gold/amber treatment, visually distinct from "best" (green)
-const CLASSIFICATION_CLASS: Record<Classification, string> = {
+// Exported so other review surfaces (e.g. PokerReviewModal) reuse the same
+// verdict→color mapping rather than redefining it.
+export const CLASSIFICATION_CLASS: Record<Classification, string> = {
   best:       "bg-green-500/20 text-green-300",
   good:       "bg-blue-500/20 text-blue-300",
   inaccuracy: "bg-yellow-500/20 text-yellow-300",
@@ -39,7 +41,7 @@ const CLASSIFICATION_CLASS: Record<Classification, string> = {
   sharp:      "bg-chip-gold/20 text-chip-gold",
 };
 
-function ClassificationChip({ cls }: { cls: Classification }) {
+export function ClassificationChip({ cls }: { cls: Classification }) {
   return (
     <span
       className={`inline-block px-2 py-0.5 rounded text-xs font-bold uppercase tracking-wide ${CLASSIFICATION_CLASS[cls]}`}

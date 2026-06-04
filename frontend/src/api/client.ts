@@ -25,6 +25,8 @@ import type {
   PokerTournamentState,
   PokerActionType,
   PokerOdds,
+  BlackjackOdds,
+  PaiGowOdds,
   HoldemTableListRow,
   HoldemTable,
   HoldemTableState,
@@ -47,6 +49,8 @@ import type {
   PaiGowTableListItem,
   PaiGowTableOut,
   PaiGowTableState,
+  PokerReview,
+  PokerGameReview,
 } from "../types";
 
 // ─── Auth header helper ───────────────────────────────────────────────────────
@@ -362,10 +366,36 @@ export async function getPokerHandReplay(
   return apiFetch<unknown>(`/api/poker/hands/${handId}/replay`);
 }
 
-export async function getPokerSessionReview(
+// ─── Poker Review (PR2) — compute-on-read Hand + Game review ──────────────────
+
+/** Hand Review for a multiplayer Hold'em hand (caller's decisions only). */
+export async function getHoldemHandReview(
+  handId: string,
+): Promise<ApiResult<PokerReview>> {
+  return apiFetch<PokerReview>(`/api/holdem/hands/${handId}/review`);
+}
+
+/** Game Review aggregating the caller's current Hold'em table visit. */
+export async function getHoldemTableReview(
+  tableId: string,
+): Promise<ApiResult<PokerGameReview>> {
+  return apiFetch<PokerGameReview>(`/api/holdem/tables/${tableId}/review`);
+}
+
+/** Hand Review for a solo poker (tournament) hand. */
+export async function getPokerHandReview(
+  handId: string,
+): Promise<ApiResult<PokerReview>> {
+  return apiFetch<PokerReview>(`/api/poker/hands/${handId}/review`);
+}
+
+/** Game Review aggregating a solo poker tournament. */
+export async function getPokerTournamentReview(
   tournamentId: string,
-): Promise<ApiResult<unknown>> {
-  return apiFetch<unknown>(`/api/poker/tournaments/${tournamentId}/review`);
+): Promise<ApiResult<PokerGameReview>> {
+  return apiFetch<PokerGameReview>(
+    `/api/poker/tournaments/${tournamentId}/review`,
+  );
 }
 
 // ─── Multiplayer Hold'em (cash ring game) ────────────────────────────────────
@@ -441,6 +471,20 @@ export async function getHoldemOdds(
   return apiFetch<PokerOdds>(`/api/holdem/tables/${tableId}/odds`, {
     method: "POST",
   });
+}
+
+/** Chipy's odds for the current blackjack hand (dealer bust % + per-action EV). */
+export async function getBlackjackOdds(
+  handId: string,
+): Promise<ApiResult<BlackjackOdds>> {
+  return apiFetch<BlackjackOdds>(`/api/advice/${handId}/odds`, { method: "POST" });
+}
+
+/** Chipy's Fortune-bonus readout for the current Pai Gow hand. */
+export async function getPaiGowOdds(
+  handId: string,
+): Promise<ApiResult<PaiGowOdds>> {
+  return apiFetch<PaiGowOdds>(`/api/pai-gow/advice/${handId}/odds`, { method: "POST" });
 }
 
 // ─── In-game chat (both multiplayer games) ───────────────────────────────────

@@ -208,6 +208,25 @@ export type PokerVerdict =
   | "no_verdict";
 export type PokerStreet = "preflop" | "flop" | "turn" | "river" | "complete";
 
+/** Blackjack odds graphic payload — dealer bust % + per-action EV. */
+export interface BlackjackActionEv {
+  action: string; // "stand" | "hit" | "double"
+  ev: number; // expected value in units of the bet
+}
+export interface BlackjackOdds {
+  dealer_bust_pct: number; // 0..1
+  player_total: number;
+  player_is_soft: boolean;
+  actions: BlackjackActionEv[];
+  best_action: string;
+}
+
+/** Pai Gow odds graphic payload — the dealt hand's Fortune-bonus tier. */
+export interface PaiGowOdds {
+  fortune_category: string | null; // "flush" | "straight_flush" | "royal_flush" | "seven_card_sf" | ...
+  placed_fortune_bet: boolean;
+}
+
 /** Hand-odds payload for the on-felt odds graphic (solo + multiplayer poker).
  *  All *_pct values are 0..1 fractions. */
 export interface PokerOdds {
@@ -412,6 +431,72 @@ export interface HoldemCreateTablePayload {
   min_buy_in: number;
   max_buy_in: number;
   max_seats: number;
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+// Poker Review (PR2) — compute-on-read Hand Review + Game Review.
+// Mirrors the LOCKED HandReview / GameReview JSON contract in
+// specs/poker-review-pr2.md. Shared by both Hold'em (table visit) and solo
+// poker (tournament) review surfaces. Grades ONLY the caller's own decisions.
+// ═════════════════════════════════════════════════════════════════════════════
+
+export type PokerReviewGame = "holdem" | "poker";
+
+export type PokerReviewStreet = "preflop" | "flop" | "turn" | "river";
+
+/** Per-action verdict. Adds "no_verdict" for ungraded decisions. */
+export type PokerReviewVerdict =
+  | "best"
+  | "good"
+  | "inaccuracy"
+  | "mistake"
+  | "blunder"
+  | "no_verdict";
+
+export interface PokerReviewAction {
+  action_index: number;
+  street: PokerReviewStreet;
+  action: string; // fold|check|call|raise|all_in
+  amount_bb: number;
+  verdict: PokerReviewVerdict;
+  confidence_tier: PokerConfidenceTier;
+  recommended_action: string | null;
+  equity: number | null;
+  required_equity: number | null;
+  ev_loss_bb: number | null;
+  explanation: string | null;
+}
+
+/** HandReview — a single finished hand graded for the caller. */
+export interface PokerReview {
+  hand_id: string;
+  game: PokerReviewGame;
+  your_hole: Card[];
+  board: Card[];
+  graded_count: number;
+  accuracy: number;
+  ev_lost_bb: number;
+  worst_action_index: number | null;
+  actions: PokerReviewAction[];
+}
+
+/** One row in a GameReview's per-hand summary list. */
+export interface PokerGameReviewHand {
+  hand_id: string;
+  accuracy: number;
+  ev_lost_bb: number;
+  graded_count: number;
+  worst_verdict: PokerReviewVerdict | null;
+}
+
+/** GameReview — aggregate over a tournament or a table visit. */
+export interface PokerGameReview {
+  scope: "tournament" | "table_visit";
+  game: PokerReviewGame;
+  overall_accuracy: number;
+  total_ev_lost_bb: number;
+  graded_count: number;
+  hands: PokerGameReviewHand[];
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
