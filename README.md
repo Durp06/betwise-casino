@@ -1,166 +1,70 @@
 # BetWise Casino
 
-A fake-money multiplayer blackjack lounge with an AI coaching buddy named **Chipy** who explains every decision against the canonical basic-strategy table. Sit down at a table with friends, place a bet, and before you confirm a Hit / Stand / Double / Split, Chipy tells you what the correct play is and *why* — using probability and expected-value reasoning, not just "wrong, try again." The point is that you walk away from the session a measurably better blackjack player; the chip leaderboard is the side effect.
+A fake-money casino **trainer** for three table games — **Blackjack**, **Texas Hold'em**, and **Pai Gow Poker** — where an AI coach named **Chipy** explains every decision against game theory instead of just telling you "wrong." Sit at a shared table with other players, place a bet, and as you play, BetWise tells you the *optimal* move and *why* (expected value, pot odds, house-way), then grades the hand afterward chess.com-style (Best / Good / Inaccuracy / Mistake / Blunder). The chip leaderboard is the hook; walking away a measurably better player is the point.
 
 > **Live URL:** https://betwise-casino-production.up.railway.app
 > **GitHub:** https://github.com/Durp06/betwise-casino
 
 ## Tier targeted
 
-**Gold.** See "Where the nontrivial logic lives" below for the bronze + silver + gold-pick pieces, and "Custom gold features" for the two custom features.
+**Gold.** Three games live and deployed, real-time-ish multiplayer (the gold "pick one"), phone-friendly, a visual design with a point of view, and well more than two custom nontrivial features. Details below.
 
 ## Team members
 
-- **Myles ([@Durp06](https://github.com/Durp06))** — backend (FastAPI + SQLAlchemy + Supabase), frontend (React/TS + Cuphead design pivot), the basic-strategy engine, the Chipy coaching flow (proactive pre/post advice with markdown stripping), multiplayer polling + table state, deploy plumbing (Railway + Dockerfile).
-- **halynk21 ([@halynk21](https://github.com/halynk21))** — Pai Gow Poker (house-banked third game): backend module (`backend/game/pai_gow/`) with Foxwoods house way, Chipy oracle (optimal_set), fortune progressive pool with atomic cross-table state, async state machine with `FOR UPDATE` row locks + savepoint-protected round-creation race retry; parallel routers (`pai_gow_{tables,game,advice}.py`); frontend slice (separate `paiGowStore.ts`, `HandSetter`, `ChipyPaiGowCoach`, `FortunePoolTicker`); 250+ new pytest tests including a 300-seed fuzz sweep for the house-way no-foul invariant.
-- _Teammate #3 — [name, GitHub handle, one-line summary of their owned area]_
+- **Myles — [@Durp06](https://github.com/Durp06)** — blackjack end-to-end (basic-strategy engine, the EV engine + Hand Review classifier, Chipy coaching flow), the multi-game platform scaffold, multiplayer polling + table state, the auto-migration runner, and Railway/Docker deploy plumbing.
+- **[@halynk21](https://github.com/halynk21)** — Pai Gow Poker end-to-end (the pure house-way/evaluator/foul-rule game logic, its three routers, the Fortune side-bet pool, and the Pai Gow frontend pages).
+- **[@cristpierce](https://github.com/cristpierce)** — Texas Hold'em + multiplayer (cash-ring betting state machine, showdown/side-pots, in-game chat) and the Balatro-grade UX/motion overhaul.
 
 ## Where the nontrivial logic lives
 
-| Tier | File | Function | What it does |
-|---|---|---|---|
-| **Bronze** | `backend/game/strategy.py:136` | `optimal_action(player_cards, dealer_upcard, can_double, can_split)` | Canonical 6-deck, dealer-hits-soft-17 basic-strategy table. Implemented as three nested dicts — `HARD_TOTALS`, `SOFT_TOTALS`, `PAIRS` — so the file reads as the published table itself, not a heuristic. Returns one of `hit`/`stand`/`double`/`split`. Pure function, no DB, fully unit-testable. **Design decision:** keeping this as a pure function (no DB access) is what lets us hit it from both the advice endpoint and the test suite without a fixture. |
-| **Bronze (helper)** | `backend/game/strategy.py:193` | `explain_decision(...)` | Returns the natural-language explanation that Chipy embeds in its prompt to Claude. Names the hand category (`"hard 16"`, `"soft 18"`, `"pair of aces"`) and the dealer upcard. |
-| **Silver** | `backend/analytics/weakness.py:75` (`_categorize`), endpoint at `backend/routers/analytics.py` | `get_weak_spots(user_id, db)` | Cross-table aggregation of `player_actions` bucketed by `(hand_category, dealer_upcard_category)`, filtered to buckets with ≥ 5 samples, sorted worst-accuracy-first. Tells the player which situations they keep losing. **Design decision:** the ≥ 5-sample filter is non-negotiable — without it, one mistake at a rare hand looks like a 0 %-accuracy "weakness" and ruins the signal. |
-| **Gold pick** (real-time-ish) | `frontend/src/hooks/useTablePoll.ts:16` | `useTablePoll(tableId, currentUserId)` | 3-second poll of `GET /api/tables/{id}/state` driving the multiplayer view. Reconciles into the Zustand store, detects when the turn becomes ours, and auto-opens Chipy. **Design decision:** polling over WebSockets — see "Design decisions" below. |
-| **Gold custom #1** | `backend/routers/advice.py:111` | streak update inside `/api/advice/{hand_id}` | Increments `users.current_streak` on every correct guess and resets to zero on a wrong guess, tracking `best_streak` as a max. Surfaced on `/profile` and `/leaderboard`. |
-| **Gold custom #2** | `backend/routers/game.py:51` (`GET /api/hands/{hand_id}/actions`) + `frontend/src/components/ReplayModal.tsx` | hand replay | After a hand finishes, the player can step through every decision they made — what they did, what was optimal, what Chipy said. Pulls ordered rows from `player_actions`. Authorization rule: only the owning user can read it during play; once the session is finished, anyone can. |
-| **Pai Gow — primary algorithm** | `backend/game/pai_gow/house_way.py` | `foxwoods(seven_cards)` | Foxwoods house way for Pai Gow Poker — a 10-rule dispatcher (straight flush, four of a kind, full house, three pairs, flush, straight, three of a kind, two pair, one pair, no pair) with rule-by-rule comments and round-7 joker preservation. Legal-by-construction split (back ≥ front under §7.3 unified ordering); 300-seed fuzz sweep verifies the no-foul invariant. The high-quad split (`KK \| KK+kickers`) passes the foul check via kicker tiebreak — this is the round-4 case where naive equality-as-foul would have crashed the dealer's own auto-set. |
-| **Pai Gow — coaching oracle** | `backend/game/pai_gow/optimal_set.py::find_optimal` + `evaluate_split` | Chipy's authoritative recommendation for the 2/5 split. v1 mirrors `house_way`; `_DEVIATIONS` table is in place for v2 Wong deviations. `evaluate_split` uses hand-strength equality (NOT card-identity) so EV-equivalent splits like swapping different K's in a quad-K split correctly count as optimal — the round-7 catch that fixed a streak-reset on correct plays. |
-| **Pai Gow — Fortune progressive pool** | `backend/game/pai_gow/fortune.py` + `backend/game/pai_gow/state.py::_drain_pool_with_lock` | Fortune-bonus side bet with two-tier payouts: fixed-amount (house-funded, bet × multiplier) + pool-funded (`SELECT … FOR UPDATE` row lock on `fortune_pool`, drains to seed on GRAND, half-of-surplus on MAJOR). Audit ledger in `fortune_pool_events`. The cross-table shared state is what makes Pai Gow specifically multiplayer at the per-game level beyond the app-level multi-user gates. |
-| **Pai Gow — round flow** | `backend/game/pai_gow/state.py::deal_to_player` | Async state machine with two concurrency disciplines baked in: (a) `SELECT … FOR UPDATE` on the round row before mutating `deck_state` / `dealer_dealt_cards` so concurrent deals serialize and the deck stays consistent; (b) savepoint-protected `IntegrityError` retry on `UNIQUE(table_id, round_number)` so the second of two simultaneous first-deals at a 2-seat table joins the existing round instead of crashing with 500. Tests cover the idempotent-deal-on-retry path and the second-player-after-`status='playing'` regression that the round-6 review flagged. |
+Every game contributes a genuinely-designed piece — none of these are CRUD-from-a-one-line-prompt.
+
+| Piece | File · function | What it does (and the design problem) |
+|---|---|---|
+| **Blackjack basic strategy** (bronze) | `backend/game/blackjack/strategy.py:136` · `optimal_action` | Canonical 6-deck dealer-hits-soft-17 table as `HARD_TOTALS`/`SOFT_TOTALS`/`PAIRS` dicts. Pure function — called from both the live game and ~30 unit tests with no DB. |
+| **Blackjack EV engine** (silver) | `backend/game/blackjack/ev.py:165,322` · `dealer_outcome_distribution`, `best_action_ev` | Infinite-deck H17 expected-value recursion: computes the true EV of stand/hit/double for any hand vs upcard, cross-checked against the strategy table. Powers the Hand Review grade and the "Sharp" tier in `review.py:258 classify_action`. Design problem: dealer-distribution recursion + ace demotion + the peek (no-blackjack) conditioning. |
+| **Cross-table weakness analytics** | `backend/analytics/weakness.py:86` · `get_weak_spots` | Aggregates `player_actions` by `(hand_category, dealer_upcard_category)`, filters to ≥5-sample buckets, sorts worst-accuracy-first. The ≥5 filter is load-bearing — without it one rare mistake reads as a 0%-accuracy "weakness." |
+| **Hold'em betting state machine** | `backend/game/poker/state.py:189,504` · `apply_action`, `compute_side_pots` | Real multi-step poker engine: street progression, min-raise / all-in-doesn't-reopen rules, and side-pot construction when players are all-in for different amounts. The side-pot ladder + showdown award (`poker/showdown.py:23 decide_winners_per_pot`) is the classic chips-at-stake correctness trap. |
+| **Pai Gow house way + foul rule** | `backend/game/pai_gow/house_way.py:50` · `foxwoods`; `pai_gow/resolver.py:56` · `resolve_hand` | Splits 7 cards into a legal 5-card/2-card set under the Foxwoods house way (with joker semi-wild handling), enforces the "low hand can't outrank high hand" foul rule, and resolves copies-to-dealer across the 9-cell truth table. Verified by a 300-seed full-deck fuzz invariant. |
 
 ## Design decisions
 
-1. **Supabase Auth over rolling our own JWT.** The PDF rubric explicitly calls out "X-Username header is not enough" and warns against burning three weeks on the login page. Supabase Auth + the `python-jose` JWT verifier in `backend/auth.py` gets us signed-and-verified identity that survives refresh, with email/password and OAuth options, in about a day of setup. The local `BETWISE_DEV_USER_ID` bypass keeps tests off the Supabase critical path.
-2. **Polling, not WebSockets.** A 3-second `setInterval` against `GET /api/tables/{id}/state` is more than fast enough for blackjack — table turns last ≥ 5 s in practice, so the worst-case staleness any player sees is ~ 3 s. WebSockets would add a reconnect state machine, server-side session pinning, and connection draining on deploy — three problems we don't actually have. The PDF rubric explicitly says polling is fine for the gold real-time pick; we took that at face value.
-3. **Chips stored as integer cents.** All monetary values in the schema (`chip_balance`, `bet`, `payout`, `min_bet`, `max_bet`) are integers — `$10.00` is `1000`. Floating-point money never enters the system. Blackjack 3:2 is `bet * 5 // 2` (round half-down toward the bet); documented in `backend/game/state.py::resolve_hand`.
-4. **Strategy engine as a pure function — no DB access.** `optimal_action` takes only the cards and the dealer upcard. It is called from the advice endpoint and from ~ 20 unit tests; both call sites use the same code path with no DB or HTTP shimming. If we ever swap from 6-deck-H17 to 8-deck-S17, the change is a constant in one file.
+1. **Supabase Auth, not our own JWT.** Real identity that survives refresh (email/password + OAuth), verified in `backend/auth.py` with `python-jose` against Supabase's JWKS. A `BETWISE_DEV_USER_ID` bypass keeps the test suite off Supabase's critical path. Rolling our own would have burned a week on the login page.
+2. **Polling, not WebSockets (the gold real-time pick).** A 3-second `setInterval` against each game's `/state` endpoint (`useTablePoll`, `usePokerPoll`, `useHoldemPoll`, `usePaiGowPoll`). Table turns last ≥5s, so worst-case staleness is ~3s — well inside the rubric's 5s bar — without a reconnect state machine, session pinning, or deploy-time connection draining.
+3. **Money is integer fake-cents, everywhere.** `chip_balance`, `bet`, `payout`, pots, and the Fortune pool are all integers ($50.00 = `5000`); floating-point money never enters the system. Payout math (blackjack 3:2, side pots, Pai Gow commission) is all integer division with documented rounding.
+4. **Migrations auto-apply on deploy.** The Dockerfile runs `python -m backend.migrate` before uvicorn — it discovers `backend/migrations/*.sql`, applies pending files once (tracked in a `schema_migrations` ledger), and **fails the deploy** if a migration errors. We added this after poker's tables shipped in code but 500'd in prod because a hand-run migration step got forgotten.
 
 ## Where the agents helped most and where we pushed back
 
-Claude was reliably good at the well-specified pieces — the basic-strategy table (HARD_TOTALS / SOFT_TOTALS / PAIRS dicts, every cell right on the first pass including the 9-9 split-vs-2-6/8-9/stand-vs-7/10/A edge cases), the SSE streaming endpoint, and the Zustand optimistic-with-rollback reducer. The patterns where we had to push back recurred: it loved opening a second `AsyncSession` for cross-cutting writes (which broke `test_advice_correct_increments_streak` until we forced the streak update onto the dependency-injected session); it wrote test helpers that silently masked impossible inputs (`hand_cards_for(22)` returning a 19-value 2-card hand instead of failing loudly that 22 isn't representable with two cards); and it shipped happy-path code that ignored every failure mode — a hard-coded `claude-sonnet-4-20250514` model alias that crashed silently when Anthropic deprecated it (we added a `CHIPY_MODEL` env var + try/except that emits graceful fallback chunks), a 409 "Round already in progress" guard on the deal endpoint that blocked the second player at a multiplayer table (caught during a two-user live test and removed), and a button-driven ChipyPanel quiz that interrupted actual play (redesigned as an always-visible side panel that streams pre-play suggestions and post-play critiques automatically). The pattern across all of these: agents nail the well-specified piece on the first try, then quietly assume the happy path holds everywhere — loading + error + concurrency + deprecation surface is where the human has to lean in hardest.
+Claude was reliably strong on the well-specified, math-heavy cores: the basic-strategy table (every cell right first pass), the 7-card poker evaluator and Pai Gow house-way (both pinned by exhaustive/fuzz tests), and the EV-recursion engine. Where we had to lean in was, every time, the unhappy path and the seams. It shipped a multiplayer table page that called `leaveTable` from a React effect *cleanup*, so `StrictMode`'s dev double-invoke un-seated the player the instant they sat down (caught only by driving the real browser, not by green unit tests). It serialized poker's per-hand RNG seed to the client, making hole-card masking cosmetic — a player could recompute the deck. It computed a tournament prize pool as `buy_in × (1 + bot_count)` while the bots paid nothing, minting chips from thin air. And it liked opening a second `AsyncSession` for cross-cutting writes, which silently broke streak updates until we forced them onto the dependency-injected session. The pattern held across all three games: agents nail the specified algorithm, then assume the happy path holds everywhere — concurrency, auth, money-conservation, and lifecycle edges are where the humans had to push hardest.
 
-## How to run locally
+## How to run locally and run tests
 
 ```bash
-# Backend
-cd betwise-casino/backend
-python -m venv .venv
-.venv\Scripts\activate              # PowerShell: .\.venv\Scripts\Activate.ps1
+# Backend (from repo root)
+cd backend && python -m venv .venv && .venv\Scripts\activate
 pip install -r requirements.txt
-# Tests run against in-memory SQLite — no real Postgres needed.
-python -m pytest tests/ -v
+python -m pytest tests/ -q            # full backend suite, in-memory SQLite, mocked Anthropic
 
 # Frontend
-cd ../frontend
-npm install
-npm test -- --run                   # 6 Vitest tests
-npm run build                       # produces frontend/dist/
+cd ../frontend && npm install
+npx tsc --noEmit && npm test -- --run # typecheck + Vitest component tests
+npm run build                         # emits frontend/dist/
 
-# Run the whole app locally (FastAPI serves the built React bundle at /)
-cd ../backend
-uvicorn main:app --reload --port 8000
-# Open http://localhost:8000 in a browser.
+# Run the whole app (one service: FastAPI serves the built React bundle at / and /api/*)
+cd .. && uvicorn backend.main:app --reload --port 8000   # -> http://localhost:8000
 ```
 
-### Environment variables
+The app boots with no env vars (tests use in-memory SQLite). For an end-to-end copy against real Supabase + Anthropic, set `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_JWT_SECRET`, `ANTHROPIC_API_KEY`, and `DATABASE_URL` (a cloud Postgres, e.g. Supabase `postgresql+asyncpg://...`). For local dev without Supabase: `BETWISE_DEV_USER_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa` and `BETWISE_TEST_DB_URL=sqlite+aiosqlite:///:memory:`.
 
-The app boots without any env vars set (great for tests). To run end-to-end against real Supabase + Anthropic you need:
+## Gold: the "pick one" and the custom features
 
-```
-SUPABASE_URL=                       # https://<project>.supabase.co
-SUPABASE_ANON_KEY=                  # Supabase anon public key (frontend reads this as VITE_SUPABASE_ANON_KEY)
-SUPABASE_JWT_SECRET=                # Supabase JWT secret — Settings → API → JWT Settings
-ANTHROPIC_API_KEY=                  # sk-ant-...
-DATABASE_URL=                       # postgresql+asyncpg://... (Supabase connection string, port 5432)
-```
+- **Pick one → real-time-ish multiplayer (polling).** Other players' actions, seats, and the dealer/board appear in your open view within ~3s, no manual refresh, across all three games. Polling fits because turn cadence (≥5s) is slower than the poll interval — see Design Decision #2.
+- **Custom feature — chess.com-style Hand Review (blackjack).** Every decision in a session is graded Best/Good/Inaccuracy/Mistake/Blunder with the real EV cost in chips and a "what-if" line, plus a "retry this spot" drill. `backend/routers/sessions.py` + `backend/game/blackjack/review.py`.
+- **Custom feature — Pai Gow Fortune side-bet pool.** A shared, progressive bonus pool that every Fortune bet contributes to and that pays out (with a seeded floor + ledgered draws) when a player hits a qualifying hand — real shared state across players. `backend/game/pai_gow/fortune.py`.
+- **Custom feature — in-game chat + multiplayer presence.** A polymorphic chat table shared across blackjack and Hold'em tables, server-validated and rendered as inert text (stored-XSS-safe). `backend/routers/chat.py`.
+- **Plus:** Texas Hold'em (solo-vs-bots trainer **and** multiplayer cash rings), per-decision skill ratings, streaks, and a multi-game leaderboard.
 
-For local dev without Supabase, set:
+## What's where
 
-```
-BETWISE_DEV_USER_ID=aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa
-BETWISE_TEST_DB_URL=sqlite+aiosqlite:///:memory:
-```
-
-The frontend additionally reads `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` from a `frontend/.env.local` file (Vite picks these up automatically).
-
-## Pai Gow Poker — deploy checklist
-
-`backend/migrations/005_pai_gow.sql` is NOT run by CI or any automated process — same pattern as the earlier migrations (`001_initial.sql` through `004_chat.sql`). Before the deploy that ships PG code reaches production, **the migration must be applied manually to the prod Supabase database**.
-
-1. **Apply the migration** — Supabase dashboard → SQL Editor → paste the contents of `backend/migrations/005_pai_gow.sql` → Run. (Or `psql $DATABASE_URL -f backend/migrations/005_pai_gow.sql`.) The file is idempotent (`CREATE TABLE IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`); safe to run twice.
-2. **Verify the schema** — run these checks in the same SQL editor:
-   ```sql
-   -- 8 PG tables present
-   SELECT table_name FROM information_schema.tables
-   WHERE table_schema = 'public' AND table_name LIKE 'pai_gow_%' OR table_name LIKE 'fortune_pool%'
-   ORDER BY table_name;
-   -- expect: fortune_pool, fortune_pool_events, pai_gow_player_actions,
-   --        pai_gow_player_hands, pai_gow_rounds, pai_gow_seats,
-   --        pai_gow_strategy_streaks, pai_gow_tables  (8 rows)
-
-   -- fortune_pool singleton row seeded
-   SELECT id, amount_cents, seed_cents FROM fortune_pool
-   WHERE id = '00000000-0000-0000-0000-000000000001'::uuid;
-   -- expect: 1 row, amount_cents=100000, seed_cents=100000
-
-   -- seed event recorded
-   SELECT event_type, post_balance_cents FROM fortune_pool_events
-   WHERE event_type = 'seed';
-   -- expect: 1 row, post_balance_cents=100000
-   ```
-3. **Deploy the code** (push to main → Railway auto-deploys). If the migration was NOT applied first, the PG endpoints will 500 on every Fortune-bet deal and every `/api/pai-gow/fortune-pool` request.
-
-If you need to roll back: the migration is additive, so a safe rollback is to disable the PG router includes in `backend/main.py` and redeploy. The data tables stay in the DB harmlessly.
-
-## Pai Gow Poker v1 limitations (documented, not bugs)
-
-- **5% commission dropped** for v1 simplicity (spec §7.6). Chipy's EV figures are computed for the no-commission ruleset; a future v2 with commission active would also bump `COMMISSION_RULESET_VERSION` in `canonical.py` to invalidate cached entries.
-- **Banker rotation deferred to v2** (spec §15). v1 is house-banked. The data model does NOT carry a dead `banker_user_id` column; v2 would add it additively.
-- **Max seats = 3** at PG tables (spec §17 Q5) — matches blackjack's seat convention.
-- **Joker treated as Ace in house_way** (spec §11/§7.1). The evaluator's semi-wild semantics are full; house_way's dispatch uses Ace substitution for simplicity. The joker token is preserved in the returned split (round-7 fix) so the player can submit it. v2 may add joker-aware optimization for straight/flush completion in the dealer's split.
-- **`_DEVIATIONS` table is empty in v1** (`backend/game/pai_gow/optimal_set.py`). Chipy mirrors house_way for every hand. Adding a Wong deviation in v2 is a localized dict entry — no caller changes needed.
-- **Per-game streak storage** — Pai Gow uses its own `pai_gow_strategy_streaks` table (spec §12.6 round-4 decision); blackjack uses `users.current_streak/best_streak`. Documented inconsistency; v2 may unify under a generic `strategy_streak(user_id, game_type, ...)` table.
-
-## Gold features summary
-
-- **Gold pick:** real-time-ish multiplayer via 3-second polling — see `frontend/src/hooks/useTablePoll.ts`. Reason: polling fits because blackjack turns last ≥ 5 s, the staleness budget tolerates ~ 3 s, and WebSockets would add reconnect + session-pinning complexity we don't need.
-- **Custom feature #1 — strategy streak.** Every correct call against `optimal_action` adds 1 to `users.current_streak`; one wrong call resets it; `users.best_streak` tracks the all-time max. Visible on `/profile` and on the leaderboard row. Tracked atomically in the same DB session as the advice response (`backend/routers/advice.py:111`).
-- **Custom feature #2 — hand replay.** After a hand finishes, "Review Hand" opens a modal (`frontend/src/components/ReplayModal.tsx`) that steps through every action the player took, with Chipy's optimal call beside it. Pulls ordered rows from `player_actions` via `GET /api/hands/{hand_id}/actions`. Authorization: owner-only during play, everyone after the session is finished.
-
-## Repo layout
-
-```
-betwise-casino/
-├── CLAUDE.md                      # team conventions (also used by Claude Code)
-├── README.md                      # this file
-├── railway.json                   # single-service Railway deploy
-├── .github/workflows/ci.yml       # backend pytest + frontend Vitest, gates merge to main
-├── backend/
-│   ├── main.py                    # FastAPI app, mounts frontend/dist at /
-│   ├── database.py                # lazy async engine factory (no module-level connect)
-│   ├── models.py                  # SQLAlchemy 2.0 Mapped[] columns
-│   ├── schemas.py                 # Pydantic v2 (ConfigDict(from_attributes=True))
-│   ├── auth.py                    # Supabase JWT verification, lazy JWKS cache, dev bypass
-│   ├── game/
-│   │   ├── engine.py              # deck, hand_value, is_blackjack, deal_card
-│   │   ├── strategy.py            # BRONZE nontrivial piece (basic-strategy table)
-│   │   └── state.py               # turn machine, dealer auto-play, resolve_hand
-│   ├── analytics/
-│   │   └── weakness.py            # SILVER nontrivial piece (cross-table aggregation)
-│   ├── routers/                   # users, tables, game, advice, leaderboard, analytics
-│   ├── migrations/001_initial.sql # idempotent CREATE TABLE / CREATE INDEX
-│   └── tests/                     # 100 pytest tests, in-memory SQLite, mocked Anthropic
-└── frontend/
-    ├── src/
-    │   ├── api/client.ts          # typed fetch wrapper, never throws to components
-    │   ├── auth/supabase.ts       # Supabase client singleton + useSession hook
-    │   ├── store/gameStore.ts     # Zustand store + optimistic Hit reducer
-    │   ├── hooks/
-    │   │   ├── useTablePoll.ts    # GOLD: 3-s polling
-    │   │   └── useChipy.ts        # SSE consumer for /api/advice
-    │   ├── components/            # PlayingCard, CardHand, ChipyPanel, ReplayModal, …
-    │   └── pages/                 # Login, Lobby, Table, Profile, Leaderboard
-    └── tests/ChipyPanel.test.tsx  # contract test for the Chipy flow
-```
+Three games as parallel router stacks under `backend/routers/` (blackjack: `tables`/`game`/`advice`/`sessions`; poker: `poker_*`; Hold'em: `holdem`; Pai Gow: `pai_gow_*`; shared: `users`/`leaderboard`/`analytics`/`chat`/`practice`) — **46 endpoints**. Pure game logic lives in `backend/game/{blackjack,poker,pai_gow}/` (no DB, fully unit-tested). Data model in `backend/models.py`; schema in `backend/migrations/*.sql` (real FKs + NOT NULL/UNIQUE/CHECK constraints, hosted on Supabase Postgres). Frontend pages per game under `frontend/src/pages/`, Zustand stores with optimistic updates, React Router for bookmarkable URLs. Tests: `backend/tests/` (~1,100 pytest) + `frontend/tests/` (Vitest), gated in `.github/workflows/ci.yml` on every push to `main`, deploy-on-green via Railway.

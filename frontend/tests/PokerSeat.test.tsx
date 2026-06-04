@@ -83,7 +83,8 @@ describe("PokerSeat", () => {
         isYou={false}
       />,
     );
-    expect(screen.getAllByTestId("hole-card-back").length).toBe(2);
+    // Masked cards now deal from the deck as card backs (DealtCard → PlayingCard).
+    expect(screen.getAllByLabelText("Face-down card").length).toBe(2);
   });
 
   it("renders current bet when > 0", () => {

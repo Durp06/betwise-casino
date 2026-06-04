@@ -8,6 +8,7 @@
  * AC-F-HIST1/2.
  */
 import { useState, useEffect } from "react";
+import { AnimatePresence } from "framer-motion";
 import { getMe, getUserHands } from "../api/client";
 import type { Hand, UserStats } from "../types";
 import SessionReviewModal from "../components/SessionReviewModal";
@@ -154,13 +155,16 @@ export default function HandHistory() {
         )}
       </main>
 
-      {reviewState && (
-        <SessionReviewModal
-          sessionId={reviewState.sessionId}
-          handId={reviewState.handId}
-          onClose={() => setReviewState(null)}
-        />
-      )}
+      <AnimatePresence>
+        {reviewState && (
+          <SessionReviewModal
+            key="review"
+            sessionId={reviewState.sessionId}
+            handId={reviewState.handId}
+            onClose={() => setReviewState(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
