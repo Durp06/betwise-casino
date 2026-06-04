@@ -9,13 +9,13 @@ import { useNavigate } from "react-router-dom";
 import type { TableListRow } from "../types";
 import { listTables, createTable, joinTable } from "../api/client";
 import { t } from "../i18n";
+import { generateTableName } from "../utils/tableName";
+import { formatMoney } from "../utils/money";
 import Chipy from "../components/Chipy";
+import BalanceHeader from "../components/BalanceHeader";
+import BlackjackLobbyCard from "../components/BlackjackLobbyCard";
 import PokerLobbyCard from "../components/PokerLobbyCard";
 import HoldemLobbyCard from "../components/HoldemLobbyCard";
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(0)}`;
-}
 
 const STATUS_LABELS: Record<string, string> = {
   waiting:  "Open",
@@ -42,7 +42,7 @@ export default function Lobby() {
     const result = await listTables();
     if (result.error) setError(result.error);
     else {
-      setTables(result.data);
+      setTables(result.data?.filter((tbl) => tbl.status !== "finished") ?? null);
       setError(null);
     }
     setLoading(false);
@@ -57,10 +57,23 @@ export default function Lobby() {
   async function handleCreateTable(): Promise<void> {
     setCreating(true);
     setActionError(null);
-    const result = await createTable({ name: `Table ${Date.now() % 10000}` });
+    const result = await createTable({ name: generateTableName() });
     setCreating(false);
-    if (result.error) setActionError(result.error);
-    else await fetchTables();
+    if (result.error) {
+      setActionError(result.error);
+      return;
+    }
+    if (result.data) {
+      const id = result.data.id;
+      const joinResult = await joinTable(String(id));
+      if (joinResult.error) {
+        setActionError(joinResult.error);
+        return;
+      }
+      void navigate(`/table/${String(id)}`);
+    } else {
+      await fetchTables();
+    }
   }
 
   async function handleJoin(tableId: string): Promise<void> {
@@ -88,6 +101,7 @@ export default function Lobby() {
           </span>
         </div>
         <nav className="flex items-center gap-4">
+          <BalanceHeader />
           <button
             onClick={() => void navigate("/profile")}
             className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
@@ -138,11 +152,23 @@ export default function Lobby() {
           </p>
         )}
 
-        {/* Texas Hold'em entries */}
-        <div className="mb-4 flex flex-col gap-3">
-          <HoldemLobbyCard />
-          <PokerLobbyCard />
+        {/* Game picker — choose a game */}
+        <div className="mb-6">
+          <h2
+            className="text-cream text-2xl gold-drop leading-tight mb-2"
+            style={{ fontFamily: "'Luckiest Guy', Impact, sans-serif", letterSpacing: "0.04em" }}
+          >
+            {t("Choose a Game")}
+          </h2>
+          <hr className="border-t-2 border-ink/30 mb-3" />
+          <div className="flex flex-col gap-3">
+            <BlackjackLobbyCard onPlay={() => void handleCreateTable()} busy={creating} />
+            <HoldemLobbyCard />
+            <PokerLobbyCard />
+          </div>
         </div>
+
+        <hr className="border-t-2 border-ink/20 mb-4" />
 
 
         {/* Loading skeleton */}
@@ -187,7 +213,7 @@ export default function Lobby() {
         {/* Table list */}
         {!loading && !error && tables !== null && tables.length > 0 && (
           <div className="flex flex-col gap-4">
-            {tables.map((table) => {
+            {tables.map((table, index) => {
               const isFull = table.seats_taken >= table.max_seats;
               const statusKey = table.status as keyof typeof STATUS_LABELS;
               return (
@@ -198,7 +224,7 @@ export default function Lobby() {
                   style={{
                     backgroundColor: "#F5F0E8",
                     boxShadow: "5px 5px 0 0 #1A0A00",
-                    animationDelay: `${Math.random() * 2}s`,
+                    animationDelay: `${index * 0.15}s`,
                   }}
                 >
                   <div className="flex-1 min-w-0">
@@ -214,7 +240,7 @@ export default function Lobby() {
                     </div>
                     <div className="font-flavor text-ink/70 text-xs mt-1 flex items-center gap-2">
                       <span className="text-action-double">
-                        {formatCents(table.min_bet)}–{formatCents(table.max_bet)}
+                        {formatMoney(table.min_bet)}–{formatMoney(table.max_bet)}
                       </span>
                       <span>·</span>
                       <span>{table.seats_taken}/{table.max_seats} {t("seated")}</span>

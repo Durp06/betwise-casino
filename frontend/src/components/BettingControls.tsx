@@ -7,8 +7,10 @@
 import { useState } from "react";
 import { t } from "../i18n";
 import { useGameStore } from "../store/gameStore";
+import { useWalletStore } from "../store/walletStore";
 import { dealHand } from "../api/client";
 import type { Hand } from "../types";
+import { formatMoney } from "../utils/money";
 
 interface BettingControlsProps {
   tableId: string;
@@ -89,6 +91,7 @@ export default function BettingControls({
   onDealSuccess,
 }: BettingControlsProps) {
   const { betAmount, placeBet, setMyHand, setLastFinishedHandId } = useGameStore();
+  const walletRefresh = useWalletStore((s) => s.refresh);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -103,7 +106,7 @@ export default function BettingControls({
 
   async function handleDeal(): Promise<void> {
     if (betAmount < minBet) {
-      setError(t(`Minimum bet is $${(minBet / 100).toFixed(2)}`));
+      setError(t(`Minimum bet is ${formatMoney(minBet)}`));
       return;
     }
     if (betAmount > chipBalance) {
@@ -126,6 +129,8 @@ export default function BettingControls({
       // once a new hand is in the air.
       setLastFinishedHandId(null);
       onDealSuccess?.(result.data);
+      // Refresh the wallet balance after placing a bet (buy-in deducted).
+      void walletRefresh();
     }
   }
 
@@ -156,7 +161,7 @@ export default function BettingControls({
           {t("Bet")}
         </span>
         <span className="font-display text-gold-bright text-2xl gold-drop">
-          ${(betAmount / 100).toFixed(2)}
+          {formatMoney(betAmount)}
         </span>
         {betAmount > 0 && (
           <button

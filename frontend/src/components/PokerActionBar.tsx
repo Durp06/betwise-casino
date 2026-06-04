@@ -58,7 +58,7 @@ export default function PokerActionBar({
       {error && (
         <div
           role="alert"
-          className="text-red-700 text-sm bg-red-50 border-2 border-red-700 px-2 py-1 rounded"
+          className="text-red-700 text-sm bg-red-50 ink-outline px-2 py-1 rounded"
           data-testid="poker-action-error"
         >
           {error}
@@ -70,10 +70,11 @@ export default function PokerActionBar({
           type="button"
           disabled={submitting}
           onClick={() => void submit("fold", 0)}
-          className="px-3 py-2 font-ui text-sm rounded border-2 border-ink bg-red-200 text-ink disabled:opacity-40"
+          className="px-3 py-2 font-ui text-sm rounded ink-outline ink-shadow bg-red-200 text-ink disabled:opacity-40"
+          aria-busy={submitting}
           data-testid="poker-action-fold"
         >
-          {t("Fold")}
+          {submitting ? t("…") : t("Fold")}
         </button>
 
         {canCheck ? (
@@ -81,20 +82,22 @@ export default function PokerActionBar({
             type="button"
             disabled={submitting}
             onClick={() => void submit("check", 0)}
-            className="px-3 py-2 font-ui text-sm rounded border-2 border-ink bg-cream text-ink disabled:opacity-40"
+            className="px-3 py-2 font-ui text-sm rounded ink-outline ink-shadow bg-cream text-ink disabled:opacity-40"
+            aria-busy={submitting}
             data-testid="poker-action-check"
           >
-            {t("Check")}
+            {submitting ? t("…") : t("Check")}
           </button>
         ) : (
           <button
             type="button"
             disabled={submitting || toCall > stack}
             onClick={() => void submit("call", 0)}
-            className="px-3 py-2 font-ui text-sm rounded border-2 border-ink bg-blue-200 text-ink disabled:opacity-40"
+            className="px-3 py-2 font-ui text-sm rounded ink-outline ink-shadow bg-blue-200 text-ink disabled:opacity-40"
+            aria-busy={submitting}
             data-testid="poker-action-call"
           >
-            {t("Call")} {toCall}
+            {submitting ? t("…") : `${t("Call")} ${toCall}`}
           </button>
         )}
 
@@ -102,25 +105,27 @@ export default function PokerActionBar({
           type="button"
           disabled={submitting || stack < hand.min_raise_increment}
           onClick={() => setShowSlider(true)}
-          className="px-3 py-2 font-ui text-sm rounded border-2 border-ink bg-orange-200 text-ink disabled:opacity-40"
+          className="px-3 py-2 font-ui text-sm rounded ink-outline ink-shadow bg-orange-200 text-ink disabled:opacity-40"
+          aria-busy={submitting}
           data-testid="poker-action-raise"
         >
-          {t("Raise")}
+          {submitting ? t("…") : t("Raise")}
         </button>
 
         <button
           type="button"
           disabled={submitting || stack === 0}
           onClick={() => void submit("all_in", 0)}
-          className="px-3 py-2 font-ui text-sm rounded border-2 border-ink bg-action-hit text-cream disabled:opacity-40"
+          className="px-3 py-2 font-ui text-sm rounded ink-outline ink-shadow bg-action-hit text-cream disabled:opacity-40"
+          aria-busy={submitting}
           data-testid="poker-action-all_in"
         >
-          {t("All-in")}
+          {submitting ? t("…") : t("All-in")}
         </button>
       </div>
 
       {showSlider && (
-        <div className="flex flex-col gap-2 p-2 border-2 border-ink rounded bg-cream/50">
+        <div className="flex flex-col gap-2 p-2 ink-outline rounded bg-cream/50">
           <BetSizingSlider
             minRaise={minRaise}
             maxRaise={stack + yourSeat.current_bet}
@@ -133,18 +138,19 @@ export default function PokerActionBar({
               type="button"
               onClick={handleRaiseConfirm}
               disabled={submitting}
-              className="px-3 py-1 font-ui text-sm rounded border-2 border-ink bg-orange-300 text-ink disabled:opacity-40"
+              className="px-3 py-1 font-ui text-sm rounded ink-outline ink-shadow bg-orange-300 text-ink disabled:opacity-40"
+              aria-busy={submitting}
               data-testid="poker-action-raise-confirm"
             >
-              {t("Confirm raise")}
+              {submitting ? t("…") : t("Confirm raise")}
             </button>
             <button
               type="button"
               onClick={() => setShowSlider(false)}
               disabled={submitting}
-              className="px-3 py-1 font-ui text-sm rounded border-2 border-ink bg-cream text-ink"
+              className="px-3 py-1 font-ui text-sm rounded ink-outline ink-shadow bg-cream text-ink"
             >
-              {t("Cancel")}
+              {submitting ? t("…") : t("Cancel")}
             </button>
           </div>
         </div>

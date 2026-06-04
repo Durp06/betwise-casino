@@ -19,7 +19,6 @@ import PokerTablePage from "./pages/PokerTablePage";
 import HoldemLobby from "./pages/HoldemLobby";
 import HoldemTablePage from "./pages/HoldemTablePage";
 import HandHistory from "./pages/HandHistory";
-
 // ─── QueryClient ─────────────────────────────────────────────────────────────
 
 const queryClient = new QueryClient({

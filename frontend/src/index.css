@@ -139,7 +139,7 @@ h1, h2, h3, h4 {
 .wobble-strong { animation: wobble-strong 2.4s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) {
-  .wobble, .wobble-strong { animation: none !important; }
+  .wobble, .wobble-strong, .sparkle, .banner-pulse { animation: none !important; }
 }
 
 /* ─── Sparkle — golden flecks around a winning outcome banner ──────────── */

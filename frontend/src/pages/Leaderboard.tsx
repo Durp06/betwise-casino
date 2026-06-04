@@ -7,10 +7,7 @@ import { useSession } from "../auth/supabase";
 import { getLeaderboard } from "../api/client";
 import type { LeaderboardRow } from "../types";
 import { t } from "../i18n";
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
+import { formatMoney } from "../utils/money";
 
 const MEDAL_COLOR: Record<number, string> = {
   1: "#F4D03F",   // gold
@@ -140,7 +137,7 @@ export default function Leaderboard() {
                     )}
                   </span>
                   <span className="text-right font-display text-action-stand">
-                    {formatCents(row.chip_balance)}
+                    {formatMoney(row.chip_balance)}
                   </span>
                   <span className="text-right font-flavor text-ink text-xs hidden sm:block">
                     {row.total_hands > 0 ? `${Math.round(row.accuracy_pct)}%` : "—"}

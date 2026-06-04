@@ -6,7 +6,7 @@
 2. Cards represented as `{ suit: "hearts"|"diamonds"|"clubs"|"spades", value: "2"-"10"|"J"|"Q"|"K"|"A" }`.
 3. Hand state stored as JSONB arrays of card objects.
 4. All monetary values are integers (fake cents, so $10.00 = 1000).
-5. User always starts with 100000 (= $1,000.00).
+5. User always starts with `5_000_000` (= $50,000.00).
 6. Async SQLAlchemy everywhere — no sync DB calls.
 7. Pydantic v2 models with `model_config = ConfigDict(from_attributes=True)`.
 8. Frontend: no `any` types — everything typed.

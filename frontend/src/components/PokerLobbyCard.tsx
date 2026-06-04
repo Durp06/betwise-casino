@@ -13,18 +13,23 @@ export default function PokerLobbyCard() {
     <button
       type="button"
       onClick={() => void navigate("/poker/setup")}
-      className="ink-outline-thick rounded-xl bg-felt-green text-cream p-4 flex flex-col items-start gap-2 hover:bg-felt-green/90 transition-colors"
+      className="w-full ink-outline-thick paper-grain rounded-md p-5 flex items-center gap-4 text-left
+        hover:bg-gold-bright/20 transition-colors"
+      style={{ backgroundColor: "#145A32", boxShadow: "5px 5px 0 0 #1A0A00" }}
       data-testid="poker-lobby-card"
     >
-      <div className="flex items-center gap-2">
-        <span className="font-display text-2xl tracking-wider">{t("TEXAS HOLD'EM")}</span>
-        <span className="text-[10px] uppercase tracking-widest bg-gold-bright text-ink px-2 py-0.5 rounded-full border-2 border-ink">
-          {t("Educational")}
+      <span className="text-4xl" aria-hidden="true">♥️</span>
+      <span className="flex flex-col">
+        <span className="flex items-center gap-2 flex-wrap">
+          <span className="font-display text-cream text-2xl leading-tight">{t("Solo Poker Trainer")}</span>
+          <span className="text-[10px] uppercase tracking-widest bg-gold-bright text-ink px-2 py-0.5 rounded-full border-2 border-ink">
+            {t("Educational")}
+          </span>
         </span>
-      </div>
-      <p className="text-sm font-body text-cream/90 text-left">
-        {t("Single-table tournament against 2–7 bot archetypes. Chipy coaches every decision.")}
-      </p>
+        <span className="font-flavor text-cream/70 text-sm italic">
+          {t("Single-table tournament against 2–7 bot archetypes. Chipy coaches every decision.")}
+        </span>
+      </span>
     </button>
   );
 }

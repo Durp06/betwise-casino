@@ -12,6 +12,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useSession } from "../auth/supabase";
 import { useGameStore } from "../store/gameStore";
 import { useHoldemPoll } from "../hooks/useHoldemPoll";
+import { useWalletStore } from "../store/walletStore";
 import {
   dealHoldemHand,
   getHoldemTableState,
@@ -23,6 +24,7 @@ import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
 import ChatPanel from "../components/ChatPanel";
 import { t } from "../i18n";
+import BalanceHeader from "../components/BalanceHeader";
 
 export default function HoldemTablePage() {
   const { id: tableId } = useParams<{ id: string }>();
@@ -33,6 +35,7 @@ export default function HoldemTablePage() {
   const holdemTableState = useGameStore((s) => s.holdemTableState);
   const setHoldemTableState = useGameStore((s) => s.setHoldemTableState);
 
+  const walletRefresh = useWalletStore((s) => s.refresh);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
@@ -81,6 +84,14 @@ export default function HoldemTablePage() {
     setBusy(false);
     if (result.error) setError(result.error);
     else setHoldemTableState(result.data);
+  }
+
+  async function handleLeave(): Promise<void> {
+    if (tableId) {
+      const result = await leaveHoldemTable(tableId);
+      if (!result.error) void walletRefresh();
+    }
+    void navigate("/holdem");
   }
 
   if (!tableId) {
@@ -147,12 +158,15 @@ export default function HoldemTablePage() {
         <h1 className="font-display text-cream text-2xl">
           {table.name} · {t("Hold'em")}
         </h1>
-        <button
-          onClick={() => void navigate("/holdem")}
-          className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
-        >
-          {t("Leave Table")}
-        </button>
+        <div className="flex items-center gap-4">
+          <BalanceHeader />
+          <button
+            onClick={() => void handleLeave()}
+            className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
+          >
+            {t("Leave Table")}
+          </button>
+        </div>
       </header>
 
       {error && (

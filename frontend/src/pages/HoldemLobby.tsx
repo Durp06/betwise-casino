@@ -9,14 +9,14 @@ import { useCallback, useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import type { HoldemTableListRow } from "../types";
 import { listHoldemTables, createHoldemTable, joinHoldemTable } from "../api/client";
+import { useWalletStore } from "../store/walletStore";
 import { t } from "../i18n";
-
-function money(n: number): string {
-  return `$${(n / 100).toFixed(2)}`;
-}
+import { formatMoney as money } from "../utils/money";
+import BalanceHeader from "../components/BalanceHeader";
 
 export default function HoldemLobby() {
   const navigate = useNavigate();
+  const walletRefresh = useWalletStore((s) => s.refresh);
   const [tables, setTables] = useState<HoldemTableListRow[] | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,7 +65,10 @@ export default function HoldemLobby() {
     const result = await joinHoldemTable(table.id, buyIn);
     setJoining(null);
     if (result.error) setActionError(result.error);
-    else void navigate(`/holdem/table/${table.id}`);
+    else {
+      void walletRefresh();
+      void navigate(`/holdem/table/${table.id}`);
+    }
   }
 
   return (
@@ -77,12 +80,15 @@ export default function HoldemLobby() {
         <h1 className="font-display text-cream text-3xl sm:text-4xl gold-drop leading-none">
           {t("Multiplayer Hold'em")}
         </h1>
-        <button
-          onClick={() => void navigate("/lobby")}
-          className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
-        >
-          {t("Back to Lobby")}
-        </button>
+        <div className="flex items-center gap-4">
+          <BalanceHeader />
+          <button
+            onClick={() => void navigate("/lobby")}
+            className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
+          >
+            {t("Back to Lobby")}
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 px-4 py-8 max-w-2xl mx-auto w-full">

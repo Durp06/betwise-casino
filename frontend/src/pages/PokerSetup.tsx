@@ -8,11 +8,15 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPokerTournament } from "../api/client";
+import { useWalletStore } from "../store/walletStore";
 import type { PokerAdviceMode } from "../types";
 import { t } from "../i18n";
+import { formatMoney } from "../utils/money";
+import BalanceHeader from "../components/BalanceHeader";
 
 export default function PokerSetup() {
   const navigate = useNavigate();
+  const walletRefresh = useWalletStore((s) => s.refresh);
   const [botCount, setBotCount] = useState(3);
   const [adviceMode, setAdviceMode] = useState<PokerAdviceMode>("odds");
   const [buyInCents, setBuyInCents] = useState(5_000);
@@ -35,11 +39,15 @@ export default function PokerSetup() {
       setError(result.error ?? "Unknown error");
       return;
     }
+    void walletRefresh();
     void navigate(`/poker/table/${result.data.id}`);
   }
 
   return (
-    <main className="min-h-screen bg-felt-green text-cream p-6 flex justify-center">
+    <main className="min-h-screen bg-felt-green text-cream p-6 flex flex-col items-center gap-4">
+      <div className="w-full max-w-md flex justify-end">
+        <BalanceHeader />
+      </div>
       <form
         onSubmit={onSubmit}
         className="ink-outline-thick rounded-xl bg-cream text-ink p-6 max-w-md w-full flex flex-col gap-4"
@@ -103,7 +111,7 @@ export default function PokerSetup() {
             data-testid="poker-setup-buyin"
           />
           <span className="text-xs text-ink/60">
-            ${(buyInCents / 100).toFixed(2)} {t("from bankroll")}
+            {formatMoney(buyInCents)} {t("from bankroll")}
           </span>
         </label>
 

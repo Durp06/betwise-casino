@@ -10,11 +10,8 @@ import { useSession } from "../auth/supabase";
 import { getMe, getWeakness, getUserHands, resetChips } from "../api/client";
 import type { UserStats, WeakSpot, Hand } from "../types";
 import { t } from "../i18n";
+import { formatMoney } from "../utils/money";
 import Chipy from "../components/Chipy";
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
-}
 
 export default function Profile() {
   const navigate = useNavigate();
@@ -141,7 +138,7 @@ export default function Profile() {
               <div className="flex items-center justify-between">
                 <span className="font-display text-ink text-3xl">{stats.username}</span>
                 <span className="font-display text-action-stand text-3xl gold-drop">
-                  {formatCents(stats.chip_balance)}
+                  {formatMoney(stats.chip_balance)}
                 </span>
               </div>
 
@@ -240,7 +237,7 @@ export default function Profile() {
                             {hand.outcome ?? "—"}
                           </span>
                           <span className="font-ui text-ink/80 text-right">
-                            {formatCents(hand.bet)}
+                            {formatMoney(hand.bet)}
                           </span>
                         </div>
                       );

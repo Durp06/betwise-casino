@@ -8,15 +8,12 @@
  */
 import type { Seat, Hand } from "../types";
 import { t } from "../i18n";
+import { formatMoney } from "../utils/money";
 
 interface TableSeatsProps {
   seats: Seat[];
   hands: Hand[];
   currentUserId: string | null;
-}
-
-function formatCents(cents: number): string {
-  return `$${(cents / 100).toFixed(2)}`;
 }
 
 const HAND_STATUS_LABELS: Record<string, string> = {
@@ -98,7 +95,7 @@ export default function TableSeats({ seats, hands, currentUserId }: TableSeatsPr
 
               {seat.chip_balance !== null && (
                 <span className="font-display text-gold-dark text-lg leading-none">
-                  {formatCents(seat.chip_balance)}
+                  {formatMoney(seat.chip_balance)}
                 </span>
               )}
 

@@ -56,6 +56,22 @@ vi.mock("../src/api/client", async (importOriginal) => {
     pokerAction: vi.fn().mockResolvedValue({ data: null, error: null }),
     getChatMessages: vi.fn().mockResolvedValue({ data: [], error: null }),
     postChatMessage: vi.fn().mockResolvedValue({ data: null, error: null }),
+    // BalanceHeader calls getMe on mount. Return a success stub so it renders the
+    // balance (no role="alert") and doesn't shadow the poll-error alert under test.
+    getMe: vi.fn().mockResolvedValue({
+      data: {
+        id: "u1",
+        username: "tester",
+        chip_balance: 5_000_000,
+        total_hands: 0,
+        correct_decisions: 0,
+        accuracy: 0,
+        current_streak: 0,
+        best_streak: 0,
+        created_at: "2026-06-03T00:00:00Z",
+      },
+      error: null,
+    }),
   };
 });
 

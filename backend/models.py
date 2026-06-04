@@ -22,6 +22,10 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.database import Base
 
+# Starting bankroll for new users and the reset-chips refill target.
+# MUST match backend/migrations/008_centralize_starting_balance.sql.
+STARTING_BALANCE_CENTS: int = 5_000_000
+
 
 def _now() -> datetime:
     return datetime.now(timezone.utc)
@@ -63,7 +67,7 @@ class User(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True, default=uuid.uuid4)
     username: Mapped[str] = mapped_column(String(20), unique=True, nullable=False)
-    chip_balance: Mapped[int] = mapped_column(Integer, nullable=False, default=100_000)
+    chip_balance: Mapped[int] = mapped_column(Integer, nullable=False, default=STARTING_BALANCE_CENTS)
     total_hands: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     correct_decisions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     # total_decisions: per-decision accuracy denominator (AC-M-HIST3, Decision #3).
