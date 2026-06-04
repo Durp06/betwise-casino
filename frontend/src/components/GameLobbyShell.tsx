@@ -9,6 +9,7 @@
 import { type ReactNode } from "react";
 import { useNavigate } from "react-router-dom";
 import { t } from "../i18n";
+import BalanceHeader from "./BalanceHeader";
 
 interface GameLobbyShellProps {
   title: string;
@@ -34,13 +35,16 @@ export default function GameLobbyShell({ title, subtitle, action, children }: Ga
             <p className="font-flavor text-cream/70 text-sm italic mt-1">{subtitle}</p>
           )}
         </div>
-        <button
-          type="button"
-          onClick={() => void navigate("/lobby")}
-          className="shrink-0 font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
-        >
-          {t("← All Games")}
-        </button>
+        <div className="flex items-center gap-3 shrink-0">
+          <BalanceHeader />
+          <button
+            type="button"
+            onClick={() => void navigate("/lobby")}
+            className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
+          >
+            {t("← All Games")}
+          </button>
+        </div>
       </header>
 
       <main className="flex-1 px-4 py-8 max-w-2xl mx-auto w-full">

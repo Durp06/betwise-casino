@@ -226,9 +226,12 @@ async def _deal_or_continue_hand(
     if active is not None:
         return await _build_state_payload(tournament, seats, user_seat, db)
 
-    # Tournament complete?
+    # Tournament over for the requester? End cleanly when only one player still
+    # has chips OR when the requesting human has busted. Never deal a busted
+    # player back in: their PokerHandSeat carries empty hole_cards, which the
+    # /act oracle path dereferences and crashes on (the reported solo crash).
     live_seats = [s for s in seats if not s.is_bust]
-    if len(live_seats) <= 1:
+    if user_seat.is_bust or len(live_seats) <= 1:
         tournament.status = "complete"
         await db.commit()
         return await _build_state_payload(tournament, seats, user_seat, db)
@@ -247,6 +250,20 @@ async def _deal_or_continue_hand(
         big_blind=bb,
         ante=ante,
     )
+
+    # Fold busted (0-chip, eliminated) seats out of the betting state. They get
+    # no hole cards; without folding them the engine reads a 0-chip seat as live
+    # and can hand it the turn — a busted bot then stalls the action re-acting a
+    # bet it can't match, and these folded rows make _reconstruct_betting_state
+    # rebuild them folded on every later /act.
+    bust_nums = {s.seat_number for s in seats if s.is_bust}
+    if bust_nums:
+        from dataclasses import replace as _replace  # noqa: PLC0415
+
+        state = _replace(state, seats=tuple(
+            _replace(st, is_folded=True) if st.seat_number in bust_nums else st
+            for st in state.seats
+        ))
 
     # Deal 2 hole cards per LIVE seat (skip busted)
     hole_cards_per_seat: dict[int, list] = {}

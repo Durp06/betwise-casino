@@ -86,7 +86,7 @@ async def reset_chips(
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
 ) -> UserStatsOut:
-    """Reset chip balance to 100000 only when balance < 1000; else 409."""
+    """Reset chip balance to STARTING_BALANCE_CENTS only when balance < 1000; else 409."""
     user = await _get_user_by_id(current_user, db)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
@@ -97,7 +97,8 @@ async def reset_chips(
             detail=f"Not eligible — balance is ${user.chip_balance / 100:.2f}",
         )
 
-    user.chip_balance = 100_000
+    from backend.models import STARTING_BALANCE_CENTS  # noqa: PLC0415
+    user.chip_balance = STARTING_BALANCE_CENTS
     await db.flush()
     await db.refresh(user)
     accuracy = (
@@ -172,10 +173,11 @@ async def _upsert_user(user_id: uuid.UUID, username: str, db: AsyncSession):
     if user is not None:
         return user
 
+    from backend.models import STARTING_BALANCE_CENTS  # noqa: PLC0415
     user = User(
         id=user_id,
         username=username,
-        chip_balance=100_000,
+        chip_balance=STARTING_BALANCE_CENTS,
         total_hands=0,
         correct_decisions=0,
         current_streak=0,

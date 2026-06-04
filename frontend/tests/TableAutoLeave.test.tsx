@@ -36,6 +36,15 @@ const { leaveTableMock, getTableStateMock } = vi.hoisted(() => {
 vi.mock("../src/api/client", () => ({
   leaveTable: leaveTableMock,
   getTableState: getTableStateMock,
+  // BalanceHeader (in Table's header) fetches the bankroll on mount.
+  getMe: vi.fn().mockResolvedValue({
+    data: {
+      id: "u", username: "tester", chip_balance: 5_000_000, total_hands: 0,
+      correct_decisions: 0, accuracy: 0, current_streak: 0, best_streak: 0,
+      created_at: "2026-06-03T00:00:00Z",
+    },
+    error: null,
+  }),
   streamPreAdvice: vi.fn(
     async (
       _handId: string,

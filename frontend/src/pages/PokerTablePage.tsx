@@ -19,6 +19,7 @@ import PokerRulesModal from "../components/PokerRulesModal";
 import { AnimatePresence } from "framer-motion";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
+import BalanceHeader from "../components/BalanceHeader";
 import ChipFly from "../components/ChipFly";
 import { useTableActionFeed } from "../motion/useTableActionFeed";
 import { t } from "../i18n";
@@ -216,6 +217,7 @@ export default function PokerTablePage() {
             {t("Hold'em Tournament")} #{tournament.current_hand_number}
           </h1>
           <div className="flex items-center gap-3">
+            <BalanceHeader />
             <button
               type="button"
               onClick={() => setShowRules(true)}

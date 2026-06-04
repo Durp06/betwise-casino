@@ -28,6 +28,7 @@ import { t } from "../i18n";
 import { formatMoney } from "../utils/money";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
+import BalanceHeader from "../components/BalanceHeader";
 
 // Maps a hand outcome (or status fallback) to Chipy's reaction state.
 // Backend doesn't always set hand.outcome — a bust during the player's turn
@@ -307,7 +308,8 @@ export default function Table() {
         <h1 className="font-display text-cream text-2xl gold-drop truncate">
           {tableState.name}
         </h1>
-        <div className="flex gap-3 font-ui uppercase tracking-wider text-xs text-cream">
+        <div className="flex items-center gap-3 font-ui uppercase tracking-wider text-xs text-cream">
+          <BalanceHeader />
           <button
             type="button"
             onClick={() => setShowRules(true)}

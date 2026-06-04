@@ -9,6 +9,11 @@ __pycache__/
 # SQLite databases
 *.db
 *.db-journal
+*.sqlite
+*.sqlite-journal
+
+# Local browser/tooling artifacts
+.playwright-mcp/
 
 # Python virtualenvs
 .venv/
