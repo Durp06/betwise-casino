@@ -15,6 +15,7 @@ import PotDisplay from "../components/PotDisplay";
 import PokerSeat from "../components/PokerSeat";
 import PokerActionBar from "../components/PokerActionBar";
 import PokerChipyCoach from "../components/PokerChipyCoach";
+import PokerRulesModal from "../components/PokerRulesModal";
 import { t } from "../i18n";
 
 /** Beat between a hand finishing (showdown visible) and auto-dealing the next
@@ -29,6 +30,7 @@ export default function PokerTablePage() {
   const [dealing, setDealing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
 
   // Always-on poll while mounted
   usePokerPoll(tournamentId ?? "", setPollError);
@@ -173,14 +175,23 @@ export default function PokerTablePage() {
           <h1 className="font-display text-2xl tracking-wider">
             {t("Hold'em Tournament")} #{tournament.current_hand_number}
           </h1>
-          <button
-            type="button"
-            onClick={() => void navigate("/lobby")}
-            className="text-xs font-ui underline"
-            data-testid="poker-table-leave"
-          >
-            {t("Lobby")}
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => setShowRules(true)}
+              className="text-xs font-ui underline"
+            >
+              {t("How to Play")}
+            </button>
+            <button
+              type="button"
+              onClick={() => void navigate("/lobby")}
+              className="text-xs font-ui underline"
+              data-testid="poker-table-leave"
+            >
+              {t("Lobby")}
+            </button>
+          </div>
         </header>
 
         {/* Felt — seats around the board */}
@@ -268,6 +279,8 @@ export default function PokerTablePage() {
       <section className="lg:w-80">
         <PokerChipyCoach handId={hand?.id ?? null} />
       </section>
+
+      {showRules && <PokerRulesModal onClose={() => setShowRules(false)} />}
     </main>
   );
 }
