@@ -22,6 +22,7 @@ import PotDisplay from "../components/PotDisplay";
 import HoldemSeat from "../components/HoldemSeat";
 import HoldemActionBar from "../components/HoldemActionBar";
 import ChatPanel from "../components/ChatPanel";
+import HoldemRulesModal from "../components/HoldemRulesModal";
 import { t } from "../i18n";
 
 export default function HoldemTablePage() {
@@ -36,6 +37,7 @@ export default function HoldemTablePage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
+  const [showRules, setShowRules] = useState(false);
 
   useHoldemPoll(tableId ?? "", setPollError);
 
@@ -147,12 +149,21 @@ export default function HoldemTablePage() {
         <h1 className="font-display text-cream text-2xl">
           {table.name} · {t("Hold'em")}
         </h1>
-        <button
-          onClick={() => void navigate("/holdem")}
-          className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
-        >
-          {t("Leave Table")}
-        </button>
+        <div className="flex items-center gap-4">
+          <button
+            type="button"
+            onClick={() => setShowRules(true)}
+            className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
+          >
+            {t("How to Play")}
+          </button>
+          <button
+            onClick={() => void navigate("/holdem")}
+            className="font-ui text-cream text-sm uppercase tracking-wider hover:text-gold-bright"
+          >
+            {t("Leave Table")}
+          </button>
+        </div>
       </header>
 
       {error && (
@@ -238,6 +249,8 @@ export default function HoldemTablePage() {
         {/* In-game chat — unobtrusive panel below the controls. */}
         <ChatPanel tableKind="holdem" tableId={tableId} />
       </main>
+
+      {showRules && <HoldemRulesModal onClose={() => setShowRules(false)} />}
     </div>
   );
 }
