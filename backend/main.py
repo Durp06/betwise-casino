@@ -28,7 +28,7 @@ from slowapi.errors import RateLimitExceeded
 from backend.ratelimit import limiter
 from backend.routers import (
     users, tables, game, advice, leaderboard, analytics, sessions,
-    poker_tables, poker_game, poker_advice, holdem, chat,
+    poker_tables, poker_game, poker_advice, poker_review, holdem, chat,
     practice,
     pai_gow_tables, pai_gow_game, pai_gow_advice,
 )
@@ -162,6 +162,7 @@ app.include_router(sessions.router, prefix="/api")
 app.include_router(poker_tables.router, prefix="/api")
 app.include_router(poker_game.router, prefix="/api")
 app.include_router(poker_advice.router, prefix="/api")
+app.include_router(poker_review.router, prefix="/api")
 app.include_router(holdem.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(practice.router, prefix="/api")

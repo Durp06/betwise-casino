@@ -16,6 +16,9 @@ import PokerSeat from "../components/PokerSeat";
 import PokerActionBar from "../components/PokerActionBar";
 import PokerChipyCoach from "../components/PokerChipyCoach";
 import PokerRulesModal from "../components/PokerRulesModal";
+import PokerReviewModal, {
+  type PokerReviewModalProps,
+} from "../components/PokerReviewModal";
 import { AnimatePresence } from "framer-motion";
 import { DeckProvider } from "../motion/DeckProvider";
 import DeckStack from "../components/DeckStack";
@@ -37,6 +40,9 @@ export default function PokerTablePage() {
   const [error, setError] = useState<string | null>(null);
   const [pollError, setPollError] = useState<string | null>(null);
   const [showRules, setShowRules] = useState(false);
+  // The review modal to show, or null. Opens a Game Review scoped to this
+  // tournament; the user can drill into any hand from there.
+  const [review, setReview] = useState<PokerReviewModalProps | null>(null);
 
   // Always-on poll while mounted
   usePokerPoll(tournamentId ?? "", setPollError);
@@ -298,13 +304,25 @@ export default function PokerTablePage() {
             className="ink-outline-thick rounded-xl bg-cream/10 p-4 flex flex-col items-start gap-2"
           >
             <p className="font-display text-xl tracking-wider">{t("Tournament complete!")}</p>
-            <button
-              type="button"
-              onClick={() => void navigate("/lobby")}
-              className="ink-outline ink-shadow px-4 py-2 rounded-md bg-gold-bright text-ink font-ui uppercase tracking-wider text-sm"
-            >
-              {t("Back to lobby")}
-            </button>
+            <div className="flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                data-testid="poker-review-tournament"
+                onClick={() =>
+                  setReview({ mode: "game", game: "poker", gameId: tournamentId, onClose: () => setReview(null) })
+                }
+                className="ink-outline ink-shadow px-4 py-2 rounded-md bg-gold-bright text-ink font-ui uppercase tracking-wider text-sm"
+              >
+                {t("Review")}
+              </button>
+              <button
+                type="button"
+                onClick={() => void navigate("/lobby")}
+                className="ink-outline px-4 py-2 rounded-md bg-cream text-ink font-ui uppercase tracking-wider text-sm"
+              >
+                {t("Back to lobby")}
+              </button>
+            </div>
           </div>
         ) : (
           !isYourTurn && hand && (
@@ -325,6 +343,16 @@ export default function PokerTablePage() {
                 >
                   {t("Deal next hand")}
                 </button>
+                <button
+                  type="button"
+                  data-testid="poker-review-between-hands"
+                  onClick={() =>
+                    setReview({ mode: "game", game: "poker", gameId: tournamentId, onClose: () => setReview(null) })
+                  }
+                  className="ink-outline px-4 py-2 rounded-md bg-cream text-ink font-ui uppercase tracking-wider text-sm"
+                >
+                  {t("Review")}
+                </button>
               </div>
             )
           )
@@ -337,6 +365,7 @@ export default function PokerTablePage() {
 
       <AnimatePresence>
         {showRules && <PokerRulesModal key="rules" onClose={() => setShowRules(false)} />}
+        {review && <PokerReviewModal key="review" {...review} />}
       </AnimatePresence>
     </main>
     </DeckProvider>

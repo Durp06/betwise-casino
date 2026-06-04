@@ -35,14 +35,13 @@ from backend.auth import CurrentUser
 from backend.database import get_db
 from backend.ratelimit import MUTATION_RATE_LIMIT, limiter
 from backend.schemas import (
+    GameReviewOut,
     PokerActIn,
     PokerActionOut,
     PokerHandReplayOut,
     PokerHandSeatStateOut,
     PokerHandStateOut,
-    PokerReviewActionOut,
     PokerSeatOut,
-    PokerSessionReviewOut,
     PokerTournamentOut,
     PokerTournamentStateOut,
 )
@@ -96,15 +95,15 @@ async def get_replay(
     return await _get_hand_replay(hand_id, current_user, db)
 
 
-@router.get("/tournaments/{tournament_id}/review", response_model=PokerSessionReviewOut)
+@router.get("/tournaments/{tournament_id}/review", response_model=GameReviewOut)
 async def get_review(
     tournament_id: uuid.UUID,
     current_user: CurrentUser,
     db: AsyncSession = Depends(get_db),
-) -> PokerSessionReviewOut:
-    """Chess.com-style classified review of every human action in the
-    tournament. Deterministic spots get EV-loss; heuristic spots get only
-    principle notes."""
+) -> GameReviewOut:
+    """Unified equity-backed Game Review (specs/poker-review-pr2.md): recomputes
+    every caller decision across the tournament on read via the shared assembly
+    in backend/game/poker/review.py. Returns the GameReview aggregate shape."""
     return await _get_session_review(tournament_id, current_user, db)
 
 
@@ -926,10 +925,18 @@ async def _get_session_review(
     tournament_id: uuid.UUID,
     current_user: uuid.UUID,
     db: AsyncSession,
-) -> PokerSessionReviewOut:
+) -> GameReviewOut:
+    """Compute-on-read unified Game Review for a solo tournament.
+
+    Recomputes each finished hand via the shared assembly (equity-backed),
+    grading only the caller's own actions, then aggregates. Reuses the
+    poker-row loaders + shaping from routers/poker_review.py — no SQL or
+    assembly duplication."""
     from sqlalchemy import select  # noqa: PLC0415
 
-    from backend.models import PokerAction, PokerHand, PokerSeat, PokerTournament  # noqa: PLC0415
+    from backend.game.poker.review import build_hand_review  # noqa: PLC0415
+    from backend.models import PokerAction, PokerHand, PokerHandSeat, PokerSeat, PokerTournament  # noqa: PLC0415
+    from backend.routers.poker_review import _build_poker_input, _game_review_to_out  # noqa: PLC0415
 
     tournament = (await db.execute(
         select(PokerTournament).where(PokerTournament.id == tournament_id)
@@ -937,55 +944,27 @@ async def _get_session_review(
     if tournament is None:
         raise HTTPException(status_code=404, detail="Tournament not found")
 
-    user_seat = (await db.execute(
-        select(PokerSeat).where(
-            PokerSeat.tournament_id == tournament_id,
-            PokerSeat.user_id == current_user,
-        )
-    )).scalar_one_or_none()
-    if user_seat is None:
+    seats = (await db.execute(
+        select(PokerSeat).where(PokerSeat.tournament_id == tournament_id).order_by(PokerSeat.seat_number)
+    )).scalars().all()
+    if not any(s.user_id == current_user for s in seats):
         raise HTTPException(status_code=403, detail="Not a participant")
 
-    actions = (await db.execute(
-        select(PokerAction, PokerHand.hand_number)
-        .join(PokerHand, PokerAction.hand_id == PokerHand.id)
-        .where(
-            PokerHand.tournament_id == tournament_id,
-            PokerAction.user_id == current_user,
-            PokerAction.is_human == True,  # noqa: E712
-        )
-        .order_by(PokerHand.hand_number, PokerAction.action_index)
-    )).all()
+    hands = (await db.execute(
+        select(PokerHand)
+        .where(PokerHand.tournament_id == tournament_id, PokerHand.status == "complete")
+        .order_by(PokerHand.hand_number)
+    )).scalars().all()
 
-    review_rows: list[PokerReviewActionOut] = []
-    total = 0
-    det = 0
-    correct = 0
-    ev_lost = 0
-    for action_row, hand_number in actions:
-        total += 1
-        if action_row.confidence_tier == "DETERMINISTIC":
-            det += 1
-            if action_row.verdict == "best":
-                correct += 1
-            ev_lost += action_row.ev_loss_chips or 0
-        review_rows.append(PokerReviewActionOut(
-            id=action_row.id,
-            hand_number=hand_number,
-            street=action_row.street,
-            action=action_row.action,
-            recommended_action=action_row.recommended_action,
-            confidence_tier=action_row.confidence_tier,
-            verdict=action_row.verdict,
-            ev_loss_chips=action_row.ev_loss_chips,
-            principle_note=action_row.chipy_explanation,
-        ))
+    reviews: list = []
+    for hand in hands:
+        hand_seats = (await db.execute(
+            select(PokerHandSeat).where(PokerHandSeat.hand_id == hand.id).order_by(PokerHandSeat.seat_number)
+        )).scalars().all()
+        actions = (await db.execute(
+            select(PokerAction).where(PokerAction.hand_id == hand.id).order_by(PokerAction.action_index)
+        )).scalars().all()
+        data = _build_poker_input(hand, hand_seats, actions, seats, current_user)
+        reviews.append(build_hand_review(data))
 
-    return PokerSessionReviewOut(
-        tournament_id=tournament_id,
-        total_actions=total,
-        deterministic_actions=det,
-        optimal_count=correct,
-        ev_lost_chips=ev_lost,
-        actions=review_rows,
-    )
+    return _game_review_to_out("tournament", "poker", reviews)

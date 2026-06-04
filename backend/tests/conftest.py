@@ -282,6 +282,122 @@ async def seed_actions(
     return actions
 
 
+# ─── Hold'em (multiplayer) seed helpers ──────────────────────────────────────
+
+
+async def seed_holdem_table(
+    db: AsyncSession,
+    name: str = "Test Holdem Table",
+    small_blind: int = 50,
+    big_blind: int = 100,
+    max_seats: int = 6,
+    status: str = "waiting",
+    button_pos: int = 0,
+) -> "backend.models.HoldemTable":  # type: ignore[name-defined]
+    import uuid as _uuid  # noqa: PLC0415
+    from backend.models import HoldemTable  # noqa: PLC0415
+
+    table = HoldemTable(
+        id=_uuid.uuid4(),
+        name=name,
+        small_blind=small_blind,
+        big_blind=big_blind,
+        min_buy_in=2_000,
+        max_buy_in=20_000,
+        max_seats=max_seats,
+        button_pos=button_pos,
+        status=status,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(table)
+    await db.commit()
+    await db.refresh(table)
+    return table
+
+
+async def seed_holdem_hand(
+    db: AsyncSession,
+    table_id: uuid.UUID,
+    *,
+    hand_number: int = 1,
+    button_seat: int = 0,
+    small_blind: int = 50,
+    big_blind: int = 100,
+    board: list = None,
+    seats: list[dict],
+    actions: list[dict],
+    status: str = "complete",
+    street: str = "complete",
+    deck: list = None,
+    result: dict = None,
+) -> "backend.models.HoldemHand":  # type: ignore[name-defined]
+    """Seed a finished Hold'em hand with engine-indexed hand-seats + an ordered
+    action log. Each ``seats`` dict needs: seat_number, user_id, hole_cards,
+    starting_stack, final_stack (+ optional table_seat_number/contributed/
+    current_bet/is_folded/is_all_in). Each ``actions`` dict needs: seat_number,
+    action, amount (+ optional user_id/street); action_index is assigned in
+    list order."""
+    import uuid as _uuid  # noqa: PLC0415
+    from backend.models import HoldemAction, HoldemHand, HoldemHandSeat  # noqa: PLC0415
+
+    hand = HoldemHand(
+        id=_uuid.uuid4(),
+        table_id=table_id,
+        hand_number=hand_number,
+        button_seat=button_seat,
+        deck=deck or [],
+        small_blind=small_blind,
+        big_blind=big_blind,
+        board=board or [],
+        pot_total=0,
+        side_pots=[],
+        street=street,
+        current_bet_to_match=0,
+        current_to_act_seat=None,
+        last_aggressor_seat=None,
+        min_raise_increment=big_blind,
+        status=status,
+        result=result,
+        created_at=datetime.now(timezone.utc),
+    )
+    db.add(hand)
+    await db.flush()
+
+    for s in seats:
+        db.add(HoldemHandSeat(
+            id=_uuid.uuid4(),
+            hand_id=hand.id,
+            seat_number=s["seat_number"],
+            user_id=s["user_id"],
+            table_seat_number=s.get("table_seat_number", s["seat_number"]),
+            hole_cards=s["hole_cards"],
+            starting_stack=s["starting_stack"],
+            final_stack=s.get("final_stack", s["starting_stack"]),
+            contributed=s.get("contributed", 0),
+            current_bet=s.get("current_bet", 0),
+            is_folded=s.get("is_folded", False),
+            is_all_in=s.get("is_all_in", False),
+            has_acted_this_street=s.get("has_acted_this_street", True),
+        ))
+
+    for i, a in enumerate(actions):
+        db.add(HoldemAction(
+            id=_uuid.uuid4(),
+            hand_id=hand.id,
+            seat_number=a["seat_number"],
+            user_id=a.get("user_id"),
+            action_index=i,
+            street=a.get("street", "preflop"),
+            action=a["action"],
+            amount=a.get("amount", 0),
+            created_at=datetime.now(timezone.utc),
+        ))
+
+    await db.commit()
+    await db.refresh(hand)
+    return hand
+
+
 # ─── Pai Gow seed helpers (round-6 architectural shift — own container) ──────
 
 async def seed_pai_gow_table(

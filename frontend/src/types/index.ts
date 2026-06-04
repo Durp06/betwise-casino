@@ -403,6 +403,72 @@ export interface HoldemCreateTablePayload {
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// Poker Review (PR2) — compute-on-read Hand Review + Game Review.
+// Mirrors the LOCKED HandReview / GameReview JSON contract in
+// specs/poker-review-pr2.md. Shared by both Hold'em (table visit) and solo
+// poker (tournament) review surfaces. Grades ONLY the caller's own decisions.
+// ═════════════════════════════════════════════════════════════════════════════
+
+export type PokerReviewGame = "holdem" | "poker";
+
+export type PokerReviewStreet = "preflop" | "flop" | "turn" | "river";
+
+/** Per-action verdict. Adds "no_verdict" for ungraded decisions. */
+export type PokerReviewVerdict =
+  | "best"
+  | "good"
+  | "inaccuracy"
+  | "mistake"
+  | "blunder"
+  | "no_verdict";
+
+export interface PokerReviewAction {
+  action_index: number;
+  street: PokerReviewStreet;
+  action: string; // fold|check|call|raise|all_in
+  amount_bb: number;
+  verdict: PokerReviewVerdict;
+  confidence_tier: PokerConfidenceTier;
+  recommended_action: string | null;
+  equity: number | null;
+  required_equity: number | null;
+  ev_loss_bb: number | null;
+  explanation: string | null;
+}
+
+/** HandReview — a single finished hand graded for the caller. */
+export interface PokerReview {
+  hand_id: string;
+  game: PokerReviewGame;
+  your_hole: Card[];
+  board: Card[];
+  graded_count: number;
+  accuracy: number;
+  ev_lost_bb: number;
+  worst_action_index: number | null;
+  actions: PokerReviewAction[];
+}
+
+/** One row in a GameReview's per-hand summary list. */
+export interface PokerGameReviewHand {
+  hand_id: string;
+  accuracy: number;
+  ev_lost_bb: number;
+  graded_count: number;
+  worst_verdict: PokerReviewVerdict | null;
+}
+
+/** GameReview — aggregate over a tournament or a table visit. */
+export interface PokerGameReview {
+  scope: "tournament" | "table_visit";
+  game: PokerReviewGame;
+  overall_accuracy: number;
+  total_ev_lost_bb: number;
+  graded_count: number;
+  hands: PokerGameReviewHand[];
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // In-game chat (both multiplayer games) — mirrors backend ChatMessageOut.
 // `body` is rendered EXCLUSIVELY as a React text node so pasted markup is inert.
 // ═════════════════════════════════════════════════════════════════════════════
