@@ -19,6 +19,11 @@ from datetime import datetime, timedelta
 # Seconds a player has to act before the server auto-resolves their turn.
 MOVE_TIMER_SECONDS: int = 30
 
+# Blackjack multiplayer: once the first bet opens a betting round, seated players
+# have this long to place theirs. The round deals as soon as ALL seated players
+# have bet; this window is the fallback so a single no-show can't stall the table.
+BLACKJACK_BETTING_WINDOW_SECONDS: int = 20
+
 # Hold'em time cards: each player is granted this many on taking a seat, and using
 # one extends the current move clock by TIME_CARD_BONUS_SECONDS. Cards do not
 # regenerate during play (see routers/holdem.py::_use_time_card).

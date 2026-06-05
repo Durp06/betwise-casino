@@ -77,7 +77,13 @@ async def _deal_hand(
     bet: int,
     db: AsyncSession,
 ) -> HandOut:
-    """Validate bet, create/join session, deal 2 cards to caller and 2 to dealer."""
+    """Place a bet into the table's open betting round (no cards dealt yet).
+
+    Multiplayer: bets are collected with the session in "betting"; the round is
+    dealt to everyone together by state.maybe_start_round once all seated players
+    have bet (or the betting window elapses). A single-seat table deals at once.
+    Betting into an in-progress ("playing") round is rejected with 409.
+    """
     from datetime import datetime, timezone  # noqa: PLC0415
     from sqlalchemy import select  # noqa: PLC0415
     from backend.models import CasinoTable, TableSeat, GameSession, Hand, User  # noqa: PLC0415
@@ -124,12 +130,12 @@ async def _deal_hand(
             detail=f"Bet {bet} is above table maximum {table.max_bet}",
         )
 
-    # Find or create a session in "betting" or "playing" phase.
-    # Multiplayer: ALL seated players can deal into the same session, even
-    # after the first player flipped status to "playing". The per-user
-    # duplicate-hand guard below prevents double-dealing for the same user.
-    # Rounds that have moved past play (dealer_turn / finished) don't match
-    # this filter, so a fresh session is created — that's how replay works.
+    # Find the table's open round. Betting is only allowed while a round is
+    # COLLECTING bets ("betting"). Once it deals ("playing") the round is locked,
+    # so a late bet is rejected — you're dealt in on the next hand. Rounds past
+    # play (dealer_turn / finished) don't match, so the first bet opens a fresh
+    # round. This "one open round at a time" rule is what stops co-players from
+    # fragmenting into separate sessions (the multiplayer muddle).
     result = await db.execute(
         select(GameSession).where(
             (GameSession.table_id == table_id)
@@ -138,8 +144,14 @@ async def _deal_hand(
     )
     session = result.scalar_one_or_none()
 
+    if session is not None and session.status == "playing":
+        raise HTTPException(
+            status_code=409,
+            detail="Round already in progress — you'll be dealt in on the next hand.",
+        )
+
     if session is None:
-        # Create a new session with a fresh deck
+        # Open a new betting round with a fresh deck.
         deck = eng.create_deck()
         session = GameSession(
             id=uuid.uuid4(),
@@ -154,7 +166,8 @@ async def _deal_hand(
         await db.flush()
         await db.refresh(session)
 
-    # Check caller doesn't already have a hand in this session
+    # Idempotent: if the caller already bet this round, return that hand
+    # (double-click / network retry must not double-escrow).
     result = await db.execute(
         select(Hand).where(
             (Hand.session_id == session.id) & (Hand.user_id == user_id)
@@ -162,7 +175,6 @@ async def _deal_hand(
     )
     existing_hand = result.scalar_one_or_none()
     if existing_hand is not None:
-        # Return existing hand
         return HandOut(
             id=existing_hand.id,
             session_id=existing_hand.session_id,
@@ -175,31 +187,16 @@ async def _deal_hand(
             move_deadline_at=existing_hand.move_deadline_at,
         )
 
-    # Deal 2 cards to caller
-    deck = list(session.deck_state)
-    card1, deck = eng.deal_card(deck)
-    card2, deck = eng.deal_card(deck)
-    player_cards = [card1, card2]
-
-    # Deal 2 cards to dealer (if not already dealt)
-    dealer_cards = list(session.dealer_cards)
-    if not dealer_cards:
-        d_card1, deck = eng.deal_card(deck)
-        d_card2, deck = eng.deal_card(deck)
-        # Dealer shows first card; second is hole card (stored but hidden)
-        dealer_cards = [d_card1, d_card2]
-
-    # Deduct bet from user balance
+    # Escrow the bet and record the hand with NO cards yet. The round deals all
+    # players + the dealer together once everyone has bet (or the betting window
+    # elapses) — see state.maybe_start_round. "Awaiting deal" is signalled by the
+    # session being "betting"; an empty `cards` list is the per-hand marker.
     user.chip_balance -= bet
-    await db.flush()
-
-    # Create hand — set created_at explicitly so _get_user_hands can order
-    # newest-first by this column (AC-R-HIST2).
     hand = Hand(
         id=uuid.uuid4(),
         session_id=session.id,
         user_id=user_id,
-        cards=player_cards,
+        cards=[],
         bet=bet,
         status="active",
         outcome=None,
@@ -207,23 +204,16 @@ async def _deal_hand(
         created_at=datetime.now(timezone.utc),
     )
     db.add(hand)
-
-    # Update session: save dealer cards and remaining deck, advance to playing
-    session.dealer_cards = dealer_cards
-    session.deck_state = deck
-    session.status = "playing"
-
-    # Update table status
-    table.status = "playing"
-
     await db.flush()
-    await db.refresh(hand)
 
-    # Put the current actor on the 30s move clock (force=False so a co-player
-    # dealing into the round doesn't restart an existing actor's clock).
+    # Try to start the round. Deals immediately iff this bet completes the table
+    # (a single-seat table, or the last seat to bet); otherwise stays "betting".
     from backend.game import state as game_state  # noqa: PLC0415
 
-    await game_state.stamp_current_deadline(session.id, db)
+    await game_state.maybe_start_round(table_id, db)
+
+    # Re-load the caller's hand — it may now hold dealt cards + a move deadline.
+    await db.refresh(hand)
 
     return HandOut(
         id=hand.id,

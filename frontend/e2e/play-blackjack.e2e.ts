@@ -18,11 +18,13 @@ test("a player can sit, deal a hand, and play it to a result", async ({ page }) 
   await page.getByRole("button", { name: "Take Seat", exact: true }).first().click();
   await expect(page).toHaveURL(/\/table\//);
 
-  // Place a $100 chip (clears either seeded table's minimum) and deal.
+  // Place a $100 chip (clears either seeded table's minimum) and bet. At a
+  // single-seat table the bet deals the round immediately (all seated players
+  // have bet), so play starts right away.
   await page.getByRole("button", { name: "Add $100", exact: true }).click();
-  const deal = page.getByRole("button", { name: "Deal", exact: true });
-  await expect(deal).toBeEnabled();
-  await deal.click();
+  const placeBet = page.getByRole("button", { name: "Place Bet", exact: true });
+  await expect(placeBet).toBeEnabled();
+  await placeBet.click();
 
   // Either the player gets to act, or the hand auto-resolves (natural blackjack).
   const stand = page.getByRole("button", { name: "Stand", exact: true });

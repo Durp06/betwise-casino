@@ -317,6 +317,11 @@ async def _get_table_state(
     )).scalar_one_or_none() is not None
     if caller_seated:
         await game_state.enforce_timeout(table_id, db)
+        # Drive the betting window lazily: a round whose betting window has
+        # elapsed (a co-player never bet) deals on the next poll, and a round
+        # where everyone has now bet starts even if the final bet's own request
+        # didn't deal it. No-op unless a "betting" round is actually ready.
+        await game_state.maybe_start_round(table_id, db)
 
     # Fetch table
     result = await db.execute(select(CasinoTable).where(CasinoTable.id == table_id))

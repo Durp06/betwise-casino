@@ -191,7 +191,7 @@ export default function BettingControls({
         style={{ backgroundColor: "#F4D03F", color: "#1A0A00" }}
         aria-busy={loading}
       >
-        {loading ? t("Dealin'…") : t("Deal")}
+        {loading ? t("Placing bet…") : t("Place Bet")}
       </button>
     </div>
   );
