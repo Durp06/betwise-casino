@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.game.blackjack import engine as eng
@@ -125,6 +125,90 @@ async def advance_turn(session_id: uuid.UUID, db: AsyncSession) -> None:
     else:
         # A new player is on the clock — give them a fresh 30s move deadline.
         await stamp_current_deadline(session_id, db, force=True)
+
+
+async def maybe_start_round(table_id: uuid.UUID, db: AsyncSession) -> bool:
+    """Deal a waiting betting round once it's ready, flipping it to 'playing'.
+
+    A round is ready when EVERY seated player has placed a bet, OR the betting
+    window (BLACKJACK_BETTING_WINDOW_SECONDS past the session's created_at) has
+    elapsed with at least one bet down — so a single no-show can't stall the
+    table. Lazy + idempotent: safe to call from the place-bet path and the
+    /state poll. Returns True iff it dealt the round.
+
+    This is the synchronized-deal half of the multiplayer betting round: bets are
+    collected with no cards (status 'active', empty `cards`) while the session is
+    'betting'; this deals everyone + the dealer together and starts seat-order play.
+    """
+    from datetime import datetime, timezone  # noqa: PLC0415
+
+    from backend.game.timer import BLACKJACK_BETTING_WINDOW_SECONDS  # noqa: PLC0415
+    from backend.models import CasinoTable, GameSession, Hand, TableSeat  # noqa: PLC0415
+
+    # Lock the table's open betting session (if any) so two final bets can't
+    # both deal. SQLite ignores FOR UPDATE but serializes writes; Postgres locks.
+    session = (await db.execute(
+        select(GameSession)
+        .where((GameSession.table_id == table_id) & (GameSession.status == "betting"))
+        .with_for_update()
+    )).scalar_one_or_none()
+    if session is None:
+        return False
+
+    # Bets placed this round = hands in the betting session.
+    hands = (await db.execute(
+        select(Hand).where(Hand.session_id == session.id)
+    )).scalars().all()
+    if not hands:
+        return False  # session open but nobody has bet yet
+
+    seat_count = int((await db.execute(
+        select(func.count(TableSeat.id)).where(TableSeat.table_id == table_id)
+    )).scalar_one())
+
+    all_seated_bet = len(hands) >= seat_count
+    # created_at may read back tz-naive on SQLite; normalize before comparing.
+    started = session.created_at
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    window_elapsed = (
+        datetime.now(timezone.utc) - started
+    ).total_seconds() > BLACKJACK_BETTING_WINDOW_SECONDS
+
+    if not (all_seated_bet or window_elapsed):
+        return False  # keep waiting for the rest of the table
+
+    # ── Deal the round ───────────────────────────────────────────────────────
+    deck = list(session.deck_state)
+    dealer_cards = list(session.dealer_cards)
+    if not dealer_cards:
+        d1, deck = eng.deal_card(deck)
+        d2, deck = eng.deal_card(deck)
+        dealer_cards = [d1, d2]  # [upcard, hole] — hole masked by _get_table_state
+
+    for hand in hands:
+        if not hand.cards:  # only the undealt bets
+            c1, deck = eng.deal_card(deck)
+            c2, deck = eng.deal_card(deck)
+            hand.cards = [c1, c2]
+            # status stays "active": a natural is paid by resolve_hand (which
+            # checks the cards regardless of status), matching the prior path.
+
+    session.dealer_cards = dealer_cards
+    session.deck_state = deck
+    session.status = "playing"
+
+    # Parity with the old deal path — reflect play on the table row.
+    table = (await db.execute(
+        select(CasinoTable).where(CasinoTable.id == table_id)
+    )).scalar_one_or_none()
+    if table is not None:
+        table.status = "playing"
+
+    await db.flush()
+    # Put the lowest-seat active hand on the clock (advance_turn stamps it).
+    await advance_turn(session.id, db)
+    return True
 
 
 # ─── Move timer (per-player 30s clock) ───────────────────────────────────────

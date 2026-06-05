@@ -191,9 +191,17 @@ export default function Table() {
 
   const sessionStatus = tableState?.session?.status;
   const myHandStatus = myHand?.status;
+  // The current actor is the only hand the backend put on the clock
+  // (move_deadline_at is non-null IFF it's that seat's turn). Keying the turn UI
+  // off this — not "I have an active hand" — means co-players who've been dealt
+  // but aren't up yet don't get action buttons (no out-of-turn 403s) and only
+  // one seat is highlighted at a time.
+  const currentActorId =
+    tableState?.hands.find((h) => h.move_deadline_at != null)?.id ?? null;
   const isMyTurn =
     sessionStatus === "playing" &&
-    myHandStatus === "active";
+    myHandStatus === "active" &&
+    myHand?.id === currentActorId;
 
   const legalActions: Action[] = ["hit", "stand"];
   if (myHand && myHand.cards.filter((c) => c !== null).length === 2) {
@@ -282,10 +290,19 @@ export default function Table() {
 
   const dealerCards = tableState.session?.dealer_cards ?? [];
 
-  // Treat "no session yet" or "previous session finished" both as "ready to deal."
-  const canStartNewRound =
-    (!tableState.session || sessionStatus === "finished") &&
-    tableState.seats.some((s) => s.user_id === currentUserId);
+  // Betting phase: you can place a bet when there's no round, the last one
+  // finished, or a betting round is open and you haven't bet into it yet.
+  const iAmSeated = tableState.seats.some((s) => s.user_id === currentUserId);
+  // During "betting", myHand is your placed-but-undealt bet (empty cards); null
+  // means you haven't bet this round.
+  const iHaveBet = myHand !== null;
+  const canPlaceBet =
+    iAmSeated &&
+    (!tableState.session ||
+      sessionStatus === "finished" ||
+      (sessionStatus === "betting" && !iHaveBet));
+  // Your bet is locked in and the table is still collecting the rest.
+  const waitingForBets = sessionStatus === "betting" && iHaveBet;
 
   // A hand is "finished" if the backend assigned an outcome OR the status
   // moved to a terminal value (bust during play, blackjack, or explicit finished).
@@ -371,7 +388,7 @@ export default function Table() {
             {tableState.hands.map((hand) => {
               const seat = tableState.seats.find((s) => s.user_id === hand.user_id);
               const isMine = hand.user_id === currentUserId;
-              const isActive = hand.status === "active"
+              const isActive = hand.id === currentActorId
                 && tableState.session?.status === "playing";
               const username = seat?.username ?? t("Player");
 
@@ -407,10 +424,16 @@ export default function Table() {
                       </span>
                     </div>
                   </div>
-                  <CardHand
-                    cards={hand.cards}
-                    handValue={handValueDisplay(hand.cards) ?? undefined}
-                  />
+                  {hand.cards.length === 0 ? (
+                    <p className="font-flavor text-cream/50 italic text-sm py-2">
+                      {t("Bet placed — waiting for the deal")}
+                    </p>
+                  ) : (
+                    <CardHand
+                      cards={hand.cards}
+                      handValue={handValueDisplay(hand.cards) ?? undefined}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -460,8 +483,9 @@ export default function Table() {
           </div>
         )}
 
-        {/* Betting controls — show when no session OR previous session finished */}
-        {canStartNewRound && (
+        {/* Betting controls — no round, last one finished, or an open betting
+            round you haven't bet into yet. */}
+        {canPlaceBet && (
           <div id="post-hand-bet" className="flex flex-col items-center gap-2">
             {isHandFinished && (
               <p className="font-ui text-cream text-xl uppercase tracking-widest">
@@ -476,6 +500,18 @@ export default function Table() {
                 tableState.seats.find((s) => s.user_id === currentUserId)?.chip_balance ?? 100000
               }
             />
+          </div>
+        )}
+
+        {/* Betting phase — your bet is in; we're waiting on the rest of the table. */}
+        {waitingForBets && (
+          <div className="flex flex-col items-center gap-1">
+            <p className="font-ui text-cream text-xl uppercase tracking-widest">
+              {t("Bet placed")}
+            </p>
+            <p className="font-flavor text-cream/70 text-sm italic">
+              {t("Waiting for players to bet")} — {tableState.hands.length}/{tableState.seats.length}
+            </p>
           </div>
         )}
 
